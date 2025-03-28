@@ -1,0 +1,13 @@
+*.o
+/*.s
+core
+a.out
+test
+test2
+/test.c
+/test.s
+/test2.s
+/hello.c
+/hello.s
+/hello
+.vscode
