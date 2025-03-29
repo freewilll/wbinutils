@@ -1,8 +1,5 @@
-#include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 #include "error.h"
 #include "list.h"
@@ -26,46 +23,7 @@ static List *read_input_files(List *input_filenames) {
 // Add some sections that are always present in output ELF file
 static void create_default_sections(RwElfFile *output_elf_file) {
     add_rw_section(output_elf_file, "" , SHT_NULL, 0, 0);
-    output_elf_file->shstrtab = add_rw_section(output_elf_file, ".shstrtab", SHT_STRTAB, 0, 1);
-}
-
-// Rearrange sections list so that .symtab, .strtab and .shstrtab are last.
-// Then set the index.
-static void make_section_indexes(RwElfFile *output_elf_file) {
-    List *sections_list = output_elf_file->sections_list;
-
-    List *new_sections_list = new_list(sections_list->length);
-    List *selected_sections_list = new_list(3);
-
-    for (int i = 0; i < sections_list->length; i++) {
-        RwSection *section = sections_list->elements[i];
-
-        if (!strcmp(section->name, ".symtab") || !strcmp(section->name, ".strtab") || !strcmp(section->name, ".shstrtab"))
-            append_to_list(selected_sections_list, section);
-        else
-            append_to_list(new_sections_list, section);
-    }
-
-    free_list(sections_list);
-
-    int non_selected_sections_length = new_sections_list->length;
-
-    // Set the index on the first sections
-    for (int i = 0; i < non_selected_sections_length; i++) {
-        RwSection *section = new_sections_list->elements[i];
-        section->index = i;
-    }
-
-    // Append the remaining sections
-    for (int i = 0; i < selected_sections_list->length; i++) {
-        RwSection *section = selected_sections_list->elements[i];
-        section->index = non_selected_sections_length + i;
-        append_to_list(new_sections_list, section);
-    }
-
-    free_list(selected_sections_list);
-
-    output_elf_file->sections_list = new_sections_list;
+    output_elf_file->section_shstrtab = add_rw_section(output_elf_file, ".shstrtab", SHT_STRTAB, 0, 1);
 }
 
 // Loop over all sections in the input files and create the target sections in the output file.
@@ -184,99 +142,6 @@ static void make_program_segment_headers(RwElfFile *output) {
     }
 }
 
-// Make an ELF section header
-static void make_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, RwSection *section) {
-    sh->sh_name      = add_to_rw_section(output_elf_file->shstrtab, (char *) section->name, strlen(section->name) + 1);
-    sh->sh_type      = section->type;
-    sh->sh_flags     = section->flags;
-    sh->sh_offset    = section->offset;
-    sh->sh_size      = section->size;
-    sh->sh_addralign = section->align;
-}
-
-// Make all output section headers
-static void make_section_headers(RwElfFile *output_elf_file) {
-    // Allocat ememory
-    output_elf_file->elf_section_headers_size = sizeof(ElfSectionHeader) * output_elf_file->sections_list->length;
-    output_elf_file->elf_section_headers = calloc(1, output_elf_file->elf_section_headers_size);
-
-    // Loop over all headers
-    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
-        make_section_header(output_elf_file, &output_elf_file->elf_section_headers[i], section);
-    }
-}
-
-// Given the sizes and alignments of all output sections, determine the offsets in the final ELF file.
-static int layout_elf_sections(RwElfFile *output_elf_file) {
-    ElfSectionHeader *elf_section_headers = output_elf_file->elf_section_headers;
-    ElfProgramSegmentHeader *elf_program_segment_headers = output_elf_file->elf_program_segment_headers;
-
-    // Determine section offsets
-    // Align start of the sections on a page boundary after the ELF, program segments and section headers
-    int offset =
-        sizeof(ElfHeader) +                                     // Elf header
-        output_elf_file->elf_program_segments_header_size +     // Program segments headers
-        output_elf_file->elf_section_headers_size;              // Section headers
-
-    // Loop over all output sections
-    int program_segment_index = 0;
-    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
-
-        // Align program sections to page boundaries
-        if (section->type == SHT_PROGBITS) offset = ALIGN_UP(offset, 0x1000);
-
-        // Determine executable address of the section
-        uint64_t vaddr = output_elf_file->executable_virt_address + offset;
-
-        section->offset = offset;
-        elf_section_headers[i].sh_offset = offset;
-        elf_section_headers[i].sh_addr = vaddr;
-
-        if (section->type == SHT_PROGBITS) {
-            program_segment_index++;
-
-            ElfProgramSegmentHeader *h = &elf_program_segment_headers[program_segment_index];
-
-            h->p_offset = offset;
-            h->p_vaddr = vaddr;
-            h->p_paddr = vaddr;
-        }
-
-        offset += section->size;
-    }
-
-    return offset;
-}
-
-// Make the ELF header
-static void make_elf_header(ElfHeader *elf_header, RwElfFile *output) {
-    uint64_t entrypoint = 0x401000; // TODO look up from symbol table
-
-    // ELF header
-    elf_header->ei_magic0 = 0x7f;                                  // Magic
-    elf_header->ei_magic1 = 'E';
-    elf_header->ei_magic2 = 'L';
-    elf_header->ei_magic3 = 'F';
-    elf_header->ei_class    = ELF_CLASS_64;                        // 64-bit
-    elf_header->ei_data     = ELF_DATA_2_LSB;                      // LSB
-    elf_header->ei_version  = 1;                                   // Original ELF version
-    elf_header->ei_osabi    = ELF_OSABI_NONE;                      // Unix System V
-    elf_header->e_type      = ET_EXEC;                             // Executable file
-    elf_header->e_machine   = E_MACHINE_TYPE_X86_64;               // x86-64
-    elf_header->e_version   = EV_CURRENT;                          // EV_CURRENT Current version of ELF
-    elf_header->e_entry     = entrypoint;                          // Program entrypoint
-    elf_header->e_phoff     = output->elf_program_segments_offset; // Offset to program header table
-    elf_header->e_shoff     = output->elf_section_headers_offset;  // Offset to section header table
-    elf_header->e_ehsize    = sizeof(ElfHeader);                   // The size of this header, 0x40 for 64-bit
-    elf_header->e_phentsize = sizeof(ElfProgramSegmentHeader);     // The size of the program header
-    elf_header->e_phnum     = output->elf_program_segments_count;  // Number of program header entries
-    elf_header->e_shentsize = sizeof(ElfSectionHeader);            // The size of the section header
-    elf_header->e_shnum     = output->sections_list->length;       // Number of section header entries
-    elf_header->e_shstrndx  = output->shstrtab->index;             // The section header string table index
-}
-
 // Copy the memory for all program sections in the input files to the output file
 static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *output_elf_file) {
     // Loop over all files
@@ -304,51 +169,14 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
     }
 }
 
-// Copy all the section data to the final positions in the ELF file.
-static void copy_sections_to_elf(RwElfFile *output_elf_file, char *program) {
-    List *sections = output_elf_file->sections_list;
-
-    for (int i = 0; i < sections->length; i++) {
-        RwSection *section = sections->elements[i];
-
-        // All sections have data other than .bss
-        if (strcmp(section->name, ".bss")) {
-            memcpy(&program[section->offset], section->data, section->size);
-        }
-    }
-}
-
-// Write the ELF file
-void write_elf_file(const char *filename, const void *program, int size) {
-    // Write output file
-    FILE *f;
-    if (!strcmp(filename, "-")) {
-        f = stdout;
-    }
-    else {
-        f = fopen(filename, "wb");
-        if (!f) {
-            perror("Unable to open write output file");
-            exit(1);
-        }
-
-        if (chmod(filename, 0755) < 0) {
-            perror("Unable to set executable permissions");
-            exit(1);
-        }
-    }
-
-    int written = fwrite(program, 1, size, f);
-    if (written < 0) { perror("Unable to write to output file"); exit(1); }
-    fclose(f);
-}
-
 void run(List *input_filenames, const char *output_filename) {
     // Read input file
     List *input_elf_files = read_input_files(input_filenames);
 
     // Create output file
-    RwElfFile *output_elf_file = new_rw_elf_file(output_filename, EXECUTABLE_VIRTUAL_ADDRESS);
+    RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
+    output_elf_file->executable_virt_address = EXECUTABLE_VIRTUAL_ADDRESS;
+    output_elf_file->entrypoint = 0x401000; // TODO look up from symbol table
 
     // Create sections in the output file
     create_output_file_sections(input_elf_files, output_elf_file);
@@ -360,35 +188,23 @@ void run(List *input_filenames, const char *output_filename) {
     make_program_segment_headers(output_elf_file);
 
     // Make all ELF section headers
-    make_section_headers(output_elf_file);
+    make_rw_section_headers(output_elf_file);
 
     // Populate the null program segment header
     make_null_program_segment_header(output_elf_file);
 
-    // Layout the sections
-    int size = layout_elf_sections(output_elf_file);
+    // Layout the sections & allocate memory for the output
+    layout_rw_elf_sections(output_elf_file);
 
-    // Allocate memory for the output program
-    char *program = calloc(1, size);
-
-    // Layout the first page as follows:
-    // - ELF header
-    // - Program segment headers
-    // - Segment headers
-    output_elf_file->elf_program_segments_offset  = sizeof(ElfSectionHeader);
-    output_elf_file->elf_section_headers_offset  = output_elf_file->elf_program_segments_offset + output_elf_file->elf_program_segments_header_size;
-
-    // Make/copy the ELF, program segment headers and section headers
-    make_elf_header((ElfHeader *) program, output_elf_file);
-    memcpy(program + output_elf_file->elf_program_segments_offset, output_elf_file->elf_program_segment_headers, output_elf_file->elf_program_segments_header_size);
-    memcpy(program + output_elf_file->elf_section_headers_offset, output_elf_file->elf_section_headers, output_elf_file->elf_section_headers_size);
+    // Make the ELF headers, program segment headers and section headers
+    make_elf_headers(output_elf_file);
 
     // Copy the memory for all program sections in the input files to the output file
     copy_input_elf_sections_to_output(input_elf_files, output_elf_file);
 
     // Copy all the section data to the final positions in the ELF file.
-    copy_sections_to_elf(output_elf_file, program);
+    copy_rw_sections_to_elf(output_elf_file);
 
     // Write the ELF file
-    write_elf_file(output_filename, program, size);
+    write_elf_file(output_elf_file);
 }

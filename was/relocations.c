@@ -2,8 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "was/elf.h"
+#include "rw-elf.h"
+
 #include "was/list.h"
+#include "was/elf.h"
 #include "was/relocations.h"
 
 static List *relocations;
@@ -13,7 +15,7 @@ void init_relocations(void) {
 }
 
 // Get .rela.x associated with section .x. Create one if not existent
-Section *get_relocation_section(Section *section) {
+RwSection *get_relocation_section(RwSection *section) {
     if (!section->rela_section) {
         char *name = malloc(strlen(section->name + 5));
         sprintf(name, "%s%s", ".rela", section->name);
@@ -23,7 +25,7 @@ Section *get_relocation_section(Section *section) {
     return section->rela_section;
 }
 
-void add_relocation(Section *section, Symbol *symbol, int type, long offset, int addend) {
+void add_relocation(RwSection *section, Symbol *symbol, int type, long offset, int addend) {
     Relocation *r = malloc(sizeof(Relocation));
     r->type = type;
     r->offset = offset;
@@ -41,9 +43,9 @@ void add_elf_relocations(void) {
         // Global symbols that have been declared don't get rewritten to a section offset.
         // Symbols that use the global offset table also don't get rewritten to a section offset.
         if (r->symbol->section_index && !r->symbol->binding == STB_GLOBAL && r->type != R_X86_64_REX_GOTP)
-            add_elf_relocation(r->section, r->type, r->symbol->section->symtab_index, r->offset, r->symbol->value + r->addend);
+            add_elf_relocation(output_elf_file, r->section, r->type, r->symbol->section->symtab_index, r->offset, r->symbol->value + r->addend);
         else
-            add_elf_relocation(r->section, r->type, r->symbol->symtab_index, r->offset, r->addend);
+            add_elf_relocation(output_elf_file, r->section, r->type, r->symbol->symtab_index, r->offset, r->addend);
     }
 }
 
@@ -51,10 +53,10 @@ void add_elf_relocations(void) {
 void make_rela_sections(void) {
     add_elf_relocations();
 
-    for (int i = 0; i < sections_list->length; i++) {
-        Section *section = sections_list->elements[i];
+    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
         if (section->rela_section) {
-            section->rela_section->link = section_symtab->index;
+            section->rela_section->link = output_elf_file->section_symtab->index;
             section->rela_section->info = section->index;
             section->rela_section->entsize = sizeof(ElfRelocation);
         }

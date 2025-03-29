@@ -1,9 +1,9 @@
 #ifndef _BRANCHES_H
 #define _BRANCHES_H
 
-#include "elf.h"
+#include "rw-elf.h"
 #include "list.h"
 
-void layout_section(Section *section);
+void layout_section(RwSection *section);
 
 #endif

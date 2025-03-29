@@ -3,8 +3,10 @@ TARGET = ../bin/was
 all: ${TARGET}
 
 HEADERS = \
+	elf.h \
 	error.h \
 	list.h \
+	rw-elf.h \
 	strmap.h \
 	was/base128.h \
 	was/branches.h \
@@ -39,6 +41,7 @@ OBJECTS = \
 	was.o \
 
 LIBS = \
+	elf \
 	error \
 	list \
 	strmap \

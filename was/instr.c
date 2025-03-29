@@ -5,7 +5,6 @@
 
 #include  "error.h"
 
-#include "was/elf.h"
 #include "was/instr.h"
 #include "was/lexer.h"
 #include "was/opcodes.h"

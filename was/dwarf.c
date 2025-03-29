@@ -4,7 +4,6 @@
 #include <string.h>
 
 #include "error.h"
-
 #include "was/base128.h"
 #include "was/dwarf.h"
 #include "was/elf.h"
@@ -45,7 +44,7 @@ typedef struct state {
 
 State state;
 
-static int make_dwarf_debug_line_section_header(Section *debug_line_section) {
+static int make_dwarf_debug_line_section_header(RwSection *debug_line_section) {
     LineNumberProgramHeader header    = {0};
 
     header.version                    = 3; // DWARF version 3
@@ -70,38 +69,38 @@ static int make_dwarf_debug_line_section_header(Section *debug_line_section) {
 
     int header_in_section_pos = debug_line_section->size;
 
-    add_to_section(debug_line_section, &header, sizeof(header));
+    add_to_rw_section(debug_line_section, &header, sizeof(header));
 
     return header_in_section_pos;
 }
 
-static int make_dwarf_debug_line_section_dirs(Section *debug_line_section) {
+static int make_dwarf_debug_line_section_dirs(RwSection *debug_line_section) {
     static char zero = 0;
 
     for (int i = 0; i < dirs_list->length; i++) {
         char *filename = dirs_list->elements[i];
-        add_to_section(debug_line_section, filename, strlen(filename) + 1);
+        add_to_rw_section(debug_line_section, filename, strlen(filename) + 1);
     }
 
-    add_to_section(debug_line_section, &zero, 1); // Terminator
+    add_to_rw_section(debug_line_section, &zero, 1); // Terminator
 }
 
-static int make_dwarf_debug_line_section_files(Section *debug_line_section) {
+static int make_dwarf_debug_line_section_files(RwSection *debug_line_section) {
     static char zero = 0;
 
     for (int i = 0; i < files->length; i++) {
         File *file = files->elements[i];
         if (!file) error("Non consecutive .file numbers");
-        add_to_section(debug_line_section, file->filename, strlen(file->filename) + 1);
+        add_to_rw_section(debug_line_section, file->filename, strlen(file->filename) + 1);
 
         char uleb128_data[9];
         int size = encode_uleb128(file->dir_index, uleb128_data);
-        add_to_section(debug_line_section, uleb128_data, size);
-        add_to_section(debug_line_section, &zero, 1); // Time of last modification not implemented
-        add_to_section(debug_line_section, &zero, 1); // Length in bytes not implemented
+        add_to_rw_section(debug_line_section, uleb128_data, size);
+        add_to_rw_section(debug_line_section, &zero, 1); // Time of last modification not implemented
+        add_to_rw_section(debug_line_section, &zero, 1); // Length in bytes not implemented
     }
 
-    add_to_section(debug_line_section, &zero, 1); // Terminator
+    add_to_rw_section(debug_line_section, &zero, 1); // Terminator
 }
 
 // Allocate space at the end of a section and return a pointer to it.
@@ -126,24 +125,24 @@ static int add_to_state_data(const void *src, int size) {
     return data - state.data;
 }
 
-static void make_dwarf_debug_line_section_program(Section *debug_line_section) {
+static void make_dwarf_debug_line_section_program(RwSection *debug_line_section) {
     if (!state.locs_present) return; // No debug line info
 
     // Add final loc for the end of the file
-    add_dwarf_loc(state.file, state.line_number, section_text->size);
+    add_dwarf_loc(state.file, state.line_number, output_elf_file->section_text->size);
 
     // Extended opcode 1: End of Sequence
     const char epilogue[] = {0x00, 0x01, DW_LNE_end_sequence};
     add_to_state_data(epilogue, sizeof(epilogue));
 
-    add_to_section(debug_line_section, state.data, state.size);
+    add_to_rw_section(debug_line_section, state.data, state.size);
 }
 
 void make_dwarf_debug_line_section(void) {
     // Only add line number information if a .debug_info section exists
-    if (!get_section(".debug_info")) return;
+    if (!get_rw_section(output_elf_file, ".debug_info")) return;
 
-    Section *debug_line_section = get_section(".debug_line");
+    RwSection *debug_line_section = get_rw_section(output_elf_file, ".debug_line");
     if (!debug_line_section)
         debug_line_section = add_section(".debug_line", SHT_PROGBITS, 0, 0);
 
@@ -152,7 +151,7 @@ void make_dwarf_debug_line_section(void) {
     make_dwarf_debug_line_section_files(debug_line_section);
 
     // Note: debug_line_section->data can be reallocated so its address must not
-    // be stored  & reused with an add_to_section call in between.
+    // be stored  & reused with an add_to_rw_section call in between.
     LineNumberProgramHeader *header_in_section = (LineNumberProgramHeader *) (debug_line_section->data + header_in_section_pos);
 
     // The number of bytes following the header_length field to the beginning of the

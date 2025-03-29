@@ -4,7 +4,7 @@ LIBS = \
 	lib/libstrmap.a \
 	lib/liberror.a \
 
-all: ${LIBS} was/was bin/wld
+all: ${LIBS} bin/was bin/wld
 
 .PHONY: lib/liblist.a
 lib/liblist.a:
@@ -22,14 +22,14 @@ lib/liberror.a:
 lib/libelf.a: lib/liblist.a lib/libstrmap.a
 	@make -C lib/libelf
 
-was/was: ${LIBS}
+bin/was: ${LIBS}
 	@make -C was
 
 bin/wld: ${LIBS}
 	@make -C wld
 
 .PHONY: test
-test:
+test: bin/was bin/wld
 	make -C was test
 	make -C wld test
 

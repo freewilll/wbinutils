@@ -910,7 +910,7 @@ void test_relocations_with_rip_and_defined_symbol(void) {
         END);
 
     // There should be no relocations
-    if (get_section(".rela.text")) panic("Unexpectedly got a .rela.text section");
+    if (get_rw_section(output_elf_file, ".rela.text")) panic("Unexpectedly got a .rela.text section");
 }
 
 // Symbols that are defined and local get resolved without a relocation
@@ -929,7 +929,7 @@ void test_local_defined_symbol_relocation(void) {
     );
 
     // There should be no relocations
-    if (get_section(".rela.text")) panic("Unexpectedly got a .rela.text section");
+    if (get_rw_section(output_elf_file, ".rela.text")) panic("Unexpectedly got a .rela.text section");
 }
 
 // Symbols that are defined and global get a relocation pointing at the symbol.
@@ -969,7 +969,7 @@ void test_data_with_undefined_symbol(void) {
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0x00, // Relocated
         0x00, // Relocated
         0x00, // Relocated
@@ -988,7 +988,7 @@ void test_data_with_undefined_symbol(void) {
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0x00, 0x00, // Relocated
         0x00, 0x00, // Relocated
         0x00, 0x00, // Relocated
@@ -1007,7 +1007,7 @@ void test_data_with_undefined_symbol(void) {
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, // Relocated
@@ -1026,7 +1026,7 @@ void test_data_with_undefined_symbol(void) {
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
@@ -1045,7 +1045,7 @@ void test_data_with_undefined_symbol(void) {
         END
     );
 
-    assert_section_data(section_rodata,
+    assert_section_data(output_elf_file->section_rodata,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
@@ -1079,13 +1079,13 @@ void test_data_with_defined_symbol(void) {
     test_full_assembly("data_with_defined_symbol byte", input, END); // No code
 
     assert_relocations(".rela.data",
-        R_X86_64_8, section_data->symtab_index, 0x01,  0,
-        R_X86_64_8, section_data->symtab_index, 0x02,  1,
-        R_X86_64_8, section_data->symtab_index, 0x03, -1,
+        R_X86_64_8, output_elf_file->section_data->symtab_index, 0x01,  0,
+        R_X86_64_8, output_elf_file->section_data->symtab_index, 0x02,  1,
+        R_X86_64_8, output_elf_file->section_data->symtab_index, 0x03, -1,
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0xff, // a
         0x00, // Relocated
         0x00, // Relocated
@@ -1099,13 +1099,13 @@ void test_data_with_defined_symbol(void) {
     test_full_assembly("data_with_defined_symbol word", input, END); // No code
 
     assert_relocations(".rela.data",
-        R_X86_64_16, section_data->symtab_index, 0x02,  0,
-        R_X86_64_16, section_data->symtab_index, 0x04,  1,
-        R_X86_64_16, section_data->symtab_index, 0x06, -1,
+        R_X86_64_16, output_elf_file->section_data->symtab_index, 0x02,  0,
+        R_X86_64_16, output_elf_file->section_data->symtab_index, 0x04,  1,
+        R_X86_64_16, output_elf_file->section_data->symtab_index, 0x06, -1,
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0xff, 0xff, // a
         0x00, 0x00, // Relocated
         0x00, 0x00, // Relocated
@@ -1119,13 +1119,13 @@ void test_data_with_defined_symbol(void) {
     test_full_assembly("data_with_defined_symbol long", input, END); // No code
 
     assert_relocations(".rela.data",
-        R_X86_64_32, section_data->symtab_index, 0x04,  0,
-        R_X86_64_32, section_data->symtab_index, 0x08,  1,
-        R_X86_64_32, section_data->symtab_index, 0x0c, -1,
+        R_X86_64_32, output_elf_file->section_data->symtab_index, 0x04,  0,
+        R_X86_64_32, output_elf_file->section_data->symtab_index, 0x08,  1,
+        R_X86_64_32, output_elf_file->section_data->symtab_index, 0x0c, -1,
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0xff, 0xff, 0xff, 0xff, // a
         0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, // Relocated
@@ -1139,13 +1139,13 @@ void test_data_with_defined_symbol(void) {
     test_full_assembly("data_with_defined_symbol quad", input, END); // No code
 
     assert_relocations(".rela.data",
-        R_X86_64_64, section_data->symtab_index, 0x08,  0,
-        R_X86_64_64, section_data->symtab_index, 0x10,  1,
-        R_X86_64_64, section_data->symtab_index, 0x18, -1,
+        R_X86_64_64, output_elf_file->section_data->symtab_index, 0x08,  0,
+        R_X86_64_64, output_elf_file->section_data->symtab_index, 0x10,  1,
+        R_X86_64_64, output_elf_file->section_data->symtab_index, 0x18, -1,
         END
     );
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // a
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
@@ -1159,13 +1159,13 @@ void test_data_with_defined_symbol(void) {
     test_full_assembly("data_with_defined_symbol quad in .rodata", input, END); // No code
 
     assert_relocations(".rela.rodata",
-        R_X86_64_64, section_rodata->symtab_index, 0x08,  0,
-        R_X86_64_64, section_rodata->symtab_index, 0x10,  1,
-        R_X86_64_64, section_rodata->symtab_index, 0x18, -1,
+        R_X86_64_64, output_elf_file->section_rodata->symtab_index, 0x08,  0,
+        R_X86_64_64, output_elf_file->section_rodata->symtab_index, 0x10,  1,
+        R_X86_64_64, output_elf_file->section_rodata->symtab_index, 0x18, -1,
         END
     );
 
-    assert_section_data(section_rodata,
+    assert_section_data(output_elf_file->section_rodata,
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, // a
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Relocated
@@ -1185,9 +1185,9 @@ void test_data_with_defined_symbol(void) {
         END);
 
     assert_relocations(".rela.text",
-        R_X86_64_64, section_text->symtab_index, 0x08,  0,
-        R_X86_64_64, section_text->symtab_index, 0x10,  1,
-        R_X86_64_64, section_text->symtab_index, 0x18, -1,
+        R_X86_64_64, output_elf_file->section_text->symtab_index, 0x08,  0,
+        R_X86_64_64, output_elf_file->section_text->symtab_index, 0x10,  1,
+        R_X86_64_64, output_elf_file->section_text->symtab_index, 0x18, -1,
         END
     );
 }
@@ -1254,9 +1254,9 @@ void test_zero_in_text_section(void) {
 }
 
 void test_symbol_types_and_binding(void) {
-    int text_index = section_text->index;
-    int data_index = section_data->index;
-    int bss_index  = section_bss->index;
+    int text_index = output_elf_file->section_text->index;
+    int data_index = output_elf_file->section_data->index;
+    int bss_index  = output_elf_file->section_bss->index;
 
     test_full_assembly("default symbol type is NOTYPE", "foo: nop", 0x90, END);
     assert_symbols(0, 0, STT_NOTYPE, STB_LOCAL, text_index, "foo", END);
@@ -1333,7 +1333,7 @@ static void test_size_with_number(void) {
 }
 
 static void test_size_difference(void) {
-    int text_index = section_text->index;
+    int text_index = output_elf_file->section_text->index;
 
     test_full_assembly(".size obj, bar - foo",
         ".size obj, bar - foo\n"
@@ -1366,7 +1366,7 @@ static void test_quad_label_difference(void) {
         "   .quad 1\n"
         ".Lend:\n", END);
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0x0c, 0x00, 0x00, 0x00,
         0xff, 0xff, 0xff, 0xff,
         0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -1384,7 +1384,7 @@ static void test_cross_section_quad_label_difference(void) {
         "    .quad -1\n"
         ".b:\n", 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, END);
 
-    assert_section_data(section_data,
+    assert_section_data(output_elf_file->section_data,
         0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
         END);
 }
@@ -1442,7 +1442,7 @@ static void test_align(void) {
 }
 
 static void test_string_with_label(void) {
-    int text_index = section_text->index;
+    int text_index = output_elf_file->section_text->index;
     test_full_assembly("foo: .string \"foo\"", NULL, 0x66, 0x6f, 0x6f, 0x00, END);
     assert_symbols(0, 0, STT_NOTYPE, STB_LOCAL, text_index, "foo", END);
 }
@@ -1489,7 +1489,7 @@ static void test_debug_line_files(void) {
         END);
 
     // Check entire section is OK
-    assert_section_data(get_section(".debug_line"),
+    assert_section_data(get_rw_section(output_elf_file, ".debug_line"),
         // Header
         0x76, 0x00, 0x00, 0x00,             // unit_length
         0x03, 0x00,                         // DWARF version

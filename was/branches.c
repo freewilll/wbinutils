@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "was/base128.h"
 #include "was/branches.h"
-#include "was/elf.h"
 #include "was/list.h"
 #include "was/parser.h"
 #include "was/utils.h"
@@ -61,7 +61,7 @@ void dump_frags(List *chunks) {
 #endif
 
 // Update all symbol offsets
-static void make_symbol_offsets(Section *section) {
+static void make_symbol_offsets(RwSection *section) {
     List *chunks = section->chunks;
 
     int offset = 0;
@@ -243,7 +243,7 @@ static void reduce(List *chunks) {
     #endif
 }
 
-void layout_section(Section *section) {
+void layout_section(RwSection *section) {
     make_symbol_offsets(section);
 
     if (!section->chunks->length) return;

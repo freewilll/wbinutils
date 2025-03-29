@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #include  "error.h"
+#include  "rw-elf.h"
 
 #include "was/base128.h"
 #include "was/branches.h"
@@ -28,7 +29,7 @@ static List *cur_chunks;       // Chunks list for current section
 
 // Lookup or create section by name and make it the current section things are being added to
 static void set_current_section(char *name) {
-    Section *section = get_section(name);
+    RwSection *section = get_rw_section(output_elf_file, name);
     if (!section) section = add_section(name, SHT_PROGBITS, 0, 1);
     if (!section->chunks) section->chunks = new_list(10240);
     cur_chunks = section->chunks;
@@ -150,7 +151,7 @@ Chunk *parse_directive_statement(void) {
             }
             else {
                 expect(TOK_STRING_LITERAL, "filename");
-                add_file_symbol(strdup(cur_string_literal.data));
+                add_file_symbol(output_elf_file, strdup(cur_string_literal.data));
                 next();
             }
 
@@ -201,9 +202,9 @@ Chunk *parse_directive_statement(void) {
             if (was_local) {
                 // The symbol was already declared as .local. Adding a .comm to that
                 // allocates local bss storage for it.
-                symbol->section = section_bss;
-                symbol->value = section_bss->size;
-                section_bss->size += symbol->size;
+                symbol->section = output_elf_file->section_bss;
+                symbol->value = output_elf_file->section_bss->size;
+                output_elf_file->section_bss->size += symbol->size;
             }
             else {
                 // The symbol may be merged with other symbols and so becomes global
@@ -281,7 +282,7 @@ Chunk *parse_directive_statement(void) {
                 next();
             }
 
-            if (!get_section(name)) add_section(name, type, flags, 1);
+            if (!get_rw_section(output_elf_file, name)) add_section(name, type, flags, 1);
 
             set_current_section(name); // Auto creates the section
 
@@ -678,7 +679,7 @@ void parse(void) {
     }
 }
 
-void emit_section_code(Section *section) {
+void emit_section_code(RwSection *section) {
     List *chunks = section->chunks;
 
     layout_section(section);
@@ -754,7 +755,7 @@ void emit_section_code(Section *section) {
         // Add the chunk to the section
         switch (chunk->type)  {
             case CT_CODE:
-                add_to_section(section, instr->data, instr->size);
+                add_to_rw_section(section, instr->data, instr->size);
                 break;
 
             case CT_DATA: {
@@ -780,21 +781,21 @@ void emit_section_code(Section *section) {
                     }
                 }
 
-                add_to_section(section, chunk->dac.data, chunk->dac.size);
+                add_to_rw_section(section, chunk->dac.data, chunk->dac.size);
 
                 break;
             }
 
             case CT_ZERO:
-                add_zeros_to_section(section, chunk->zec.size);
+                add_zeros_to_rw_section(section, chunk->zec.size);
                 break;
 
             case CT_ALIGN: {
                 int padding =  PADDING_FOR_ALIGN_UP(section->size, chunk->aic.alignment);
                 if (padding) {
                     // Insert NOPs (0x90) as padding in a text section, otherwise zeros
-                    char value = section == section_text ? 0x90 : 0;
-                    add_repeated_value_to_section(section, value, padding);
+                    char value = section == output_elf_file->section_text ? 0x90 : 0;
+                    add_repeated_value_to_rw_section(section, value, padding);
                 }
                 break;
             }

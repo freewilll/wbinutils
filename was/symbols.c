@@ -45,8 +45,8 @@ Symbol *get_or_add_symbol(char *name) {
 }
 
 // Add a section + associated symbol
-Section *add_section(char *name, int type, int flags, int align) {
-    Section *section = add_elf_section(name, type, flags, align);
+RwSection *add_section(char *name, int type, int flags, int align) {
+    RwSection *section = add_rw_section(output_elf_file, name, type, flags, align);
 
     // Add a symbol unless it's the null section
     if (name[0]) {
@@ -69,7 +69,7 @@ Section *add_section(char *name, int type, int flags, int align) {
 void make_symbols_section(void) {
     // Add non-global symbols
     for (StrMapIterator it = strmap_iterator(symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        char *name = strmap_iterator_key(&it);
+        const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(symbols, name);
 
         if (symbol->section) symbol->section_index = symbol->section->index;
@@ -80,11 +80,11 @@ void make_symbols_section(void) {
         // Any local symbols starting with .L aren't included in the ELF.
         int dot_local = strlen(name) >= 2 && name[0] == '.' && name[1] == 'L';
         if (symbol->binding != STB_GLOBAL && !dot_local) {
-            char *elf_name = symbol->type == STT_SECTION ? "" : name;
-            symbol->symtab_index = add_elf_symbol(elf_name, symbol->value, symbol->size, symbol->binding, symbol->type, symbol->section_index);
+            const char *elf_name = symbol->type == STT_SECTION ? "" : name;
+            symbol->symtab_index = add_elf_symbol(output_elf_file, elf_name, symbol->value, symbol->size, symbol->binding, symbol->type, symbol->section_index);
 
             if (symbol->type == STT_SECTION) {
-                Section *section = get_section(name);
+                RwSection *section = get_rw_section(output_elf_file, name);
                 section->symtab_index = symbol->symtab_index;
             }
         }
@@ -92,34 +92,34 @@ void make_symbols_section(void) {
 
     // Add global symbols
     for (StrMapIterator it = strmap_iterator(symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        char *name = strmap_iterator_key(&it);
+        const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(symbols, name);
 
         if (symbol->section) symbol->section_index = symbol->section->index;
 
         if (symbol->binding == STB_GLOBAL)
-            symbol->symtab_index = add_elf_symbol(name, symbol->value, symbol->size, symbol->binding, symbol->type, symbol->section_index);
+            symbol->symtab_index = add_elf_symbol(output_elf_file, name, symbol->value, symbol->size, symbol->binding, symbol->type, symbol->section_index);
     }
 
-    section_symtab->link = section_strtab->index;
-    section_symtab->info = local_symbol_end + 1; // Index of the first global symbol
-    section_symtab->entsize = sizeof(ElfSymbol);
+    output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
+    output_elf_file->section_symtab->info = output_elf_file->local_symbol_end + 1; // Index of the first global symbol
+    output_elf_file->section_symtab->entsize = sizeof(ElfSymbol);
 }
 
 // Create default sections
 void init_default_sections(void) {
-    //                                name            type          flags                      alignment
-                          add_section("" ,            0,            0,                         0   );
-    section_text        = add_section(".text",        SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 0x10);
-    section_data        = add_section(".data",        SHT_PROGBITS, SHF_ALLOC | SHF_WRITE,     0x04);
-    section_bss         = add_section(".bss",         SHT_NOBITS,   SHF_ALLOC | SHF_WRITE,     0x04);
-    section_rodata      = add_section(".rodata",      SHT_PROGBITS, SHF_ALLOC,                 0x04);
-    section_symtab      = add_section(".symtab",      SHT_SYMTAB,   0,                         0x08);
-    section_strtab      = add_section(".strtab",      SHT_STRTAB,   0,                         0x01);
-    section_shstrtab    = add_section(".shstrtab",    SHT_STRTAB,   0,                         0x01);
+    //                                                 name            type          flags                      alignment
+                                           add_section("" ,            0,            0,                         0   );
+    output_elf_file->section_text        = add_section(".text",        SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 0x10);
+    output_elf_file->section_data        = add_section(".data",        SHT_PROGBITS, SHF_ALLOC | SHF_WRITE,     0x04);
+    output_elf_file->section_bss         = add_section(".bss",         SHT_NOBITS,   SHF_ALLOC | SHF_WRITE,     0x04);
+    output_elf_file->section_rodata      = add_section(".rodata",      SHT_PROGBITS, SHF_ALLOC,                 0x04);
+    output_elf_file->section_symtab      = add_section(".symtab",      SHT_SYMTAB,   0,                         0x08);
+    output_elf_file->section_strtab      = add_section(".strtab",      SHT_STRTAB,   0,                         0x01);
+    output_elf_file->section_shstrtab    = add_section(".shstrtab",    SHT_STRTAB,   0,                         0x01);
 
     // Start string table entries at 1, so that the zero value goes to an empty string
-    add_to_section(section_strtab, "", 1);
+    add_to_rw_section(output_elf_file->section_strtab, "", 1);
 
-    add_elf_symbol("", 0, 0, STB_LOCAL, STT_NOTYPE, SHN_UNDEF); // Null symbol
+    add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, SHN_UNDEF); // Null symbol
 }
