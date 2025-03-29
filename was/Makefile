@@ -1,6 +1,10 @@
-all: was
+TARGET = ../bin/was
+
+all: ${TARGET}
 
 HEADERS = \
+	list.h \
+	strmap.h \
 	was/branches.h \
 	was/dwarf.h \
 	was/elf.h \
@@ -23,17 +27,22 @@ OBJECTS = \
 	expr.o \
 	instr.o \
 	lexer.o \
-	list.o \
 	opcodes.o \
 	opcodes-generated.o \
 	parser.o \
 	relocations.o \
-	strmap.o \
 	symbols.o \
 	utils.o \
 	was.o \
 
+LIBS = \
+	list \
+	strmap \
+
 HEADERS_PATH := ${HEADERS:%=../include/%}
+
+LIBS_PREFIXED_L := ${LIBS:%=-l%}
+LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 
 %.o: %.c ${HEADERS_PATH}
 	gcc -g  -Wunused -I ../include -c $< -o $@
@@ -46,24 +55,24 @@ scripts/venv:
 opcodes-generated.c: scripts/parse-x86reference.xml.py scripts/opcodes.j2 scripts/venv
 	scripts/venv/bin/python3 scripts/parse-x86reference.xml.py ../../x86reference-2.xml opcodes-generated.c
 
-was: ${OBJECTS} main.o
-	gcc -g ${OBJECTS} main.o -o was
+${TARGET}: ${OBJECTS} main.o ${HEADERS_PATH}
+	gcc -g -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} main.o -o ${TARGET}
 
 .PHONY: test
-test: was run-test-instr run-test-data run-test-expr
+test: ${TARGET} run-test-instr run-test-data run-test-expr
 	make -C tests
 
-test-utils.o: test-utils.c test-utils.h
-	gcc -g  -Wunused -c $< -o $@
+test-utils.o: test-utils.c ../include/was/test-utils.h
+	gcc -g  -Wunused -I ../include -c $< -o $@
 
 test-instr: ${OBJECTS} test-instr.o test-utils.o
-	gcc -g ${OBJECTS} test-instr.o test-utils.o -o test-instr
+	gcc -g -L../lib ${OBJECTS} test-instr.o test-utils.o ${LIBS_PREFIXED_L} -o test-instr
 
 test-data: ${OBJECTS} test-data.o test-utils.o
-	gcc -g ${OBJECTS} test-data.o test-utils.o -o test-data
+	gcc -g -L../lib ${OBJECTS} test-data.o test-utils.o ${LIBS_PREFIXED_L} -o test-data
 
 test-expr: ${OBJECTS} test-expr.o test-utils.o
-	gcc -g ${OBJECTS} test-expr.o test-utils.o -o test-expr
+	gcc -g -L../lib ${OBJECTS} test-expr.o test-utils.o ${LIBS_PREFIXED_L} -o test-expr
 
 .PHONY: run-test-instr
 run-test-instr: test-instr

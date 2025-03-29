@@ -28,6 +28,11 @@ was/was: ${LIBS}
 bin/wld: ${LIBS}
 	@make -C wld
 
+.PHONY: test
+test:
+	make -C was test
+	make -C wld test
+
 clean:
 	@make -C lib/liblist clean
 	@make -C lib/libstrmap clean

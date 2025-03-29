@@ -1,6 +1,5 @@
 *.o
 /*.s
-was
 core
 a.out
 test

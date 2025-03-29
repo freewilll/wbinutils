@@ -3,13 +3,15 @@ TARGET = ../bin/wld
 all: ${TARGET}
 
 HEADERS = \
-	../include/elf.h \
-	../include/list.h \
-	../include/ro-elf.h \
-	../include/rw-elf.h \
-	../include/strmap.h \
-	../include/error.h \
-	../include/wld/wld.h \
+	list.h \
+	strmap.h \
+	elf.h \
+	list.h \
+	ro-elf.h \
+	rw-elf.h \
+	strmap.h \
+	error.h \
+	wld/wld.h \
 
 OBJECTS = \
 	main.o \
@@ -21,10 +23,12 @@ LIBS = \
 	list \
 	strmap \
 
+HEADERS_PATH := ${HEADERS:%=../include/%}
+
 LIBS_PREFIXED_L := ${LIBS:%=-l%}
 LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 
-%.o: %.c ${HEADERS}
+%.o: %.c ${HEADERS_PATH}
 	gcc -g -I ../include -c $< -o $@
 
 ${TARGET}: ${OBJECTS} ${LIBS_PATH}
