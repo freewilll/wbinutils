@@ -1,7 +1,7 @@
 #include <stdlib.h>
 
-#include "list.h"
-#include "utils.h"
+#include "was/list.h"
+#include "was/utils.h"
 
 #define MIN_SIZE 0
 

@@ -3,11 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "elf.h"
-#include "instr.h"
-#include "lexer.h"
-#include "opcodes.h"
-#include "utils.h"
+#include "was/elf.h"
+#include "was/instr.h"
+#include "was/lexer.h"
+#include "was/opcodes.h"
+#include "was/utils.h"
 
 #define OPCODE_SET_SIZE16 0x66
 

@@ -1,11 +1,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "branches.h"
-#include "elf.h"
-#include "list.h"
-#include "parser.h"
-#include "utils.h"
+#include "was/branches.h"
+#include "was/elf.h"
+#include "was/list.h"
+#include "was/parser.h"
+#include "was/utils.h"
 
 // Based on the approach in relax_segment in GNU GAS write.c The text chunks are grouped
 // into a list of frags. Each frag starts with a branch instruction and has zero or

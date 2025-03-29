@@ -3,11 +3,11 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "dwarf.h"
-#include "elf.h"
-#include "list.h"
-#include "utils.h"
-#include "symbols.h"
+#include "was/dwarf.h"
+#include "was/elf.h"
+#include "was/list.h"
+#include "was/utils.h"
+#include "was/symbols.h"
 
 #define LINE_BASE  -5
 #define LINE_RANGE 14

@@ -1,20 +1,20 @@
 all: was
 
 HEADERS = \
-	branches.h \
-	dwarf.h \
-	elf.h \
-	expr.h \
-	instr.h \
-	lexer.h \
-	list.h \
-	opcodes.h \
-	parser.h \
-	relocations.h \
-	strmap.h \
-	symbols.h \
-	utils.h \
-	was.h \
+	was/branches.h \
+	was/dwarf.h \
+	was/elf.h \
+	was/expr.h \
+	was/instr.h \
+	was/lexer.h \
+	was/list.h \
+	was/opcodes.h \
+	was/parser.h \
+	was/relocations.h \
+	was/strmap.h \
+	was/symbols.h \
+	was/utils.h \
+	was/was.h \
 
 OBJECTS = \
 	branches.o \
@@ -33,8 +33,10 @@ OBJECTS = \
 	utils.o \
 	was.o \
 
-%.o: %.c ${HEADERS}
-	gcc -g  -Wunused -c $< -o $@
+HEADERS_PATH := ${HEADERS:%=../include/%}
+
+%.o: %.c ${HEADERS_PATH}
+	gcc -g  -Wunused -I ../include -c $< -o $@
 
 scripts/venv:
 	python3 -m virtualenv scripts/venv

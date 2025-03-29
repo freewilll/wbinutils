@@ -1,9 +1,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "elf.h"
-#include "strmap.h"
-#include "symbols.h"
+#include "was/elf.h"
+#include "was/strmap.h"
+#include "was/symbols.h"
 
 // The naming is dubious: this covers both symbols and sections
 

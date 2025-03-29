@@ -2,12 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "expr.h"
-#include "instr.h"
-#include "relocations.h"
-#include "symbols.h"
-#include "test-utils.h"
-#include "utils.h"
+#include "was/expr.h"
+#include "was/instr.h"
+#include "was/relocations.h"
+#include "was/symbols.h"
+#include "was/test-utils.h"
+#include "was/utils.h"
 
 static Node *run_expression_parser(char *input) {
     // Trick the lexer into thinking identifiers aren't instructions

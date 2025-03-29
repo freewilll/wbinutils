@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "strmap.h"
-#include "utils.h"
+#include "was/strmap.h"
+#include "was/utils.h"
 
 enum {
     TOMBSTONE        = -1,

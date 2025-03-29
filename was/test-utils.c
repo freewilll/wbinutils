@@ -3,11 +3,11 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "dwarf.h"
-#include "elf.h"
-#include "utils.h"
-#include "test-utils.h"
-#include "was.h"
+#include "was/dwarf.h"
+#include "was/elf.h"
+#include "was/utils.h"
+#include "was/test-utils.h"
+#include "was/was.h"
 
 const char *symbol_type_names[] = {
     "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",

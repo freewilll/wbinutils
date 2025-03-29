@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "expr.h"
-#include "lexer.h"
-#include "utils.h"
+#include "was/expr.h"
+#include "was/lexer.h"
+#include "was/utils.h"
 
 #define NODE_HAS_SYMBOL(node) ((node)->value && (node)->value->symbol)
 #define NODE_IS_NUMERIC(node) ((node)->value && !(node)->value->symbol)

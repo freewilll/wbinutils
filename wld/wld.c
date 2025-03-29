@@ -8,7 +8,7 @@
 #include "list.h"
 #include "ro-elf.h"
 #include "rw-elf.h"
-#include "wld.h"
+#include "wld/wld.h"
 
 // Load all files into memoryfiles
 static List *read_input_files(List *input_filenames) {

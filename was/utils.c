@@ -4,8 +4,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "lexer.h"
-#include "was.h"
+#include "was/lexer.h"
+#include "was/was.h"
 
 // ANSI color codes
 #define LOCUS "\e[0;01m" // Bold

@@ -4,7 +4,7 @@
 
 #include "error.h"
 #include "list.h"
-#include "wld.h"
+#include "wld/wld.h"
 
 int main(int argc, char **argv) {
     int exit_code = 0;

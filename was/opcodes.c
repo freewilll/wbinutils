@@ -2,10 +2,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "list.h"
-#include "opcodes.h"
-#include "strmap.h"
-#include "utils.h"
+#include "was/list.h"
+#include "was/opcodes.h"
+#include "was/strmap.h"
+#include "was/utils.h"
 
 // Uncomment to enable debug output
 // #define DEBUG

@@ -2,19 +2,19 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "branches.h"
-#include "dwarf.h"
-#include "elf.h"
-#include "expr.h"
-#include "instr.h"
-#include "lexer.h"
-#include "list.h"
-#include "parser.h"
-#include "relocations.h"
-#include "strmap.h"
-#include "symbols.h"
-#include "utils.h"
-#include "was.h"
+#include "was/branches.h"
+#include "was/dwarf.h"
+#include "was/elf.h"
+#include "was/expr.h"
+#include "was/instr.h"
+#include "was/lexer.h"
+#include "was/list.h"
+#include "was/parser.h"
+#include "was/relocations.h"
+#include "was/strmap.h"
+#include "was/symbols.h"
+#include "was/utils.h"
+#include "was/was.h"
 
 typedef struct simple_expression {
     Symbol *symbol; // Optional symbol

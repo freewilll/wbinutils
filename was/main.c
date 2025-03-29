@@ -2,8 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "was.h"
-#include "utils.h"
+#include "was/was.h"
+#include "was/utils.h"
 
 int main(int argc, char **argv) {
     int exit_code = 0;

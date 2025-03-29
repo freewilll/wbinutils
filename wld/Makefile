@@ -9,7 +9,7 @@ HEADERS = \
 	../include/rw-elf.h \
 	../include/strmap.h \
 	../include/error.h \
-	../include/wld.h \
+	../include/wld/wld.h \
 
 OBJECTS = \
 	main.o \

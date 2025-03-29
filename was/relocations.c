@@ -2,9 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "elf.h"
-#include "list.h"
-#include "relocations.h"
+#include "was/elf.h"
+#include "was/list.h"
+#include "was/relocations.h"
 
 static List *relocations;
 

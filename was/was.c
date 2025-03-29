@@ -1,13 +1,13 @@
 #include <stdio.h>
 
-#include "branches.h"
-#include "dwarf.h"
-#include "elf.h"
-#include "lexer.h"
-#include "opcodes.h"
-#include "parser.h"
-#include "relocations.h"
-#include "was.h"
+#include "was/branches.h"
+#include "was/dwarf.h"
+#include "was/elf.h"
+#include "was/lexer.h"
+#include "was/opcodes.h"
+#include "was/parser.h"
+#include "was/relocations.h"
+#include "was/was.h"
 
 void emit_code(void) {
     for (int i = 0; i < sections_list->length; i++) {

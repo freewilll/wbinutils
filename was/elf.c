@@ -4,11 +4,11 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "elf.h"
-#include "list.h"
-#include "strmap.h"
-#include "utils.h"
-#include "was.h"
+#include "was/elf.h"
+#include "was/list.h"
+#include "was/strmap.h"
+#include "was/utils.h"
+#include "was/was.h"
 
 // ELF sections
 Section *section_text;

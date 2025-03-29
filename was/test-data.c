@@ -3,15 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "dwarf.h"
-#include "elf.h"
-#include "lexer.h"
-#include "opcodes.h"
-#include "parser.h"
-#include "relocations.h"
-#include "symbols.h"
-#include "utils.h"
-#include "test-utils.h"
+#include "was/dwarf.h"
+#include "was/elf.h"
+#include "was/lexer.h"
+#include "was/opcodes.h"
+#include "was/parser.h"
+#include "was/relocations.h"
+#include "was/symbols.h"
+#include "was/utils.h"
+#include "was/test-utils.h"
 
 #define END -1
 

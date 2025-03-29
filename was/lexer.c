@@ -2,9 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "lexer.h"
-#include "utils.h"
-#include "was.h"
+#include "was/lexer.h"
+#include "was/utils.h"
+#include "was/was.h"
 
 static char *input;             // Input file data
 static char *input_end;         // Input file data

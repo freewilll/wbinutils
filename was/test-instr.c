@@ -2,15 +2,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "dwarf.h"
-#include "elf.h"
-#include "lexer.h"
-#include "instr.h"
-#include "parser.h"
-#include "relocations.h"
-#include "symbols.h"
-#include "utils.h"
-#include "test-utils.h"
+#include "was/dwarf.h"
+#include "was/elf.h"
+#include "was/lexer.h"
+#include "was/instr.h"
+#include "was/parser.h"
+#include "was/relocations.h"
+#include "was/symbols.h"
+#include "was/utils.h"
+#include "was/test-utils.h"
 
 #define DWARF_PROLOGUE 0x00, 0x09, 0x02, 0, 0, 0, 0, 0, 0, 0, 0
 #define DWARF_EPILOGUE 0x00, 0x01, 0x01
