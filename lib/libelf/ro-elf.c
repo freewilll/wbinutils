@@ -10,38 +10,50 @@
 #include "strmap.h"
 #include "error.h"
 
-static InputElfFile *read_file(const char *filename) {
-    InputElfFile *elf_file = malloc(sizeof(InputElfFile));
+// Open an ELF file and read the ELF header
+static ElfFile *open_file(const char *filename) {
+    ElfFile *elf_file = malloc(sizeof(ElfFile));
 
     elf_file->filename = strdup(filename);
 
-    FILE *f  = fopen(filename, "r");
+    elf_file->file = fopen(filename, "r");
 
-    if (f == 0) {
+    if (elf_file->file == 0) {
         perror(filename);
         exit(1);
     }
 
-    fseek(f, 0, SEEK_END);
-    elf_file->size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    elf_file->data = malloc(elf_file->size);
-    int read = fread(elf_file->data, 1, elf_file->size, f);
-    if (read != elf_file->size) {
-        error("Unable to read input file: %s\n", filename);
-        exit(1);
-    }
-
-    fclose(f);
-
-    elf_file->elf_header = (ElfHeader *) elf_file->data;
+    elf_file->elf_header = malloc(sizeof(ElfHeader));
+    int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
+    if (read != sizeof(ElfHeader)) error("Unable to read input file: %s\n", filename);
 
     return elf_file;
 }
 
+// Read from the file into a buffer
+static char *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
+    fseek(elf_file->file, offset, SEEK_SET);
+    int read = fread(dst, 1, size, elf_file->file);
+    if (read != size) error("Unable to read input file: %s\n", elf_file->filename);
+}
+
+// Read a section into dst
+void load_section_into_buffer(ElfFile *elf_file, int section_index, void *dst) {
+    ElfSectionHeader *section_header = &elf_file->section_headers[section_index];
+    read_from_file(elf_file, dst, section_header->sh_offset, section_header->sh_size);
+}
+
+// Allocate memory for a section, read it, and return it
+static void *load_section(ElfFile *elf_file, int section_index) {
+    ElfSectionHeader *section_header = &elf_file->section_headers[section_index];
+    void *result = malloc(section_header->sh_size);
+    load_section_into_buffer(elf_file, section_index, result);
+
+    return result;
+}
+
 // Ensure the file is an x86_64 ELF object file
-static void check_file(InputElfFile *elf_file) {
+static void check_file(ElfFile *elf_file) {
     ElfHeader *elf_header = elf_file->elf_header;
 
     // Ensure it's an elf file
@@ -77,11 +89,12 @@ static void check_file(InputElfFile *elf_file) {
 }
 
 // May return NULL if not existent
-static InputSection *get_input_section(InputElfFile *elf_file, char *name) {
+static Section *get_input_section(ElfFile *elf_file, char *name) {
     return strmap_get(elf_file->section_map, name);
 }
 
-static void load_sections(InputElfFile *elf_file) {
+static void load_sections(ElfFile *elf_file) {
+    // Init section caches
     elf_file->section_list = new_list(32);
     elf_file->section_map = new_strmap();
 
@@ -89,21 +102,21 @@ static void load_sections(InputElfFile *elf_file) {
     if (elf_file->elf_header->e_shentsize > sizeof(ElfSectionHeader))
         error("ELF section header size is too large for: %s", elf_file->filename);
 
-    uintptr_t section_headers_offset = elf_file->elf_header->e_shoff;
+    // Load all section headeres
+    int section_headers_size = sizeof(ElfSectionHeader) * elf_file->elf_header->e_shnum;
+    elf_file->section_headers = malloc(section_headers_size);
+    read_from_file(elf_file, elf_file->section_headers, elf_file->elf_header->e_shoff, section_headers_size);
 
-    // Get pointer to the section header strings
-    uintptr_t section_header_strings_offset = section_headers_offset + elf_file->elf_header->e_shstrndx * elf_file->elf_header->e_shentsize;
-    ElfSectionHeader *section_header  = (ElfSectionHeader*) (elf_file->data + section_header_strings_offset);
-    elf_file->section_header_strings = elf_file->data + section_header->sh_offset;
+    // Load the section header strings
+    elf_file->section_header_strings = load_section(elf_file, elf_file->elf_header->e_shstrndx);
 
     // Loop over all sections and populate the section headers list and map
     for (int i = 0; i < elf_file->elf_header->e_shnum; i++) {
-        uintptr_t offset = section_headers_offset + i * elf_file->elf_header->e_shentsize;
-
-        ElfSectionHeader *elf_section_header  = (ElfSectionHeader*) (elf_file->data + offset);
+        ElfSectionHeader *elf_section_header = &elf_file->section_headers[i];
         const char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
 
-        InputSection *section = calloc(1, sizeof(InputSection));
+        Section *section = calloc(1, sizeof(Section));
+        section->index = i;
         section->elf_section_header = elf_section_header;
         if (elf_section_header->sh_type != SHT_NULL) {
             append_to_list(elf_file->section_list, section);
@@ -112,21 +125,22 @@ static void load_sections(InputElfFile *elf_file) {
     }
 
     // Look up string table
-    InputSection *strtab_section = get_input_section(elf_file, ".strtab");
+    Section *strtab_section = get_input_section(elf_file, ".strtab");
     if (!strtab_section)
         error("No .strtab section in: %s", elf_file->filename);
-    elf_file->strtab_strings = elf_file->data + strtab_section->elf_section_header->sh_offset;
+    elf_file->strtab_strings = load_section(elf_file, strtab_section->index);
 
     // Look up symbol table
-    InputSection *symtab_section = get_input_section(elf_file, ".symtab");
+    Section *symtab_section = get_input_section(elf_file, ".symtab");
     if (!symtab_section)
         error("No .symtab section in: %s", elf_file->filename);
-    elf_file->symbol_table = (ElfSymbol *) elf_file->data + symtab_section->elf_section_header->sh_offset;
+
+    elf_file->symbol_table = load_section(elf_file, symtab_section->index);
     elf_file->symbol_count = symtab_section->elf_section_header->sh_size / sizeof(ElfSymbol);
 }
 
-InputElfFile *read_elf_file(const char *filename) {
-    InputElfFile *elf_file = read_file(filename);
+ElfFile *open_elf_file(const char *filename) {
+    ElfFile *elf_file = open_file(filename);
     check_file(elf_file);
     load_sections(elf_file);
 

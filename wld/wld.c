@@ -5,15 +5,16 @@
 #include "list.h"
 #include "ro-elf.h"
 #include "rw-elf.h"
+
 #include "wld/wld.h"
 
-// Load all files into memoryfiles
+// Load all files into memory
 static List *read_input_files(List *input_filenames) {
     List *input_elf_files = new_list(32);
 
     for (int i = 0; i < input_filenames->length; i++) {
         char *input_filename = input_filenames->elements[i];
-        InputElfFile *elf_file = read_elf_file(input_filename);
+        ElfFile *elf_file = open_elf_file(input_filename);
         append_to_list(input_elf_files, elf_file);
     }
 
@@ -32,11 +33,11 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
 
     // Loop over all files
     for (int i = 0; i < input_elf_files->length; i++) {
-        InputElfFile *elf_file = input_elf_files->elements[i];
+        ElfFile *elf_file = input_elf_files->elements[i];
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {
-            InputSection *input_section  = (InputSection *) elf_file->section_list->elements[j];
+            Section *input_section  = (Section *) elf_file->section_list->elements[j];
             ElfSectionHeader *elf_section_header = input_section->elf_section_header;
             const char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
 
@@ -62,11 +63,11 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
 static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_file) {
     // Loop over all files
     for (int i = 0; i < input_elf_files->length; i++) {
-        InputElfFile *elf_file = input_elf_files->elements[i];
+        ElfFile *elf_file = input_elf_files->elements[i];
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {
-            InputSection *input_section  = (InputSection *) elf_file->section_list->elements[j];
+            Section *input_section  = (Section *) elf_file->section_list->elements[j];
             ElfSectionHeader *elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
@@ -146,11 +147,11 @@ static void make_program_segment_headers(RwElfFile *output) {
 static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *output_elf_file) {
     // Loop over all files
     for (int i = 0; i < input_elf_files->length; i++) {
-        InputElfFile *input_elf_file = input_elf_files->elements[i];
+        ElfFile *input_elf_file = input_elf_files->elements[i];
 
         // Loop over all sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
-            InputSection *input_section  = (InputSection *) input_elf_file->section_list->elements[j];
+            Section *input_section  = (Section *) input_elf_file->section_list->elements[j];
             ElfSectionHeader *input_elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
@@ -163,8 +164,8 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
             // Allocate memory if not already done in a previous loop
             if (!rw_section->data) rw_section->data = calloc(1, rw_section->size);
 
-            // Copy the section data
-            memcpy(rw_section->data + input_section->offset, input_elf_file->data + input_elf_section_header->sh_offset, input_elf_section_header->sh_size);
+            // Load the section data
+            load_section_into_buffer(input_elf_file, input_section->index, rw_section->data + input_section->offset);
         }
     }
 }
@@ -181,7 +182,7 @@ void run(List *input_filenames, const char *output_filename) {
     // Create sections in the output file
     create_output_file_sections(input_elf_files, output_elf_file);
 
-    // Determine layuout of the input sections in the output sections
+    // Determine layout of the input sections in the output sections
     layout_output_sections(input_elf_files, output_elf_file);
 
     // Make all ELF program segment headers

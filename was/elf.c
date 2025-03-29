@@ -11,7 +11,7 @@
 RwElfFile *output_elf_file;
 
 void init_elf_file(const char *output_filename) {
-    output_elf_file = new_rw_elf_file(output_filename, ET_REL); // wwip
+    output_elf_file = new_rw_elf_file(output_filename, ET_REL);
 }
 
 // Final stage of the assembly
