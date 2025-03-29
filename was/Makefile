@@ -5,6 +5,7 @@ all: ${TARGET}
 HEADERS = \
 	list.h \
 	strmap.h \
+	was/base128.h \
 	was/branches.h \
 	was/dwarf.h \
 	was/elf.h \
@@ -21,6 +22,7 @@ HEADERS = \
 	was/was.h \
 
 OBJECTS = \
+	base128.o \
 	branches.o \
 	dwarf.o \
 	elf.o \
