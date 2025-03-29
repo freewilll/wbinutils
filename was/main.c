@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include  "error.h"
+
 #include "was/was.h"
 #include "was/utils.h"
 
@@ -25,14 +27,12 @@ int main(int argc, char **argv) {
                 argv += 2;
             }
             else {
-                printf("Unknown parameter %s\n", argv[0]);
-                exit(1);
+                error("Unknown parameter %s", argv[0]);
             }
         }
         else {
             if (input_filename) {
-                printf("Multiple input filenames not supported\n");
-                exit(1);
+                error("Multiple input filenames not supported");
             }
             input_filename = argv[0];
             argc--;
@@ -58,8 +58,7 @@ int main(int argc, char **argv) {
     if (!output_filename) output_filename = "a.out";
 
     if (!input_filename) {
-        printf("Missing input filename\n");
-        exit(1);
+        error("Missing input filename");
     }
 
     assemble(input_filename, output_filename);

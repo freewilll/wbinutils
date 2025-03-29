@@ -24,8 +24,7 @@ int main(int argc, char **argv) {
                 argv += 2;
             }
             else {
-                printf("Unknown parameter %s\n", argv[0]);
-                exit(1);
+                error("Unknown parameter %s\n");
             }
         }
         else {
@@ -51,8 +50,7 @@ int main(int argc, char **argv) {
     if (!output_filename) output_filename = "a.out";
 
     if (!input_filenames->length) {
-        printf("Missing input filename\n");
-        exit(1);
+        error("Missing input filename");
     }
 
     run(input_filenames, output_filename);

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "error.h"
+
 #include "was/expr.h"
 #include "was/instr.h"
 #include "was/relocations.h"

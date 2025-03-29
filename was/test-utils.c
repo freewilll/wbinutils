@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "error.h"
+
 #include "was/dwarf.h"
 #include "was/elf.h"
 #include "was/utils.h"

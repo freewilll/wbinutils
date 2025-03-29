@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include  "error.h"
+
 #include "was/expr.h"
 #include "was/lexer.h"
 #include "was/utils.h"
@@ -45,10 +47,10 @@ static Node *parse_binary_expression(Node *left, Operation operation, int token)
 
     if (NODE_HAS_SYMBOL(left) && NODE_HAS_SYMBOL(right)) {
         // Evalulate symbol - symbol
-        if (operation != OP_SUBTRACT) error("Invalid operation on two symbols");
+        if (operation != OP_SUBTRACT) error_in_file("Invalid operation on two symbols");
 
         if (left->value->symbol->section != right->value->symbol->section)
-            error("Cannot subtract two symbols in different sections");
+            error_in_file("Cannot subtract two symbols in different sections");
 
         // Create an operation node
         node = calloc(1, sizeof(Node));
@@ -66,7 +68,7 @@ static Node *parse_binary_expression(Node *left, Operation operation, int token)
         node = left;
         if (!node->value->symbol) node->value->symbol = right->value->symbol;
 
-        if (operation == OP_DIVIDE && !right->value->number) error("Divide by zero");
+        if (operation == OP_DIVIDE && !right->value->number) error_in_file("Divide by zero");
 
         switch (operation)  {
             case OP_ADD:      node->value->number += right->value->number; break;
@@ -140,7 +142,7 @@ static Node *parse(int level) {
             break;
 
         default:
-            error("Unexpected token %d in expression", cur_token);
+            error_in_file("Unexpected token %d in expression", cur_token);
     }
 
     while (cur_token >= level) {

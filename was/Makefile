@@ -3,6 +3,7 @@ TARGET = ../bin/was
 all: ${TARGET}
 
 HEADERS = \
+	error.h \
 	list.h \
 	strmap.h \
 	was/base128.h \
@@ -38,6 +39,7 @@ OBJECTS = \
 	was.o \
 
 LIBS = \
+	error \
 	list \
 	strmap \
 
@@ -47,7 +49,7 @@ LIBS_PREFIXED_L := ${LIBS:%=-l%}
 LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 
 %.o: %.c ${HEADERS_PATH}
-	gcc -g  -Wunused -I ../include -c $< -o $@
+	gcc -g -Werror -I ../include -c $< -o $@
 
 scripts/venv:
 	python3 -m virtualenv scripts/venv
@@ -58,23 +60,23 @@ opcodes-generated.c: scripts/parse-x86reference.xml.py scripts/opcodes.j2 script
 	scripts/venv/bin/python3 scripts/parse-x86reference.xml.py ../../x86reference-2.xml opcodes-generated.c
 
 ${TARGET}: ${OBJECTS} main.o ${HEADERS_PATH}
-	gcc -g -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} main.o -o ${TARGET}
+	gcc -g -Werror -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} main.o -o ${TARGET}
 
 .PHONY: test
 test: ${TARGET} run-test-instr run-test-data run-test-expr
 	make -C tests
 
 test-utils.o: test-utils.c ../include/was/test-utils.h
-	gcc -g  -Wunused -I ../include -c $< -o $@
+	gcc -g -Werror  -Wunused -I ../include -c $< -o $@
 
 test-instr: ${OBJECTS} test-instr.o test-utils.o
-	gcc -g -L../lib ${OBJECTS} test-instr.o test-utils.o ${LIBS_PREFIXED_L} -o test-instr
+	gcc -g -Werror -L../lib ${OBJECTS} test-instr.o test-utils.o ${LIBS_PREFIXED_L} -o test-instr
 
 test-data: ${OBJECTS} test-data.o test-utils.o
-	gcc -g -L../lib ${OBJECTS} test-data.o test-utils.o ${LIBS_PREFIXED_L} -o test-data
+	gcc -g -Werror -L../lib ${OBJECTS} test-data.o test-utils.o ${LIBS_PREFIXED_L} -o test-data
 
 test-expr: ${OBJECTS} test-expr.o test-utils.o
-	gcc -g -L../lib ${OBJECTS} test-expr.o test-utils.o ${LIBS_PREFIXED_L} -o test-expr
+	gcc -g -Werror -L../lib ${OBJECTS} test-expr.o test-utils.o ${LIBS_PREFIXED_L} -o test-expr
 
 .PHONY: run-test-instr
 run-test-instr: test-instr

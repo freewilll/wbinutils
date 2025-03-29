@@ -12,7 +12,7 @@ OBJECTS = \
 	rw-elf.o
 
 %.o: %.c ${HEADERS}
-	gcc -g  -Wunused -I ../../include -c $< -o $@
+	gcc -g -Wunused -I ../../include -c $< -o $@
 
 ${TARGET}: ${OBJECTS} ${OBJECTS}
 	ar rcs ${TARGET} ${OBJECTS}

@@ -2,6 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include  "error.h"
+
+#include "was/base128.h"
 #include "was/branches.h"
 #include "was/dwarf.h"
 #include "was/elf.h"

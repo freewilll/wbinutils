@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include  "error.h"
+
 #include "was/elf.h"
 #include "was/instr.h"
 #include "was/lexer.h"
@@ -91,9 +93,9 @@ static int get_operation_size(Opcode *opcode, OpcodeAlias *opcode_alias, Operand
         // Check operands are the same size unless they are conversions or one of them is an indirect
         if (!opcode->conver && op1 && op2 && !op1->indirect && !op2->indirect) {
             if (op1 && op2 && OP_TYPE_IS_REG(op1) && OP_TYPE_IS_REG(op2) && OP_TO_SIZE(op1) != OP_TO_SIZE(op2))
-                error("Size mismatch within oparands");
+                error_in_file("Size mismatch within oparands");
             if (op1 && op3 && OP_TYPE_IS_REG(op1) && OP_TYPE_IS_REG(op3) && OP_TO_SIZE(op1) != OP_TO_SIZE(op3))
-                error("Size mismatch within oparands");
+                error_in_file("Size mismatch within oparands");
         }
 
         if (!size) size = SIZE32; // In long mode, the default instruction size is 32 bits;
@@ -580,7 +582,7 @@ Instructions make_instructions(char *mnemonic, Operand *op1, Operand *op2, Opera
 
     List *opcode_alias_list = strmap_get(opcode_alias_map, mnemonic);
 
-    if (!opcode_alias_list) error("Unknown instruction %s", mnemonic);
+    if (!opcode_alias_list) error_in_file("Unknown instruction %s", mnemonic);
 
     // Loop over all possible encodings, picking the one that generates
     // the smallest number of bytes.
@@ -651,7 +653,7 @@ Instructions make_instructions(char *mnemonic, Operand *op1, Operand *op2, Opera
         }
     }
 
-    if (best_enc_size == -1) error("Unable to find encoding for instruction %s", mnemonic);
+    if (best_enc_size == -1) error_in_file("Unable to find encoding for instruction %s", mnemonic);
 
     // Generate the instructions
     Instructions instr;

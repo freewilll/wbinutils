@@ -3,6 +3,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "error.h"
+
+#include "was/base128.h"
 #include "was/dwarf.h"
 #include "was/elf.h"
 #include "was/list.h"
@@ -88,7 +91,7 @@ static int make_dwarf_debug_line_section_files(Section *debug_line_section) {
 
     for (int i = 0; i < files->length; i++) {
         File *file = files->elements[i];
-        if (!file) simple_error("Non consecutive .file numbers");
+        if (!file) error("Non consecutive .file numbers");
         add_to_section(debug_line_section, file->filename, strlen(file->filename) + 1);
 
         char uleb128_data[9];
@@ -259,7 +262,7 @@ void add_dwarf_loc(int file_index, int line_number, int address) {
     // https://dwarfstd.org/doc/Dwarf3.pdf page 99
     int address_advance = address - state.address;
 
-    if (address_advance < 0) simple_error("DWARF line numbers going backwards in address");
+    if (address_advance < 0) error("DWARF line numbers going backwards in address");
 
     int line_increment = line_number - state.line_number;
     unsigned int opcode = (line_increment - LINE_BASE) + (LINE_RANGE * address_advance) + OPCODE_BASE;

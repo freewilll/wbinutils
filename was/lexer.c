@@ -2,6 +2,8 @@
 #include <string.h>
 #include <stdlib.h>
 
+#include "error.h"
+
 #include "was/lexer.h"
 #include "was/utils.h"
 #include "was/was.h"
@@ -37,11 +39,15 @@ static void start_lexer(void) {
     seen_directive = 0;
     cur_register = 0;
 
+    set_error_line(1);
+
     next();
 }
 
 void init_lexer(char *filename) {
     cur_filename = filename;
+    set_error_filename(filename);
+
 
     FILE *f  = fopen(filename, "r");
 
@@ -173,13 +179,13 @@ static void lex_string_literal(void) {
                 lex_octal_literal();
                 data[(size)++] = cur_long & 0xff;
             }
-            else error("Unknown \\ escape in string literal");
+            else error_in_file("Unknown \\ escape in string literal");
         }
 
         data[size] = 0;
     }
 
-    if (*ip != '"') error("Expecting terminating \" in string literal");
+    if (*ip != '"') error_in_file("Expecting terminating \" in string literal");
     ip++;
 
     if (size >= MAX_STRING_LITERAL_SIZE) panic("Exceeded maximum string literal size %d", MAX_STRING_LITERAL_SIZE);
@@ -246,13 +252,16 @@ static void parse_register(void) {
         return;
     }
 
-    error("Unknown register %%%s", name);
+    error_in_file("Unknown register %%%s", name);
 }
 
 // Lexer. Lex a next token or TOK_EOF if the file is ended
 void next(void) {
     // Increment the line number after consuming a newline
-    if (cur_token == TOK_EOL) cur_line++;
+    if (cur_token == TOK_EOL) {
+        cur_line++;
+        set_error_line(cur_line);
+    }
 
     while (ip < input_end) {
         skip_whitespace();
@@ -384,7 +393,7 @@ void next(void) {
         }
 
         else
-            error("Unknown token %c (%d)", *ip, *ip);
+        error_in_file("Unknown token %c (%d)", *ip, *ip);
 
         return;
     }
@@ -393,7 +402,7 @@ void next(void) {
 }
 
 void expect(int token, char *what) {
-    if (cur_token != token) error("Expected %s", what);
+    if (cur_token != token) error_in_file("Expected %s", what);
 }
 
 void consume(int token, char *what) {

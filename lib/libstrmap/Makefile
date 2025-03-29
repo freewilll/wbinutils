@@ -9,7 +9,7 @@ OBJECTS = \
 	strmap.o
 
 %.o: %.c ${HEADERS}
-	gcc -g  -Wunused -I ../../include  -c $< -o $@
+	gcc -g -Werror -I ../../include -c $< -o $@
 
 ${TARGET}: ${OBJECTS} ${OBJECTS}
 	ar rcs ${TARGET} ${OBJECTS}

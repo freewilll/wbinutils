@@ -29,10 +29,10 @@ LIBS_PREFIXED_L := ${LIBS:%=-l%}
 LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 
 %.o: %.c ${HEADERS_PATH}
-	gcc -g -I ../include -c $< -o $@
+	gcc -g -Werror -I ../include -c $< -o $@
 
 ${TARGET}: ${OBJECTS} ${LIBS_PATH}
-	gcc -g -I ../include -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} -o ${TARGET}
+	gcc -g -Werror -I ../include -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} -o ${TARGET}
 
 test: ${TARGET}
 	make -C tests

@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "error.h"
+
 #include "was/dwarf.h"
 #include "was/elf.h"
 #include "was/lexer.h"
