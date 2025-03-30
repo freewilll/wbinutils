@@ -10,6 +10,16 @@
 #include "strmap.h"
 #include "error.h"
 
+static const char *symbol_type_names[] = {
+    "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?"
+};
+
+static const char *symbol_binding_names[] = {
+    "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?",
+};
+
 // Open an ELF file and read the ELF header
 static ElfFile *open_file(const char *filename) {
     ElfFile *elf_file = malloc(sizeof(ElfFile));
@@ -145,4 +155,35 @@ ElfFile *open_elf_file(const char *filename) {
     load_sections(elf_file);
 
     return elf_file;
+}
+
+// Print readelf compatible symbol table output
+void dump_symbols(ElfFile *elf_file) {
+    printf("Symbol Table:\n");
+    printf("   Num:    Value          Size Type    Bind   Vis      Ndx Name\n");
+
+    for (int i = 0; i < elf_file->symbol_count; i++) {
+        ElfSymbol *symbol = &elf_file->symbol_table[i];
+
+        char binding = (symbol->st_info >> 4) & 0xf;
+        char type = symbol->st_info & 0xf;
+        const char *type_name = symbol_type_names[type];
+        const char *binding_name = symbol_binding_names[binding];
+
+        printf("%6d: %016ld  %4ld %-8s%-7sDEFAULT  ", i, symbol->st_value, symbol->st_size, type_name, binding_name);
+        if ((unsigned short) symbol->st_shndx == SHN_UNDEF)
+            printf("UND");
+        else if ((unsigned short) symbol->st_shndx == SHN_ABS)
+            printf("ABS");
+        else if ((unsigned short) symbol->st_shndx == SHN_COMMON)
+            printf("COM");
+        else
+            printf("%3d", symbol->st_shndx);
+
+        int strtab_offset = symbol->st_name;
+        if (strtab_offset)
+            printf(" %s\n", &elf_file->strtab_strings[strtab_offset]);
+        else
+            printf("\n");
+    }
 }

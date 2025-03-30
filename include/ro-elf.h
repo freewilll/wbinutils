@@ -29,5 +29,6 @@ typedef struct input_elf_file {
 
 ElfFile *open_elf_file(const char *filename);
 void load_section_into_buffer(ElfFile *elf_file, int section_index, void *dst);
+void dump_symbols(ElfFile *elf_file);
 
 #endif
