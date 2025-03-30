@@ -10,4 +10,6 @@ test2
 /hello.c
 /hello.s
 /hello
+libtest.a
+libtest2.a
 .vscode

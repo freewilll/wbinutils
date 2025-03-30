@@ -11,3 +11,6 @@ test
 /hello.s
 /hello
 .vscode
+test-archive-loading
+libtest-archive-loading.a
+libtest-archive-loading-long.a

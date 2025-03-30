@@ -25,7 +25,7 @@ static ElfFile *open_file(const char *filename) {
 
     elf_file->elf_header = malloc(sizeof(ElfHeader));
     int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
-    if (read != sizeof(ElfHeader)) error("Unable to read input file: %s\n", filename);
+    if (read != sizeof(ElfHeader)) error("Unable to read input file: %s", filename);
 
     return elf_file;
 }
@@ -34,7 +34,7 @@ static ElfFile *open_file(const char *filename) {
 static char *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
     fseek(elf_file->file, offset, SEEK_SET);
     int read = fread(dst, 1, size, elf_file->file);
-    if (read != size) error("Unable to read input file: %s\n", elf_file->filename);
+    if (read != size) error("Unable to read input file: %s", elf_file->filename);
 }
 
 // Read a section into dst

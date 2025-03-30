@@ -5,6 +5,11 @@
 
 #define EXECUTABLE_VIRTUAL_ADDRESS 0x400000
 
-void run(List *input_filenames, const char *output_filename);
+typedef struct input_file {
+    char *filename;
+    int is_library;       // On the command line with -l
+} InputFile;
+
+void run(List *library_paths, List *input_files, const char *output_filename);
 
 #endif

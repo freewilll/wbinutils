@@ -11,10 +11,11 @@ HEADERS = \
 	rw-elf.h \
 	strmap.h \
 	error.h \
+	wld/libs.h \
 	wld/wld.h \
 
 OBJECTS = \
-	main.o \
+	libs.o \
 	wld.o \
 
 LIBS = \
@@ -31,13 +32,30 @@ LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 %.o: %.c ${HEADERS_PATH}
 	gcc -g -Werror -I ../include -c $< -o $@
 
-${TARGET}: ${OBJECTS} ${LIBS_PATH}
-	gcc -g -Werror -I ../include -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} -o ${TARGET}
+${TARGET}: ${OBJECTS} main.o ${LIBS_PATH}
+	gcc -g -Werror -I ../include -L../lib ${OBJECTS} main.o ${LIBS_PREFIXED_L} -o ${TARGET}
 
-test: ${TARGET}
+test: ${TARGET} run-test-archive-loading
 	make -C tests
+
+libtest-archive-loading.a: test-archive-loading.o
+	ar rcs libtest-archive-loading.a test-archive-loading.o
+
+libtest-archive-loading-long.a: test-archive-loading.o
+	cp test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
+	ar rcs libtest-archive-loading-long.a test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
+
+test-archive-loading: ${OBJECTS} test-archive-loading.o
+	ar rcs libtest-archive-loading.a test-archive-loading.o
+	gcc -g -Werror -I ../include -L../lib ${OBJECTS} test-archive-loading.o ${LIBS_PREFIXED_L} -o test-archive-loading
+
+.PHONY: run-test-archive-loading
+run-test-archive-loading: test-archive-loading libtest-archive-loading.a libtest-archive-loading-long.a
+	./test-archive-loading
 
 clean:
 	@rm -f *.o
 	@rm -f ${TARGET}
 	@make -C tests clean
+	rm libtest-archive-loading.a
+	rm libtest-archive-loading-long.a

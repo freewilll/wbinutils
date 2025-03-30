@@ -1,21 +1,29 @@
 #include <stdlib.h>
-#include <string.h>
 
 #include "error.h"
 #include "list.h"
 #include "ro-elf.h"
 #include "rw-elf.h"
 
+#include "wld/libs.h"
 #include "wld/wld.h"
 
-// Load all files into memory
-static List *read_input_files(List *input_filenames) {
+// Go down all input files which are either object files or libraries
+static List *read_input_files(List *library_paths, List *input_files) {
     List *input_elf_files = new_list(32);
 
-    for (int i = 0; i < input_filenames->length; i++) {
-        char *input_filename = input_filenames->elements[i];
-        ElfFile *elf_file = open_elf_file(input_filename);
-        append_to_list(input_elf_files, elf_file);
+    for (int i = 0; i < input_files->length; i++) {
+        InputFile *input_file = input_files->elements[i];
+        char *input_filename = input_file->filename;
+
+        if (input_file->is_library) {
+            char *path = search_for_library(library_paths, input_filename);
+            ArchiveFile *ar_file = open_archive_file(path);
+        }
+        else {
+            ElfFile *elf_file = open_elf_file(input_filename);
+            append_to_list(input_elf_files, elf_file);
+        }
     }
 
     return input_elf_files;
@@ -170,9 +178,9 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
     }
 }
 
-void run(List *input_filenames, const char *output_filename) {
+void run(List *library_paths, List *input_files, const char *output_filename) {
     // Read input file
-    List *input_elf_files = read_input_files(input_filenames);
+    List *input_elf_files = read_input_files(library_paths, input_files);
 
     // Create output file
     RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
