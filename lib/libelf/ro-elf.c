@@ -20,29 +20,16 @@ static const char *symbol_binding_names[] = {
     "?", "?", "?", "?", "?", "?", "?", "?",
 };
 
-// Open an ELF file and read the ELF header
-static ElfFile *open_file(const char *filename) {
-    ElfFile *elf_file = malloc(sizeof(ElfFile));
-
-    elf_file->filename = strdup(filename);
-
-    elf_file->file = fopen(filename, "r");
-
-    if (elf_file->file == 0) {
-        perror(filename);
-        exit(1);
-    }
-
+static void read_header(ElfFile *elf_file) {
+    fseek(elf_file->file, elf_file->file_offset, SEEK_SET);
     elf_file->elf_header = malloc(sizeof(ElfHeader));
     int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
-    if (read != sizeof(ElfHeader)) error("Unable to read input file: %s", filename);
-
-    return elf_file;
+    if (read != sizeof(ElfHeader)) error("Unable to read input file: %s", elf_file->filename);
 }
 
 // Read from the file into a buffer
 static char *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
-    fseek(elf_file->file, offset, SEEK_SET);
+    fseek(elf_file->file, elf_file->file_offset + offset, SEEK_SET);
     int read = fread(dst, 1, size, elf_file->file);
     if (read != size) error("Unable to read input file: %s", elf_file->filename);
 }
@@ -88,7 +75,7 @@ static void check_file(ElfFile *elf_file) {
         error("Invalid ELF version %d for file: %s", elf_header->ei_version, elf_file->filename);
 
     // ABI version
-    if (elf_header->ei_osabi != ELF_OSABI_NONE)
+    if (elf_header->ei_osabi != ELF_OSABI_NONE && elf_header->ei_osabi != ELF_OSABI_GNU)
         error("Invalid ABI version %d for file: %s", elf_header->ei_osabi, elf_file->filename);
 
     if (elf_header->e_type != ET_REL)
@@ -137,28 +124,61 @@ static void load_sections(ElfFile *elf_file) {
     // Look up string table
     Section *strtab_section = get_input_section(elf_file, ".strtab");
     if (!strtab_section)
-        error("No .strtab section in: %s", elf_file->filename);
-    elf_file->strtab_strings = load_section(elf_file, strtab_section->index);
+        elf_file->strtab_strings = NULL;
+    else
+        elf_file->strtab_strings = load_section(elf_file, strtab_section->index);
 
     // Look up symbol table
     Section *symtab_section = get_input_section(elf_file, ".symtab");
-    if (!symtab_section)
-        error("No .symtab section in: %s", elf_file->filename);
-
-    elf_file->symbol_table = load_section(elf_file, symtab_section->index);
-    elf_file->symbol_count = symtab_section->elf_section_header->sh_size / sizeof(ElfSymbol);
+    if (!symtab_section) {
+        elf_file->symbol_table = NULL;
+        elf_file->symbol_count = 0;
+    }
+    else {
+        elf_file->symbol_table = load_section(elf_file, symtab_section->index);
+        elf_file->symbol_count = symtab_section->elf_section_header->sh_size / sizeof(ElfSymbol);
+    }
 }
 
-ElfFile *open_elf_file(const char *filename) {
-    ElfFile *elf_file = open_file(filename);
+static void read_common_file_data(ElfFile *elf_file) {
+    read_header(elf_file);
     check_file(elf_file);
     load_sections(elf_file);
+}
+
+// Open an object file
+ElfFile *open_elf_file(const char *filename) {
+    ElfFile *elf_file = malloc(sizeof(ElfFile));
+    elf_file->filename = strdup(filename);
+    elf_file->file = fopen(filename, "r");
+
+    if (elf_file->file == 0) {
+        perror(filename);
+        exit(1);
+    }
+
+    read_common_file_data(elf_file);
+
+    return elf_file;
+}
+
+// Open an object file in an archive
+ElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int offset) {
+    ElfFile *elf_file = calloc(1, sizeof(ElfFile));
+    elf_file->filename = strdup(filename);
+    elf_file->file = file;
+    elf_file->file_offset = offset;
+
+    read_common_file_data(elf_file);
 
     return elf_file;
 }
 
 // Print readelf compatible symbol table output
 void dump_symbols(ElfFile *elf_file) {
+    if (elf_file->symbol_count && !elf_file->symbol_table)
+        panic("There are symbols, yet no symbol table");
+
     printf("Symbol Table:\n");
     printf("   Num:    Value          Size Type    Bind   Vis      Ndx Name\n");
 

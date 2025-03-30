@@ -18,7 +18,11 @@
 #define ELF_DATA_2_MSB	  2   // 2's complement, big endian
 
 // ELF ABI
-#define ELF_OSABI_NONE    0	       // UNIX System V ABI
+#define ELF_OSABI_NONE    0	 // UNIX System V ABI
+#define ELF_OSABI_HPUX    1	 // HP-UX
+#define ELF_OSABI_NETBSD  2	 // NetBSD
+#define ELF_OSABI_GNU     3	 // Object uses GNU ELF extensions
+
 
 // Legal values for e_version (version).
 #define EV_NONE		0               // Invalid ELF version

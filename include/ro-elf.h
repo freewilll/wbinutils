@@ -17,6 +17,7 @@ typedef struct section {
 typedef struct input_elf_file {
     const char *filename;               // Filename of input file
     FILE *file;                         // Open file handle
+    int file_offset;                    // Offset in file where the object begins, used for archives
     ElfHeader *elf_header;
     ElfSectionHeader *section_headers;  // All section headers
     char *section_header_strings;
@@ -28,6 +29,7 @@ typedef struct input_elf_file {
 } ElfFile;
 
 ElfFile *open_elf_file(const char *filename);
+ElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
 void load_section_into_buffer(ElfFile *elf_file, int section_index, void *dst);
 void dump_symbols(ElfFile *elf_file);
 

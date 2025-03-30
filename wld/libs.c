@@ -4,6 +4,7 @@
 #include <unistd.h>
 
 #include "error.h"
+#include "ro-elf.h"
 
 #include "wld/libs.h"
 
@@ -77,8 +78,6 @@ void index_archive_file(ArchiveFile *ar_file) {
     char *extended_filenames = NULL;
     char *extended_filenames_end = NULL;
 
-    int offset = 0;
-
     // Loop over all entries
     while (1) {
         ArHeader header;
@@ -141,15 +140,13 @@ void index_archive_file(ArchiveFile *ar_file) {
 
             ArchiveFileObject *ar_file_object = malloc(sizeof(ArchiveFileObject));
             ar_file_object->filename = strdup(name);
-            ar_file_object->offset = offset;
+            ar_file_object->offset = ftell(ar_file->file);
             append_to_list(ar_file->objects, ar_file_object);
         }
 
         // Seek to the next entry
         int seek_size = size + seek_alignment;
         if (fseek(ar_file->file, seek_size, SEEK_CUR) != 0) break;
-
-        offset += seek_size;
     }
 }
 
@@ -173,4 +170,15 @@ ArchiveFile *open_archive_file(const char *filename) {
     index_archive_file(ar_file);
 
     return ar_file;
+}
+
+void dump_archive_file_symbols(ArchiveFile* ar_file) {
+    // Loop over all object files
+    for (int i = 0; i < ar_file->objects->length; i++) {
+        ArchiveFileObject *ar_file_object = (ArchiveFileObject *) ar_file->objects->elements[i];
+        char *pseudo_filename = malloc(strlen(ar_file->filename) + strlen(ar_file_object->filename) + 2);
+        sprintf(pseudo_filename, "%s/%s", ar_file->filename, ar_file_object->filename);
+        ElfFile *elf_file = open_elf_file_in_archive(ar_file->file, pseudo_filename, ar_file_object->offset);
+        dump_symbols(elf_file);
+    }
 }
