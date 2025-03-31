@@ -27,7 +27,12 @@ void set_error_line(int line) {
 static void print_filename_and_linenumber(void) {
     int is_tty = isatty(2);
     if (is_tty) fprintf(stderr, LOCUS);
-    fprintf(stderr, "%s:%d: ", error_filename, error_line);
+
+    if (error_line)
+        fprintf(stderr, "%s:%d: ", error_filename, error_line);
+    else
+        fprintf(stderr, "%s: ", error_filename);
+
     if (is_tty) fprintf(stderr, RESET);
 }
 
