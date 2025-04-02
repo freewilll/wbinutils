@@ -6,11 +6,14 @@
 #include "list.h"
 #include "elf.h"
 #include "strmap.h"
+#include "rw-elf.h"
 
 typedef struct section {
     ElfSectionHeader *elf_section_header; // Pointer to the ELF header
+    char *name;                           // Section name
     int index;                            // Index in the ELF section headers table
-    int offset;                           // Offset in output
+    int offset;                           // Offset in output section
+    RwSection *dst_section;               // Target Section (for WLD)
 } Section;
 
 // In-memory input ELF file
@@ -31,6 +34,7 @@ typedef struct input_elf_file {
 ElfFile *open_elf_file(const char *filename);
 ElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
 void load_section_into_buffer(ElfFile *elf_file, int section_index, void *dst);
+void *load_section(ElfFile *elf_file, int section_index);
 void dump_symbols(ElfFile *elf_file);
 
 #endif

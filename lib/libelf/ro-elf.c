@@ -28,7 +28,7 @@ static void read_header(ElfFile *elf_file) {
 }
 
 // Read from the file into a buffer
-static char *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
+static void *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
     fseek(elf_file->file, elf_file->file_offset + offset, SEEK_SET);
     int read = fread(dst, 1, size, elf_file->file);
     if (read != size) error("Unable to read input file: %s", elf_file->filename);
@@ -41,7 +41,7 @@ void load_section_into_buffer(ElfFile *elf_file, int section_index, void *dst) {
 }
 
 // Allocate memory for a section, read it, and return it
-static void *load_section(ElfFile *elf_file, int section_index) {
+void *load_section(ElfFile *elf_file, int section_index) {
     ElfSectionHeader *section_header = &elf_file->section_headers[section_index];
     void *result = malloc(section_header->sh_size);
     load_section_into_buffer(elf_file, section_index, result);
@@ -110,15 +110,14 @@ static void load_sections(ElfFile *elf_file) {
     // Loop over all sections and populate the section headers list and map
     for (int i = 0; i < elf_file->elf_header->e_shnum; i++) {
         ElfSectionHeader *elf_section_header = &elf_file->section_headers[i];
-        const char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
+        char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
 
         Section *section = calloc(1, sizeof(Section));
+        section->name = name;
         section->index = i;
         section->elf_section_header = elf_section_header;
-        if (elf_section_header->sh_type != SHT_NULL) {
-            append_to_list(elf_file->section_list, section);
-            strmap_put(elf_file->section_map, strdup(name), section);
-        }
+        append_to_list(elf_file->section_list, section);
+        strmap_put(elf_file->section_map, strdup(name), section);
     }
 
     // Look up string table

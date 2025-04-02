@@ -12,11 +12,13 @@ HEADERS = \
 	strmap.h \
 	error.h \
 	wld/libs.h \
+	wld/relocations.h \
 	wld/symbols.h \
 	wld/wld.h \
 
 OBJECTS = \
 	libs.o \
+	relocations.o \
 	symbols.o \
 	wld.o \
 

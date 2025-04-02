@@ -3,7 +3,10 @@
 
 #include "list.h"
 
+#define DEBUG 1 // wwip
+
 #define EXECUTABLE_VIRTUAL_ADDRESS 0x400000
+#define ENTRYPOINT_SYMBOL          "_start"
 
 typedef struct input_file {
     char *filename;

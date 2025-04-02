@@ -18,8 +18,10 @@ extern StrMap *defined_symbols;
 extern StrMap *undefined_symbols;
 
 void init_symbols(void);
+Symbol *get_defined_symbol(char *name);
 void process_elf_file_symbols(ElfFile *elf_file);
 void fail_on_undefined_symbols(void);
 void debug_summarize_symbols(void);
+void make_symbol_values(uint64_t executable_virt_address);
 
 #endif

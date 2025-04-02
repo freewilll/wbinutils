@@ -6,6 +6,14 @@
 .globl i
 
 _start:
+    # Print a message
+    movl $4, %eax              # sys_write into %eax
+    movl $1, %ebx              # fd stdout into %ebx
+    movl $msg, %ecx            # msg address
+    movl $msg_len, %edx        # msg length address
+    movl (%edx), %edx         # msg length
+    int $0x80                  # Trigger the kernel system call
+
     # Call sys_exit(int status)
     call f              # f is present in the other file
     mov %eax, %ebx      # ebx is the exit code

@@ -6,6 +6,7 @@
 #include "rw-elf.h"
 
 #include "wld/libs.h"
+#include "wld/relocations.h"
 #include "wld/symbols.h"
 #include "wld/wld.h"
 
@@ -91,6 +92,10 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
             // Align the section
             int offset = ALIGN_UP(rw_section->size, rw_section->align);
             input_section->offset = offset;
+            input_section->dst_section = rw_section;
+
+            if (DEBUG) printf("File %s section %s is at offset %#08x in target section\n", elf_file->filename, input_section->name, offset);
+
             rw_section->size = offset + elf_section_header->sh_size;
         }
     }
@@ -109,6 +114,13 @@ static void make_null_program_segment_header(RwElfFile *output) {
     h->p_filesz = size;
     h->p_memsz  = size;
     h->p_align  = 0x1000;                           // Align on page boundaries
+}
+
+// Set the executable entrypoint
+void set_entrypoint(RwElfFile *output_elf_file) {
+    Symbol *symbol = get_defined_symbol(ENTRYPOINT_SYMBOL);
+    if (!symbol) error("Missing %s symbol", ENTRYPOINT_SYMBOL);
+    output_elf_file->entrypoint = symbol->dst_value;
 }
 
 // Make an ELF program segment header
@@ -193,7 +205,6 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Create output file
     RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
     output_elf_file->executable_virt_address = EXECUTABLE_VIRTUAL_ADDRESS;
-    output_elf_file->entrypoint = 0x401000; // TODO look up from symbol table
 
     // Create sections in the output file
     create_output_file_sections(input_elf_files, output_elf_file);
@@ -213,6 +224,12 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Layout the sections & allocate memory for the output
     layout_rw_elf_sections(output_elf_file);
 
+    // Assign final values to all symbols
+    make_symbol_values(output_elf_file->executable_virt_address);
+
+    // Set the executable entrypoint
+    set_entrypoint(output_elf_file);
+
     // Make the ELF headers, program segment headers and section headers
     make_elf_headers(output_elf_file);
 
@@ -221,6 +238,9 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
 
     // Copy all the section data to the final positions in the ELF file.
     copy_rw_sections_to_elf(output_elf_file);
+
+    // Write relocated data to the ELF file
+    apply_relocations(input_elf_files, output_elf_file);
 
     // Write the ELF file
     write_elf_file(output_elf_file);

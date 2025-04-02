@@ -4,6 +4,7 @@
 #include "strmap.h"
 
 #include "wld/symbols.h"
+#include "wld/wld.h"
 
 StrMap *defined_symbols;    // Map of defined symbols, name -> symbol
 StrMap *undefined_symbols;  // A set of undefined symbols
@@ -14,7 +15,7 @@ void init_symbols(void) {
 }
 
 // Get a symbol from the defined symbol table. Returns NULL if not present.
-static Symbol *get_defined_symbol(char *name) {
+Symbol *get_defined_symbol(char *name) {
     return (Symbol *) strmap_get(defined_symbols, name);
 }
 
@@ -110,15 +111,33 @@ void fail_on_undefined_symbols(void) {
 
 void debug_summarize_symbols(void) {
     printf("Defined symbols:\n");
+    printf("  %-40s %-40s %s %s\n", "Name", "Src file", "Src Value", "Dst Value");
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
-        printf("  %-20s %s %x\n", symbol->name, symbol->src_elf_file->filename, symbol->src_value);
+        printf("  %-40s %-40s %08x  %08x\n", symbol->name, symbol->src_elf_file->filename, symbol->src_value, symbol->dst_value);
     }
 
     printf("Undefined symbols:\n");
     for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
         printf("  %s\n", name);
+    }
+}
+
+// Assign final values to all symbols
+void make_symbol_values(uint64_t executable_virt_address) {
+    if (DEBUG) printf("\nFinal symbols:\n");
+
+    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+        const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(defined_symbols, name);
+
+        symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
+
+        if (DEBUG) {
+            printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
+            printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
+        }
     }
 }
