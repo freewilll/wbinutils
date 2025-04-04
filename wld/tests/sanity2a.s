@@ -11,7 +11,7 @@ _start:
     movl $1, %ebx              # fd stdout into %ebx
     movl $msg, %ecx            # msg address
     movl $msg_len, %edx        # msg length address
-    movl (%edx), %edx         # msg length
+    movl (%edx), %edx          # msg length
     int $0x80                  # Trigger the kernel system call
 
     # Call sys_exit(int status)

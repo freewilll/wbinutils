@@ -1,6 +1,8 @@
+WCC = ../../../src/wcc
+WAS = ../../bin/was
 WLD = ../../bin/wld
 
-all: run-sanity1 run-sanity2ab run-sanity2ba
+all: run-sanity1 run-sanity2ab run-sanity2ba run-sanity3
 
 %.o: %.s
 	as $< -o $@
@@ -47,10 +49,35 @@ run-sanity2ba: sanity2ba
 	fi ;\
 	echo "Sanity 2ba test passed"
 
+sanity3.o: sanity3.c
+	AS=${WAS} ${WCC} -c sanity3.c -o sanity3.o
+
+sanity3: sanity3.o
+	ld \
+		-L/usr/lib \
+		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-static \
+		-o sanity3 \
+		sanity3.o \
+		/usr/lib/x86_64-linux-gnu/crt1.o \
+		/usr/lib/x86_64-linux-gnu/crti.o \
+		-lc \
+		-lgcc \
+		-lgcc_eh \
+		-lc \
+		/usr/lib/x86_64-linux-gnu/crtn.o
+
+run-sanity3: sanity3
+	@MSG=$$(./sanity3);\
+	if [ "$$MSG" != "Hello World!" ]; then \
+		echo "Message was not hello world."; \
+		exit 1; \
+	fi ;\
+	echo "Sanity 3 test passed"
+
 clean:
-	@rm -f sanity1.o
+	@rm -f *.o
 	@rm -f sanity1
 	@rm -f sanity2ab
 	@rm -f sanity2ba
-	@rm -f sanity2a.o
-	@rm -f sanity2b.o
+	@rm -f sanity3

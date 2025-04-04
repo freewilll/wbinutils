@@ -1,6 +1,5 @@
-sanity1.o
+*.o
 sanity1
-sanity2a.o
-sanity2b.o
 sanity2ab
 sanity2ba
+sanity3

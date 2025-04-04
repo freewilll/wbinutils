@@ -3,7 +3,7 @@
 
 #include "list.h"
 
-#define DEBUG 1 // wwip
+#define DEBUG 0
 
 #define EXECUTABLE_VIRTUAL_ADDRESS 0x400000
 #define ENTRYPOINT_SYMBOL          "_start"
