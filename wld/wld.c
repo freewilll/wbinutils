@@ -35,7 +35,12 @@ static List *read_input_files(List *library_paths, List *input_files) {
 // Add some sections that are always present in output ELF file
 static void create_default_sections(RwElfFile *output_elf_file) {
     add_rw_section(output_elf_file, "" , SHT_NULL, 0, 0);
-    output_elf_file->section_shstrtab = add_rw_section(output_elf_file, ".shstrtab", SHT_STRTAB, 0, 1);
+    output_elf_file->section_symtab      = add_rw_section(output_elf_file, ".symtab",   SHT_SYMTAB, 0, 8);
+    output_elf_file->section_strtab      = add_rw_section(output_elf_file, ".strtab",   SHT_STRTAB, 0, 1);
+    output_elf_file->section_shstrtab    = add_rw_section(output_elf_file, ".shstrtab", SHT_STRTAB, 0, 1);
+
+    output_elf_file->section_symtab->entsize = sizeof(ElfSymbol);
+    add_to_rw_section(output_elf_file->section_strtab, "", 1);
 }
 
 // Loop over all sections in the input files and create the target sections in the output file.
@@ -215,6 +220,9 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Make all ELF program segment headers
     make_program_segment_headers(output_elf_file);
 
+    // Add the symbols to the ELF symbol table
+    make_elf_symbols(output_elf_file);
+
     // Make all ELF section headers
     make_rw_section_headers(output_elf_file);
 
@@ -225,7 +233,10 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     layout_rw_elf_sections(output_elf_file);
 
     // Assign final values to all symbols
-    make_symbol_values(output_elf_file->executable_virt_address);
+    make_symbol_values(output_elf_file, output_elf_file->executable_virt_address);
+
+    // Set the symbol's value and section indexes
+    update_elf_symbols(output_elf_file);
 
     // Set the executable entrypoint
     set_entrypoint(output_elf_file);

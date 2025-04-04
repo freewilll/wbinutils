@@ -4,6 +4,7 @@
 .section .text
 .globl _start
 .globl i
+.size i, 4
 
 _start:
     # Print a message

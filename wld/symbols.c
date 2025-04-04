@@ -6,6 +6,16 @@
 #include "wld/symbols.h"
 #include "wld/wld.h"
 
+static const char *SYMBOL_TYPE_NAMES[] = {
+    "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?"
+};
+
+static const char *SYMBOL_BINDING_NAMES[] = {
+    "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?",
+};
+
 StrMap *defined_symbols;    // Map of defined symbols, name -> symbol
 StrMap *undefined_symbols;  // A set of undefined symbols
 
@@ -39,8 +49,9 @@ static Symbol *new_symbol(char *name, int type, int binding) {
     return symbol;
 }
 
-static Symbol *add_defined_symbol(char *name, int type, int binding) {
+static Symbol *add_defined_symbol(char *name, int type, int binding, int size) {
     Symbol *symbol = new_symbol(name, type, binding);
+    symbol->size = size;
     strmap_put(defined_symbols, name, symbol);
     return symbol;
 }
@@ -55,6 +66,7 @@ void process_elf_file_symbols(ElfFile *elf_file) {
 
         char binding = (symbol->st_info >> 4) & 0xf;
         char type = symbol->st_info & 0xf;
+        int size = symbol->st_size;
 
         if (!symbol->st_name) continue;
 
@@ -80,7 +92,7 @@ void process_elf_file_symbols(ElfFile *elf_file) {
                 }
                 else {
                     // Add a new symbol
-                    Symbol *new_symbol = add_defined_symbol(name, type, binding);
+                    Symbol *new_symbol = add_defined_symbol(name, type, binding, size);
                     new_symbol->src_elf_file = elf_file;
                     new_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
                     new_symbol->src_value = symbol->st_value;
@@ -111,11 +123,25 @@ void fail_on_undefined_symbols(void) {
 
 void debug_summarize_symbols(void) {
     printf("Defined symbols:\n");
-    printf("  %-40s %-40s %s %s\n", "Name", "Src file", "Src Value", "Dst Value");
+    printf("   Num:    Value          Size Type    Bind   Vis      Ndx Name\n");
+
+    int i = 0;
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
-        printf("  %-40s %-40s %08x  %08x\n", symbol->name, symbol->src_elf_file->filename, symbol->src_value, symbol->dst_value);
+
+        char binding = symbol->binding;
+        char type = symbol->type;
+        const char *type_name = SYMBOL_TYPE_NAMES[type];
+        const char *binding_name = SYMBOL_BINDING_NAMES[binding];
+
+        RwSection *rw_section = symbol->dst_section;
+
+        printf("%6d: %016x  %4x %-8s%-7sDEFAULT  ", i, symbol->dst_value, symbol->size, type_name, binding_name);
+        printf("%3d", rw_section->index);
+        printf(" %s\n", name);
+
+        i++;
     }
 
     printf("Undefined symbols:\n");
@@ -126,7 +152,7 @@ void debug_summarize_symbols(void) {
 }
 
 // Assign final values to all symbols
-void make_symbol_values(uint64_t executable_virt_address) {
+void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_address) {
     if (DEBUG) printf("\nFinal symbols:\n");
 
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
@@ -135,9 +161,47 @@ void make_symbol_values(uint64_t executable_virt_address) {
 
         symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
 
+        // Get the output section
+        RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
+        symbol->dst_section = rw_section;
+
         if (DEBUG) {
             printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
             printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
         }
+    }
+}
+
+// Add the symbols to the ELF symbol table
+// The values and section indexes will be updated later
+void make_elf_symbols(RwElfFile *output_elf_file) {
+    ElfSectionHeader *elf_section_header = &output_elf_file->elf_section_headers[output_elf_file->section_symtab->index];
+
+    output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
+    output_elf_file->section_symtab->info = output_elf_file->sections_list->length; // Index of the first global symbol
+
+    add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, SHN_UNDEF); // Null symbol
+
+    for (int i = 1; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
+        add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, i);
+    }
+
+    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+        const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(defined_symbols, name);
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, 0, STB_GLOBAL, STT_NOTYPE, 0);
+    }
+}
+
+// Set the symbol's value and section indexes
+void update_elf_symbols(RwElfFile *output_elf_file) {
+    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+        const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(defined_symbols, name);
+        ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+        ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
+        elf_symbol->st_value = symbol->dst_value;
+        elf_symbol->st_shndx = symbol->dst_section->index;
     }
 }

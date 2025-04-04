@@ -1,4 +1,5 @@
 .globl j
+.size j, 1
 .globl k
 .globl f
 .globl msg
