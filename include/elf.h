@@ -100,6 +100,12 @@
 #define ET_EXEC  2 // Executable file
 #define ET_DYN   3 // Shared object file
 
+// Symbol visibility specification encoded in the st_other field
+#define STV_DEFAULT     0 / Default symbol visibility rules
+#define STV_INTERNAL    1 / Processor specific hidden class
+#define STV_HIDDEN      2 / Sym unavailable in other modules
+#define STV_PROTECTED   3 / Not preemptible, not exported
+
 typedef struct elf_header {
     char   ei_magic0;       // 0x7F followed by ELF(45 4c 46) in ASCII; these four bytes constitute the magic number.
     char   ei_magic1;

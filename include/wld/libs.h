@@ -34,5 +34,6 @@ extern const char *BUILTIN_LIBRARY_PATHS[];
 char *search_for_library(List *library_paths, const char *input_filename);
 ArchiveFile *open_archive_file(const char *filename);
 void dump_archive_file_symbols(ArchiveFile* ar_file);
+void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files);
 
 #endif

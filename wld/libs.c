@@ -4,9 +4,12 @@
 #include <unistd.h>
 
 #include "error.h"
+#include "list.h"
 #include "ro-elf.h"
+#include "strmap.h"
 
 #include "wld/libs.h"
+#include "wld/symbols.h"
 
 const char *BUILTIN_LIBRARY_PATHS[] = {
     "/usr/local/lib/x86_64-linux-gnu",
@@ -170,6 +173,48 @@ ArchiveFile *open_archive_file(const char *filename) {
     index_archive_file(ar_file);
 
     return ar_file;
+}
+
+void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
+    StrMap *included_objects_map = new_strmap();
+    List *included_objects_list = new_list(32);
+
+    int objects_added;
+    // Repeat over all objects in the archive file until no objects have
+    // been added. These multiple passes are needed, since an object might need a
+    // symbol in a previously scanned object.
+
+    do {
+        objects_added = 0;
+
+        // Loop over all object files
+        for (int i = 0; i < ar_file->objects->length; i++) {
+            ArchiveFileObject *obj = ar_file->objects->elements[i];
+
+            // Don't process the same object twice
+            if (strmap_get(included_objects_map, obj->filename)) continue;
+
+            ElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
+            int resolved_symbols = process_elf_file_symbols(elf_file, 1);
+            if (resolved_symbols) {
+                // Use the object file
+                if (!strmap_get(included_objects_map, obj->filename)) {
+                    process_elf_file_symbols(elf_file, 0);
+                    strmap_put(included_objects_map, obj->filename, elf_file);
+                    append_to_list(included_objects_list, elf_file);
+                    objects_added++;
+                }
+            }
+        }
+    } while (objects_added);
+
+    for (int i = 0; i < included_objects_list->length; i++) {
+        ElfFile *elf_file = included_objects_list->elements[i];
+        append_to_list(input_elf_files, elf_file);
+    }
+
+    free_strmap(included_objects_map);
+    free_list(included_objects_list);
 }
 
 void dump_archive_file_symbols(ArchiveFile* ar_file) {

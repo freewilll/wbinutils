@@ -21,10 +21,11 @@ static List *read_input_files(List *library_paths, List *input_files) {
         if (input_file->is_library) {
             char *path = search_for_library(library_paths, input_filename);
             ArchiveFile *ar_file = open_archive_file(path);
+            process_library_symbols(ar_file, input_elf_files);
         }
         else {
             ElfFile *elf_file = open_elf_file(input_filename);
-            process_elf_file_symbols(elf_file);
+            process_elf_file_symbols(elf_file, 0);
             append_to_list(input_elf_files, elf_file);
         }
     }

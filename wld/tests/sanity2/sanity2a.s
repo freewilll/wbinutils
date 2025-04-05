@@ -24,4 +24,4 @@ _start:
     int $0x80           # Call kernel
 
 .section .data
-i: .byte 2              # Read by the other file
+i: .long 2              # Read by the other file

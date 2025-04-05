@@ -10,14 +10,18 @@
 #include "strmap.h"
 #include "error.h"
 
-static const char *symbol_type_names[] = {
+static const char *SYMBOL_TYPE_NAMES[] = {
     "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
     "?", "?", "?", "?", "?", "?", "?", "?"
 };
 
-static const char *symbol_binding_names[] = {
+static const char *SYMBOL_BINDING_NAMES[] = {
     "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
     "?", "?", "?", "?", "?", "?", "?", "?",
+};
+
+static const char *SYMBOL_VISIBILITY_NAMES[] = {
+    "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
 };
 
 static void read_header(ElfFile *elf_file) {
@@ -164,7 +168,7 @@ ElfFile *open_elf_file(const char *filename) {
 // Open an object file in an archive
 ElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int offset) {
     ElfFile *elf_file = calloc(1, sizeof(ElfFile));
-    elf_file->filename = strdup(filename);
+    elf_file->filename = filename ? strdup(filename) : NULL;
     elf_file->file = file;
     elf_file->file_offset = offset;
 
@@ -179,17 +183,19 @@ void dump_symbols(ElfFile *elf_file) {
         panic("There are symbols, yet no symbol table");
 
     printf("Symbol Table:\n");
-    printf("   Num:    Value          Size Type    Bind   Vis      Ndx Name\n");
+    printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
 
     for (int i = 0; i < elf_file->symbol_count; i++) {
         ElfSymbol *symbol = &elf_file->symbol_table[i];
 
         char binding = (symbol->st_info >> 4) & 0xf;
         char type = symbol->st_info & 0xf;
-        const char *type_name = symbol_type_names[type];
-        const char *binding_name = symbol_binding_names[binding];
+        char visibility = symbol->st_other & 3;
+        const char *type_name = SYMBOL_TYPE_NAMES[type];
+        const char *binding_name = SYMBOL_BINDING_NAMES[binding];
+        const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
-        printf("%6d: %016ld  %4ld %-8s%-7sDEFAULT  ", i, symbol->st_value, symbol->st_size, type_name, binding_name);
+        printf("%6d: %016ld  %4ld %-8s%-7s%-9s  ", i, symbol->st_value, symbol->st_size, type_name, binding_name, visibility_name);
         if ((unsigned short) symbol->st_shndx == SHN_UNDEF)
             printf("UND");
         else if ((unsigned short) symbol->st_shndx == SHN_ABS)

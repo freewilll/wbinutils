@@ -1,6 +1,6 @@
 *.o
 /*.s
-core
+**/core
 a.out
 test
 test2

@@ -61,5 +61,5 @@ clean:
 	@rm -f *.o
 	@rm -f ${TARGET}
 	@make -C tests clean
-	rm libtest-archive-loading.a
-	rm libtest-archive-loading-long.a
+	@rm -f libtest-archive-loading.a
+	@rm -f libtest-archive-loading-long.a

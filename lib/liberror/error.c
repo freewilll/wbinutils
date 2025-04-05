@@ -28,10 +28,12 @@ static void print_filename_and_linenumber(void) {
     int is_tty = isatty(2);
     if (is_tty) fprintf(stderr, LOCUS);
 
-    if (error_line)
+    if (error_filename && error_line)
         fprintf(stderr, "%s:%d: ", error_filename, error_line);
-    else
+    else if (error_filename && !error_line)
         fprintf(stderr, "%s: ", error_filename);
+    else if (!error_filename && error_line)
+        fprintf(stderr, "%d: ", error_line);
 
     if (is_tty) fprintf(stderr, RESET);
 }

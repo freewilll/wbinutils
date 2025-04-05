@@ -16,6 +16,10 @@ static const char *SYMBOL_BINDING_NAMES[] = {
     "?", "?", "?", "?", "?", "?", "?", "?",
 };
 
+static const char *SYMBOL_VISIBILITY_NAMES[] = {
+    "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
+};
+
 StrMap *defined_symbols;    // Map of defined symbols, name -> symbol
 StrMap *undefined_symbols;  // A set of undefined symbols
 
@@ -39,34 +43,41 @@ static void remove_undefined_symbol(char *name) {
     strmap_delete(undefined_symbols, name);
 }
 
-static Symbol *new_symbol(char *name, int type, int binding) {
+static Symbol *new_symbol(char *name, int type, int binding, int other, int size) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
-    symbol->name    = name;
-    symbol->type    = type;
-    symbol->binding = binding;
+    symbol->name     = name;
+    symbol->type     = type;
+    symbol->binding  = binding;
+    symbol->other    = other;
+    symbol->size     = size;
 
     return symbol;
 }
 
-static Symbol *add_defined_symbol(char *name, int type, int binding, int size) {
-    Symbol *symbol = new_symbol(name, type, binding);
-    symbol->size = size;
+static Symbol *add_defined_symbol(char *name, int type, int binding, int other, int size) {
+    Symbol *symbol = new_symbol(name, type, binding, other, size);
     strmap_put(defined_symbols, name, symbol);
     return symbol;
 }
 
-static void add_undefined_symbol(char *name, int type, int binding) {
-    strmap_put(undefined_symbols, name, (void *) 1);
+static void add_undefined_symbol(char *name, int type, int binding, int other, int size) {
+    Symbol *symbol = new_symbol(name, type, binding, other, size);
+    strmap_put(undefined_symbols, name, symbol);
 }
 
-void process_elf_file_symbols(ElfFile *elf_file) {
+// Process all symbols in a file. Returns the amount of undefined symbols in
+// the symbol table that would be resolved.
+int process_elf_file_symbols(ElfFile *elf_file, int read_only) {
+    int resolved_symbols = 0;
+
     for (int i = 0; i < elf_file->symbol_count; i++) {
         ElfSymbol *symbol = &elf_file->symbol_table[i];
 
         char binding = (symbol->st_info >> 4) & 0xf;
         char type = symbol->st_info & 0xf;
         int size = symbol->st_size;
+        int other = symbol->st_other;
 
         if (!symbol->st_name) continue;
 
@@ -78,31 +89,43 @@ void process_elf_file_symbols(ElfFile *elf_file) {
 
         if (symbol->st_shndx == SHN_UNDEF) {
             Symbol *found_symbol = get_defined_symbol(name);
-            if (!found_symbol)
-                add_undefined_symbol(name, type, binding);
+            if (!found_symbol && !read_only)
+                add_undefined_symbol(name, type, binding, other, size);
         }
         else {
             if (binding == STB_GLOBAL || binding == STB_WEAK) {
                 Symbol *found_symbol = get_defined_symbol(name);
 
                 if (found_symbol)  {
+                    // Resolving symbols of the same name is not yet implemented, fail hard.
+                    printf("Found duplicate symbol %s: Had %s, got: %s\n",
+                        name, SYMBOL_BINDING_NAMES[found_symbol->binding], SYMBOL_BINDING_NAMES[binding]);
                     set_error_filename((char *) elf_file->filename);
                     set_error_line(0);
                     error_in_file("Multiple definition of %s\n", name);
                 }
                 else {
-                    // Add a new symbol
-                    Symbol *new_symbol = add_defined_symbol(name, type, binding, size);
-                    new_symbol->src_elf_file = elf_file;
-                    new_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
-                    new_symbol->src_value = symbol->st_value;
+                    // The symbol has not yet been defined
 
-                    if (is_undefined_symbol(name))
-                        remove_undefined_symbol(name);
+                    if (!read_only) {
+                        // Add a new symbol
+                        Symbol *new_symbol = add_defined_symbol(name, type, binding, size, other);
+                        new_symbol->src_elf_file = elf_file;
+                        new_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
+                        new_symbol->src_value = symbol->st_value;
+                    }
+
+                    if (is_undefined_symbol(name)) {
+                        // This resolved an undefined symbol
+                        if (!read_only) remove_undefined_symbol(name);
+                        resolved_symbols++;
+                    }
                 }
             }
         }
     }
+
+    return resolved_symbols;
 }
 
 void fail_on_undefined_symbols(void) {
@@ -121,9 +144,24 @@ void fail_on_undefined_symbols(void) {
     error("Unable to resolve undefined references");
 }
 
+void debug_print_symbol(Symbol *symbol) {
+    char binding = symbol->binding;
+    char type = symbol->type;
+    char visibility = symbol->other & 3;
+    const char *type_name = SYMBOL_TYPE_NAMES[type];
+    const char *binding_name = SYMBOL_BINDING_NAMES[binding];
+    const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
+
+    RwSection *rw_section = symbol->dst_section;
+
+    printf("%016x  %4x %-8s%-7s%-7s  ", symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
+    printf("%3d", rw_section->index);
+    printf(" %s\n", symbol->name);
+}
+
 void debug_summarize_symbols(void) {
     printf("Defined symbols:\n");
-    printf("   Num:    Value          Size Type    Bind   Vis      Ndx Name\n");
+    printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
 
     int i = 0;
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
@@ -132,13 +170,16 @@ void debug_summarize_symbols(void) {
 
         char binding = symbol->binding;
         char type = symbol->type;
+        char visibility = symbol->other & 3;
         const char *type_name = SYMBOL_TYPE_NAMES[type];
         const char *binding_name = SYMBOL_BINDING_NAMES[binding];
+        const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
         RwSection *rw_section = symbol->dst_section;
+        int rw_section_index = rw_section ? rw_section->index : 0;
 
-        printf("%6d: %016x  %4x %-8s%-7sDEFAULT  ", i, symbol->dst_value, symbol->size, type_name, binding_name);
-        printf("%3d", rw_section->index);
+        printf("%6d: %016x  %4x %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
+        printf("%3d", rw_section_index);
         printf(" %s\n", name);
 
         i++;
@@ -159,10 +200,14 @@ void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_add
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
 
+        if (!symbol->src_section) panic("Unexpected null symbol->src_section for %s", name);
+        if (!symbol->src_section->dst_section) panic("Unexpected null symbol->src_section->dst_section for %s", name);
+
         symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
 
         // Get the output section
         RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
+        if (!rw_section) panic("Unexpected empty output section for %s", name);
         symbol->dst_section = rw_section;
 
         if (DEBUG) {
