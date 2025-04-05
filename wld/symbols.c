@@ -90,8 +90,12 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 
         if (symbol->st_shndx == SHN_UNDEF) {
             Symbol *found_symbol = get_defined_symbol(name);
-            if (!found_symbol && !read_only)
-                add_undefined_symbol(name, type, binding, other, size, is_library);
+            if (!found_symbol && !read_only) {
+                // Add an undefined symbol unless it already exists
+                if (!is_undefined_symbol(name)) {
+                    add_undefined_symbol(name, type, binding, other, size, is_library);
+                }
+            }
         }
         else {
             if (binding == STB_GLOBAL || binding == STB_WEAK) {
