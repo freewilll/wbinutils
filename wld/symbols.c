@@ -163,16 +163,27 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 void fail_on_undefined_symbols(void) {
     int count = 0;
 
-    for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it))
+    for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+        const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(undefined_symbols, name);
+
+        // It's ok for unresolved symbols to be weak. They just get value zero.
+        if (symbol->binding == STB_WEAK) continue;
         count++;
+    }
 
     if (!count) return;
 
     printf("Undefined symbols:\n");
     for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(undefined_symbols, name);
+
+        // It's ok for unresolved symbols to be weak. They just get value zero.
+        if (symbol->binding == STB_WEAK) continue;
         printf("  %s\n", name);
     }
+
     error("Unable to resolve undefined references");
 }
 
@@ -185,9 +196,10 @@ void debug_print_symbol(Symbol *symbol) {
     const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
     RwSection *rw_section = symbol->dst_section;
+    int rw_section_index = rw_section ? rw_section->index : 0;
 
     printf("%016x  %4x %-8s%-7s%-7s  ", symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
-    printf("%3d", rw_section->index);
+    printf("%3d", rw_section_index);
     printf(" %s\n", symbol->name);
 }
 
@@ -220,7 +232,9 @@ void debug_summarize_symbols(void) {
     printf("Undefined symbols:\n");
     for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        printf("  %s\n", name);
+        Symbol *symbol = strmap_get(undefined_symbols, name);
+        if (symbol->binding == STB_WEAK) continue; // It's ok for unresolved symbols to be weak
+        debug_print_symbol(symbol);
     }
 }
 
