@@ -151,7 +151,7 @@ static void read_common_file_data(ElfFile *elf_file) {
 
 // Open an object file
 ElfFile *open_elf_file(const char *filename) {
-    ElfFile *elf_file = malloc(sizeof(ElfFile));
+    ElfFile *elf_file = calloc(1, sizeof(ElfFile));
     elf_file->filename = strdup(filename);
     elf_file->file = fopen(filename, "r");
 
