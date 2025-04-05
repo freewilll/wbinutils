@@ -3,7 +3,7 @@
 
 #include "list.h"
 
-#define DEBUG 1
+#define DEBUG 0
 
 #define EXECUTABLE_VIRTUAL_ADDRESS 0x400000
 #define ENTRYPOINT_SYMBOL          "_start"
@@ -13,6 +13,7 @@ typedef struct input_file {
     int is_library;       // On the command line with -l
 } InputFile;
 
+int is_supported_section(const char *name);
 void run(List *library_paths, List *input_files, const char *output_filename);
 
 #endif

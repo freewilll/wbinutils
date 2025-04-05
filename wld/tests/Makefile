@@ -1,6 +1,13 @@
 all: test
 
-test: sanity1 sanity2 libc-with-gcc-ld lib-object-file-selection
+test: \
+	sanity1 \
+	sanity2 \
+	libc-with-gcc-ld \
+	lib-object-file-selection \
+	symbol-resolution-bindings \
+	symbol-resolution-double-strong-bindings \
+	symbol-resolution-weak-strong-bindings \
 
 .PHONY: sanity1
 sanity1:
@@ -18,8 +25,23 @@ libc-with-gcc-ld:
 lib-object-file-selection:
 	make -C lib-object-file-selection
 
+.PHONY: symbol-resolution-bindings
+symbol-resolution-bindings:
+	make -C symbol-resolution-bindings
+
+.PHONY: symbol-resolution-double-strong-bindings
+symbol-resolution-double-strong-bindings:
+	make -C symbol-resolution-double-strong-bindings
+
+.PHONY: symbol-resolution-weak-strong-bindings
+symbol-resolution-weak-strong-bindings:
+	make -C symbol-resolution-weak-strong-bindings
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
 	@make -C libc-with-gcc-ld clean
 	@make -C lib-object-file-selection clean
+	@make -C symbol-resolution-bindings clean
+	@make -C symbol-resolution-double-strong-bindings clean
+	@make -C symbol-resolution-weak-strong-bindings clean

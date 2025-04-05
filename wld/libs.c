@@ -195,11 +195,11 @@ void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
             if (strmap_get(included_objects_map, obj->filename)) continue;
 
             ElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
-            int resolved_symbols = process_elf_file_symbols(elf_file, 1);
+            int resolved_symbols = process_elf_file_symbols(elf_file, 1, 1);
             if (resolved_symbols) {
                 // Use the object file
                 if (!strmap_get(included_objects_map, obj->filename)) {
-                    process_elf_file_symbols(elf_file, 0);
+                    process_elf_file_symbols(elf_file, 1, 0);
                     strmap_put(included_objects_map, obj->filename, elf_file);
                     append_to_list(included_objects_list, elf_file);
                     objects_added++;

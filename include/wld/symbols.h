@@ -11,6 +11,7 @@ typedef struct symbol {
     int type;               // Type, e.g. function or object
     int other;              // Visibility
     int size;
+    int src_is_library;     // 1 if the symbol was found in a library, otherwise it was found in an object file
     ElfFile *src_elf_file;  // File symbol is defined in. NULL if undefined.
     Section *src_section;   // Section the symbol is defined in. NULL if undefined.
     RwSection *dst_section; // Section the symbol is defined in. NULL if undefined.
@@ -24,7 +25,7 @@ extern StrMap *undefined_symbols;
 
 void init_symbols(void);
 Symbol *get_defined_symbol(char *name);
-int process_elf_file_symbols(ElfFile *elf_file, int read_only);
+int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
 void fail_on_undefined_symbols(void);
 void debug_print_symbol(Symbol *symbol);
 void debug_summarize_symbols(void);

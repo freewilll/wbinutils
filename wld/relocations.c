@@ -26,6 +26,9 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
             int target_section_index = rela_input_elf_section_header->sh_info;
             Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
 
+            if (input_section->elf_section_header->sh_type != SHT_PROGBITS) continue;
+            if (!is_supported_section(input_section->name)) continue;
+
             // Loop over all relocations
             ElfRelocation *relocations = load_section(input_elf_file, j);
             ElfRelocation *relocation = relocations;
@@ -38,6 +41,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                 ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
                 char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
                 Symbol *symbol = get_defined_symbol(symbol_name);
+                if (!symbol) panic("Trying to relocate a symbol that's not defined: %s in section %s",
+                    symbol_name, input_section->name);
 
                 if (DEBUG) {
                     printf("  offset %#08lx type=%d %s + %ld\n", relocation->r_offset, type, symbol_name, relocation->r_addend);
@@ -46,6 +51,7 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                 // Get the output section
                 RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
+                if (!rw_section) panic("Unexpected null section in output when applying relocations");
 
                 // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
                 if (type == R_X86_64_PLT32) type = R_X86_64_PC32;

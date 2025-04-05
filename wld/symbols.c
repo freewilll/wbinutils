@@ -43,32 +43,33 @@ static void remove_undefined_symbol(char *name) {
     strmap_delete(undefined_symbols, name);
 }
 
-static Symbol *new_symbol(char *name, int type, int binding, int other, int size) {
+static Symbol *new_symbol(char *name, int type, int binding, int other, int size, int is_library) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
-    symbol->name     = name;
-    symbol->type     = type;
-    symbol->binding  = binding;
-    symbol->other    = other;
-    symbol->size     = size;
+    symbol->name           = name;
+    symbol->type           = type;
+    symbol->binding        = binding;
+    symbol->other          = other;
+    symbol->size           = size;
+    symbol->src_is_library = is_library;
 
     return symbol;
 }
 
-static Symbol *add_defined_symbol(char *name, int type, int binding, int other, int size) {
-    Symbol *symbol = new_symbol(name, type, binding, other, size);
+static Symbol *add_defined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_put(defined_symbols, name, symbol);
     return symbol;
 }
 
-static void add_undefined_symbol(char *name, int type, int binding, int other, int size) {
-    Symbol *symbol = new_symbol(name, type, binding, other, size);
+static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_put(undefined_symbols, name, symbol);
 }
 
 // Process all symbols in a file. Returns the amount of undefined symbols in
 // the symbol table that would be resolved.
-int process_elf_file_symbols(ElfFile *elf_file, int read_only) {
+int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
     int resolved_symbols = 0;
 
     for (int i = 0; i < elf_file->symbol_count; i++) {
@@ -90,26 +91,53 @@ int process_elf_file_symbols(ElfFile *elf_file, int read_only) {
         if (symbol->st_shndx == SHN_UNDEF) {
             Symbol *found_symbol = get_defined_symbol(name);
             if (!found_symbol && !read_only)
-                add_undefined_symbol(name, type, binding, other, size);
+                add_undefined_symbol(name, type, binding, other, size, is_library);
         }
         else {
             if (binding == STB_GLOBAL || binding == STB_WEAK) {
                 Symbol *found_symbol = get_defined_symbol(name);
 
                 if (found_symbol)  {
-                    // Resolving symbols of the same name is not yet implemented, fail hard.
-                    printf("Found duplicate symbol %s: Had %s, got: %s\n",
-                        name, SYMBOL_BINDING_NAMES[found_symbol->binding], SYMBOL_BINDING_NAMES[binding]);
-                    set_error_filename((char *) elf_file->filename);
-                    set_error_line(0);
-                    error_in_file("Multiple definition of %s\n", name);
+                    // Check bindings
+
+                    // Two strong bindings
+                    if (found_symbol->binding != STB_WEAK && binding != STB_WEAK) {
+                        // Anecdotal mimic of what gcc does. If the second symbol is an object file,
+                        // It is an error.
+                        if (!is_library) {
+                            set_error_filename((char *) elf_file->filename);
+                            set_error_line(0);
+                            error_in_file("Multiple definition of %s\n", name);
+                        }
+
+                        // The second symbol overrides the first
+
+                        resolved_symbols++;
+                    }
+
+                    // For weak-weak it's first come first served. Use the existing symbol
+                    else if (found_symbol->binding == STB_WEAK && binding == STB_WEAK)
+                        ; // Do nothing
+                    else {
+                        // One is strong and one is weak.
+                        if (binding != STB_WEAK) {
+                            // The new symbol is strong and takes over
+                            resolved_symbols++;
+
+                            if (!read_only) {
+                                found_symbol->src_elf_file = elf_file;
+                                found_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
+                                found_symbol->src_value = symbol->st_value;
+                            }
+                        }
+                    }
                 }
                 else {
                     // The symbol has not yet been defined
 
                     if (!read_only) {
                         // Add a new symbol
-                        Symbol *new_symbol = add_defined_symbol(name, type, binding, size, other);
+                        Symbol *new_symbol = add_defined_symbol(name, type, binding, size, other, is_library);
                         new_symbol->src_elf_file = elf_file;
                         new_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
                         new_symbol->src_value = symbol->st_value;
@@ -201,7 +229,7 @@ void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_add
         Symbol *symbol = strmap_get(defined_symbols, name);
 
         if (!symbol->src_section) panic("Unexpected null symbol->src_section for %s", name);
-        if (!symbol->src_section->dst_section) panic("Unexpected null symbol->src_section->dst_section for %s", name);
+        if (!symbol->src_section->dst_section) panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
 
         symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
 
