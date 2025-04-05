@@ -39,7 +39,7 @@ char *search_for_library(List *library_paths, const char *filename) {
     for (int i = 0; i < library_paths->length; i++) {
         char *search_path = (char *) library_paths->elements[i];
 
-        test_path = malloc(strlen(search_path) + path_len + 1);
+        test_path = malloc(strlen(search_path) + path_len + 2);
         sprintf(test_path, "%s/%s", search_path, path);
 
         if (!access(test_path, F_OK)) {
@@ -52,7 +52,7 @@ char *search_for_library(List *library_paths, const char *filename) {
         // Search system paths
         int system_library_count = sizeof(BUILTIN_LIBRARY_PATHS) / sizeof(BUILTIN_LIBRARY_PATHS[0]);
         for (int i = 0; i < system_library_count; i++) {
-            test_path = malloc(strlen(BUILTIN_LIBRARY_PATHS[i]) + path_len + 1);
+            test_path = malloc(strlen(BUILTIN_LIBRARY_PATHS[i]) + path_len + 2);
             sprintf(test_path, "%s/%s", BUILTIN_LIBRARY_PATHS[i], path);
 
             if (!access(test_path, F_OK)) {
