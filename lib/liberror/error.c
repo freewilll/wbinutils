@@ -74,9 +74,14 @@ void error(char *format, ...) {
 }
 
 // Report an error with filename and line number and exit
+void verror_in_file(char *format, va_list ap) {
+    print_filename_and_linenumber();
+    verror(format, ap);
+}
+
+// Report an error with filename and line number and exit
 void error_in_file(char *format, ...) {
     va_list ap;
     va_start(ap, format);
-    print_filename_and_linenumber();
-    verror(format, ap);
+    verror_in_file(format, ap);
 }

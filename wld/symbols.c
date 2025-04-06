@@ -1,4 +1,6 @@
+#include <stdarg.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "error.h"
 #include "strmap.h"
@@ -23,6 +25,8 @@ static const char *SYMBOL_VISIBILITY_NAMES[] = {
 StrMap *defined_symbols;    // Map of defined symbols, name -> symbol
 StrMap *undefined_symbols;  // A set of undefined symbols
 
+char *last_error_message;
+
 void init_symbols(void) {
     defined_symbols = new_strmap();
     undefined_symbols = new_strmap();
@@ -31,6 +35,12 @@ void init_symbols(void) {
 // Get a symbol from the defined symbol table. Returns NULL if not present.
 Symbol *get_defined_symbol(char *name) {
     return (Symbol *) strmap_get(defined_symbols, name);
+}
+
+Symbol *must_get_defined_symbol(char *name) {
+    Symbol *symbol = get_defined_symbol(name);
+    if (!symbol) panic("Expected a symbol %s, but got none", name);
+    return symbol;
 }
 
 // Is a symbol in the undefined symbols set?
@@ -67,9 +77,30 @@ static void add_undefined_symbol(char *name, int type, int binding, int other, i
     strmap_put(undefined_symbols, name, symbol);
 }
 
+// Report an error, or in case we are being tested, write to last_error_message
+static void fail(ElfFile *elf_file, char *format, ...) {
+    va_list ap;
+    va_start(ap, format);
+    va_list ap2;
+    va_copy(ap2, ap);
+
+    // Test if the filename is a magic string
+    if (!strcmp(elf_file->filename, "/_testing.o")) {
+        int size = vsnprintf(NULL, 0, format, ap);
+        last_error_message = malloc(size + 1);
+        vsprintf(last_error_message, format, ap2);
+        return;
+    }
+
+    set_error_filename((char *) elf_file->filename);
+    set_error_line(0);
+    verror_in_file(format, ap);
+}
+
 // Process all symbols in a file. Returns the amount of undefined symbols in
 // the symbol table that would be resolved.
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
+    last_error_message = NULL;
     int resolved_symbols = 0;
 
     for (int i = 0; i < elf_file->symbol_count; i++) {
@@ -111,12 +142,10 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
                         // Anecdotal mimic of what gcc does. If the second symbol is an object file,
                         // It is an error.
                         if (!is_library) {
-                            set_error_filename((char *) elf_file->filename);
-                            set_error_line(0);
-                            error_in_file("Multiple definition of %s\n", name);
+                            fail(elf_file, "Multiple definition of %s", name);
                         }
 
-                        // The second symbol overrides the first
+                        // The second symbol is ignored
 
                         resolved_symbols++;
                     }

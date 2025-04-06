@@ -23,8 +23,11 @@ typedef struct symbol {
 extern StrMap *defined_symbols;
 extern StrMap *undefined_symbols;
 
+extern char *last_error_message;
+
 void init_symbols(void);
 Symbol *get_defined_symbol(char *name);
+Symbol *must_get_defined_symbol(char *name);
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
 void fail_on_undefined_symbols(void);
 void debug_print_symbol(Symbol *symbol);

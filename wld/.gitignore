@@ -14,3 +14,4 @@ test
 test-archive-loading
 libtest-archive-loading.a
 libtest-archive-loading-long.a
+test-symbol-resolution
