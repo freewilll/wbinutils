@@ -85,6 +85,8 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
         int strtab_offset = symbol->st_name;
         char *name = &elf_file->strtab_strings[symbol->st_name];
 
+        if (type == STT_FILE) continue;
+
         if (symbol->st_shndx == SHN_ABS) panic("SHN_ABS symbols aren't handled");
         if (symbol->st_shndx == SHN_COMMON) panic("SHN_COMMON symbols aren't handled");
 

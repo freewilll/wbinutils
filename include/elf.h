@@ -1,6 +1,8 @@
 #ifndef _ELF_H
 #define _ELF_H
 
+#include <stdint.h>
+
 #include "strmap.h"
 
 // https://en.wikipedia.org/wiki/Executable_and_Linkable_Format
@@ -107,74 +109,74 @@
 #define STV_PROTECTED   3 / Not preemptible, not exported
 
 typedef struct elf_header {
-    char   ei_magic0;       // 0x7F followed by ELF(45 4c 46) in ASCII; these four bytes constitute the magic number.
-    char   ei_magic1;
-    char   ei_magic2;
-    char   ei_magic3;
-    char   ei_class;        // This byte is set to either 1 or 2 to signify 32- or 64-bit format, respectively.
-    char   ei_data;         // This byte is set to either 1 or 2 to signify little or big endianness, respectively.
-    char   ei_version;      // Set to 1 for the original version of ELF.
-    char   ei_osabi;        // Identifies the target operating system ABI.
-    char   ei_osabiversion; // Further specifies the ABI version.
-    char   pad0;            // Unused
-    char   pad1;            // Unused
-    char   pad2;            // Unused
-    char   pad3;            // Unused
-    char   pad4;            // Unused
-    char   pad5;            // Unused
-    char   pad6;            // Unused
-    short  e_type;          // File type.
-    short  e_machine;       // Machine architecture.
-    int    e_version;       // ELF format version.
-    long   e_entry;         // Entry point.
-    long   e_phoff;         // Program header file offset.
-    long   e_shoff;         // Section header file offset.
-    int    e_flags;         // Architecture-specific flags.
-    short  e_ehsize;        // Size of ELF header in bytes.
-    short  e_phentsize;     // Size of program header entry.
-    short  e_phnum;         // Number of program header entries.
-    short  e_shentsize;     // Size of section header entry.
-    short  e_shnum;         // Number of section header entries.
-    short  e_shstrndx;      // Section name strings section.
+    uint8_t   ei_magic0;        // 0x7F followed by ELF(45 4c 46) in ASCII; these four bytes constitute the magic number.
+    uint8_t   ei_magic1;
+    uint8_t   ei_magic2;
+    uint8_t   ei_magic3;
+    uint8_t   ei_class;         // This byte is set to either 1 or 2 to signify 32- or 64-bit format, respectively.
+    uint8_t   ei_data;          // This byte is set to either 1 or 2 to signify little or big endianness, respectively.
+    uint8_t   ei_version;       // Set to 1 for the original version of ELF.
+    uint8_t   ei_osabi;         // Identifies the target operating system ABI.
+    uint8_t   ei_osabiversion;  // Further specifies the ABI version.
+    uint8_t   pad0;             // Unused
+    uint8_t   pad1;             // Unused
+    uint8_t   pad2;             // Unused
+    uint8_t   pad3;             // Unused
+    uint8_t   pad4;             // Unused
+    uint8_t   pad5;             // Unused
+    uint8_t   pad6;             // Unused
+    uint16_t  e_type;           // File type.
+    uint16_t  e_machine;        // Machine architecture.
+    uint32_t  e_version;        // ELF format version.
+    uint64_t  e_entry;          // Entry point.
+    uint64_t  e_phoff;          // Program header file offset.
+    uint64_t  e_shoff;          // Section header file offset.
+    uint32_t  e_flags;          // Architecture-specific flags.
+    uint16_t  e_ehsize;         // Size of ELF header in bytes.
+    uint16_t  e_phentsize;      // Size of program header entry.
+    uint16_t  e_phnum;          // Number of program header entries.
+    uint16_t  e_shentsize;      // Size of section header entry.
+    uint16_t  e_shnum;          // Number of section header entries.
+    uint16_t  e_shstrndx;       // Section name strings section.
 } ElfHeader;
 
 typedef struct elf_section_header {
-    int  sh_name;           // An offset to a string in the .shstrtab section that represents the name of this section
-    int  sh_type;           // Identifies the type of this header.
-    long sh_flags;          // Identifies the attributes of the section.
-    long sh_addr;           // Virtual address of the section in memory, for sections that are loaded.
-    long sh_offset;         // Offset of the section in the file image.
-    long sh_size;           // Size in bytes of the section in the file image. May be 0.
-    int  sh_link;           // Contains the section index of an associated section.
-    int  sh_info;           // Contains extra information about the section.
-    long sh_addralign;      // Contains the required alignment of the section. This field must be a power of two.
-    long sh_entsize;        // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
+    uint32_t sh_name;           // An offset to a string in the .shstrtab section that represents the name of this section
+    uint32_t sh_type;           // Identifies the type of this header.
+    uint64_t sh_flags;          // Identifies the attributes of the section.
+    uint64_t sh_addr;           // Virtual address of the section in memory, for sections that are loaded.
+    uint64_t sh_offset;         // Offset of the section in the file image.
+    uint64_t sh_size;           // Size in bytes of the section in the file image. May be 0.
+    uint32_t sh_link;           // Contains the section index of an associated section.
+    uint32_t sh_info;           // Contains extra information about the section.
+    uint64_t sh_addralign;      // Contains the required alignment of the section. This field must be a power of two.
+    uint64_t sh_entsize;        // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
 } ElfSectionHeader;
 
 typedef struct elf_program_segment_header{
-  int   p_type;			// Segment type
-  int   p_flags;		// Segment flags
-  long  p_offset;		// Segment file offset
-  long  p_vaddr;		// Segment virtual address
-  long  p_paddr;		// Segment physical address
-  long  p_filesz;		// Segment size in file
-  long  p_memsz;		// Segment size in memory
-  long  p_align;		// Segment alignment
+    uint32_t p_type;            // Segment type
+    uint32_t p_flags;           // Segment flags
+    uint64_t p_offset;          // Segment file offset
+    uint64_t p_vaddr;           // Segment virtual address
+    uint64_t p_paddr;           // Segment physical address
+    uint64_t p_filesz;          // Segment size in file
+    uint64_t p_memsz;           // Segment size in memory
+    uint64_t p_align;           // Segment alignment
 } ElfProgramSegmentHeader;
 
 typedef struct elf_symbol {
-    int   st_name;          // This member holds an index into the object file's symbol string table
-    char  st_info;          // This member specifies the symbol's type (low 4 bits) and binding (high 4 bits) attributes
-    char  st_other;         // This member currently specifies a symbol's visibility.
-    short st_shndx;         // Every symbol table entry is defined in relation to some section. This member holds the relevant section header table index.
-    long  st_value;         // This member gives the value of the associated symbol. Depending on the context, this may be an absolute value, an address, and so on; details appear
-    long  st_size;          // Many symbols have associated sizes. For example, a data object's size is the number of bytes contained in the object. This member holds 0 if the symbol has no size or an unknown size.
+    uint32_t st_name;           // This member holds an index into the object file's symbol string table
+    uint8_t  st_info;           // This member specifies the symbol's type (low 4 bits) and binding (high 4 bits) attributes
+    uint8_t  st_other;          // This member currently specifies a symbol's visibility.
+    uint16_t st_shndx;          // Every symbol table entry is defined in relation to some section. This member holds the relevant section header table index.
+    uint64_t st_value;          // This member gives the value of the associated symbol. Depending on the context, this may be an absolute value, an address, and so on; details appear
+    uint64_t st_size;           // Many symbols have associated sizes. For example, a data object's size is the number of bytes contained in the object. This member holds 0 if the symbol has no size or an unknown size.
 } ElfSymbol;
 
 typedef struct elf_relocation {
-    long r_offset;          // Location to be relocated
-    long r_info;            // Relocation type (low 32 bits) and symbol index (high 32 bits).
-    long r_addend;          // Addend
+    uint64_t r_offset;          // Location to be relocated
+    uint64_t r_info;            // Relocation type (low 32 bits) and symbol index (high 32 bits).
+    uint64_t r_addend;          // Addend
 } ElfRelocation;
 
 #endif
