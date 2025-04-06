@@ -44,7 +44,7 @@ Symbol *must_get_defined_symbol(char *name) {
 }
 
 // Is a symbol in the undefined symbols set?
-static int is_undefined_symbol(char *name) {
+int is_undefined_symbol(char *name) {
     return strmap_get(undefined_symbols, name) != NULL;
 }
 
@@ -97,6 +97,138 @@ static void fail(ElfFile *elf_file, char *format, ...) {
     verror_in_file(format, ap);
 }
 
+// Handle a symbol where either the found symbol or symbol is common
+// The found symbol may be undefined.
+// Returns if the symbol has resolved an undefined symbol
+// Not all the cases in https://www.airs.com/blog/archives/49 are handled, just the simple ones.
+static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+    int result = 0;
+
+    int strtab_offset = symbol->st_name;
+    char *name = &elf_file->strtab_strings[symbol->st_name];
+
+    char binding = (symbol->st_info >> 4) & 0xf;
+    char type = symbol->st_info & 0xf;
+    int size = symbol->st_size;
+    int other = symbol->st_other;
+
+    int is_common = symbol->st_shndx == SHN_COMMON;
+
+    if (found_symbol) {
+        if (!found_symbol->is_common && is_common) {
+            // Not common - common
+            return 0;
+        }
+        else if (found_symbol->is_common && !is_common) {
+            // Common - not common
+            // The new symbol takes over from the common symbol
+            result = 1;
+
+            if (!read_only) {
+                Section *src_section = elf_file->section_list->elements[symbol->st_shndx];
+                found_symbol->src_elf_file = elf_file;
+                found_symbol->src_section = src_section;
+                found_symbol->src_value = symbol->st_value;
+                found_symbol->is_common = 0;
+            }
+
+            return 0;
+        }
+        else {
+            // Common - common
+            if (symbol->st_size > found_symbol->size) {
+                found_symbol->size = symbol->st_size;
+                return 1;
+            }
+        }
+    }
+    else {
+        // The symbol has not yet been defined
+        if (!read_only) {
+            // Add a new symbol
+            Symbol *new_symbol = add_defined_symbol(name, type, binding, other, size, is_library);
+            new_symbol->src_elf_file = elf_file;
+            new_symbol->src_section = NULL;
+            new_symbol->src_value = symbol->st_value;
+            new_symbol->is_common = 1;
+        }
+
+        if (is_undefined_symbol(name)) {
+            // This resolved an undefined symbol
+            if (!read_only) remove_undefined_symbol(name);
+            result = 1;
+        }
+    }
+
+    return result;
+}
+
+// Handle a symbol where the left side is defined. Both are not common.
+// Returns if the symbol has resolved an undefined symbol
+static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+    int result = 0;
+
+    int strtab_offset = symbol->st_name;
+    char *name = &elf_file->strtab_strings[symbol->st_name];
+
+    char binding = (symbol->st_info >> 4) & 0xf;
+    char type = symbol->st_info & 0xf;
+    int size = symbol->st_size;
+    int other = symbol->st_other;
+
+    Section *src_section = elf_file->section_list->elements[symbol->st_shndx];
+
+    if (found_symbol)  {
+        // Check bindings
+
+        // Two strong bindings
+        if (found_symbol->binding != STB_WEAK && binding != STB_WEAK) {
+            // Anecdotal mimic of what gcc does. If the second symbol is an object file,
+            // It is an error.
+            if (!is_library) fail(elf_file, "Multiple definition of %s", name);
+
+            // The second symbol is ignored
+        }
+
+        // For weak-weak it's first come first served. Use the existing symbol
+        else if (found_symbol->binding == STB_WEAK && binding == STB_WEAK)
+            ; // Do nothing
+        else {
+            // One is strong and one is weak.
+            if (binding != STB_WEAK) {
+                // The new symbol is strong and takes over
+                result = 1;
+
+                if (!read_only) {
+                    found_symbol->src_elf_file = elf_file;
+                    found_symbol->src_section = src_section;
+                    found_symbol->src_value = symbol->st_value;
+                    found_symbol->is_common = 0;
+                }
+            }
+        }
+    }
+    else {
+        // The symbol has not yet been defined
+        if (!read_only) {
+            // Add a new symbol
+            Symbol *new_symbol = add_defined_symbol(name, type, binding, other, size, is_library);
+            new_symbol->src_elf_file = elf_file;
+            new_symbol->src_section = src_section;
+            new_symbol->src_value = symbol->st_value;
+            new_symbol->is_common = 0;
+        }
+
+        if (is_undefined_symbol(name)) {
+            // This resolved an undefined symbol
+            if (!read_only) remove_undefined_symbol(name);
+            result = 1;
+        }
+    }
+
+    return result;
+}
+
 // Process all symbols in a file. Returns the amount of undefined symbols in
 // the symbol table that would be resolved.
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
@@ -112,16 +244,29 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
         int other = symbol->st_other;
 
         if (!symbol->st_name) continue;
-
         int strtab_offset = symbol->st_name;
         char *name = &elf_file->strtab_strings[symbol->st_name];
 
         if (type == STT_FILE) continue;
+        if (binding == STB_LOCAL) continue;
 
         if (symbol->st_shndx == SHN_ABS) panic("SHN_ABS symbols aren't handled");
-        if (symbol->st_shndx == SHN_COMMON) panic("SHN_COMMON symbols aren't handled");
+
+        Section *src_section = NULL;
+        int is_common = symbol->st_shndx == SHN_COMMON;
+
+        // Look up the src_section unless the symbol is common
+        if (!is_common) {
+            if (symbol->st_shndx >= elf_file->section_list->length)
+                fail(elf_file, "Invalid section index in %s: %d >= %d",
+                    elf_file->filename, symbol->st_shndx, elf_file->section_list->length);
+
+            src_section = elf_file->section_list->elements[symbol->st_shndx];
+        }
 
         if (symbol->st_shndx == SHN_UNDEF) {
+            // The new symbol is undefined
+
             Symbol *found_symbol = get_defined_symbol(name);
             if (!found_symbol && !read_only) {
                 // Add an undefined symbol unless it already exists
@@ -131,60 +276,17 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
             }
         }
         else {
-            if (binding == STB_GLOBAL || binding == STB_WEAK) {
-                Symbol *found_symbol = get_defined_symbol(name);
+            // The new symbol is defined or common
 
-                if (found_symbol)  {
-                    // Check bindings
+            if (binding != STB_GLOBAL && binding != STB_WEAK)
+                panic("Don't know how to handle a symbol with binding %d", binding);
 
-                    // Two strong bindings
-                    if (found_symbol->binding != STB_WEAK && binding != STB_WEAK) {
-                        // Anecdotal mimic of what gcc does. If the second symbol is an object file,
-                        // It is an error.
-                        if (!is_library) {
-                            fail(elf_file, "Multiple definition of %s", name);
-                        }
+            Symbol *found_symbol = get_defined_symbol(name);
 
-                        // The second symbol is ignored
-
-                        resolved_symbols++;
-                    }
-
-                    // For weak-weak it's first come first served. Use the existing symbol
-                    else if (found_symbol->binding == STB_WEAK && binding == STB_WEAK)
-                        ; // Do nothing
-                    else {
-                        // One is strong and one is weak.
-                        if (binding != STB_WEAK) {
-                            // The new symbol is strong and takes over
-                            resolved_symbols++;
-
-                            if (!read_only) {
-                                found_symbol->src_elf_file = elf_file;
-                                found_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
-                                found_symbol->src_value = symbol->st_value;
-                            }
-                        }
-                    }
-                }
-                else {
-                    // The symbol has not yet been defined
-
-                    if (!read_only) {
-                        // Add a new symbol
-                        Symbol *new_symbol = add_defined_symbol(name, type, binding, size, other, is_library);
-                        new_symbol->src_elf_file = elf_file;
-                        new_symbol->src_section = elf_file->section_list->elements[symbol->st_shndx];
-                        new_symbol->src_value = symbol->st_value;
-                    }
-
-                    if (is_undefined_symbol(name)) {
-                        // This resolved an undefined symbol
-                        if (!read_only) remove_undefined_symbol(name);
-                        resolved_symbols++;
-                    }
-                }
-            }
+            if ((found_symbol && found_symbol->is_common) || is_common)
+                resolved_symbols += handle_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
+            else
+                resolved_symbols += handle_non_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
         }
     }
 
@@ -218,6 +320,16 @@ void fail_on_undefined_symbols(void) {
     error("Unable to resolve undefined references");
 }
 
+static char *print_section_string(Symbol *symbol) {
+    RwSection *rw_section = symbol->dst_section;
+    int rw_section_index = rw_section ? rw_section->index : 0;
+
+    if (symbol->is_common)
+        printf("COM");
+    else
+        printf("%3d", rw_section_index);
+}
+
 void debug_print_symbol(Symbol *symbol) {
     char binding = symbol->binding;
     char type = symbol->type;
@@ -226,11 +338,8 @@ void debug_print_symbol(Symbol *symbol) {
     const char *binding_name = SYMBOL_BINDING_NAMES[binding];
     const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
-    RwSection *rw_section = symbol->dst_section;
-    int rw_section_index = rw_section ? rw_section->index : 0;
-
     printf("%016x  %4x %-8s%-7s%-7s  ", symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
-    printf("%3d", rw_section_index);
+    print_section_string(symbol);
     printf(" %s\n", symbol->name);
 }
 
@@ -250,11 +359,8 @@ void debug_summarize_symbols(void) {
         const char *binding_name = SYMBOL_BINDING_NAMES[binding];
         const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
-        RwSection *rw_section = symbol->dst_section;
-        int rw_section_index = rw_section ? rw_section->index : 0;
-
         printf("%6d: %016x  %4x %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
-        printf("%3d", rw_section_index);
+        print_section_string(symbol);
         printf(" %s\n", name);
 
         i++;
@@ -269,6 +375,40 @@ void debug_summarize_symbols(void) {
     }
 }
 
+// Returns 1 if any defined symbols are common
+int common_symbols_are_present(void) {
+    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+        const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(defined_symbols, name);
+        if (symbol->is_common) return 1;
+    }
+
+    return 0;
+}
+
+// Returns 1 if any defined symbols are common
+void layout_common_symbols_in_bss_section(RwSection *bss_section) {
+    int offset = 0;
+    int section_align = 1;
+
+    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+        const char *name = strmap_iterator_key(&it);
+        Symbol *symbol = strmap_get(defined_symbols, name);
+        if (!symbol->is_common) continue;
+
+        int symbol_align = symbol->src_value;
+        if (symbol_align > section_align) section_align = symbol_align;
+
+        symbol->src_value = offset;
+        symbol->dst_section = bss_section;
+
+        offset = ALIGN_UP(offset + symbol->size, symbol_align);
+    }
+
+    bss_section->align = section_align;
+    bss_section->size = offset;
+}
+
 // Assign final values to all symbols
 void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_address) {
     if (DEBUG) printf("\nFinal symbols:\n");
@@ -277,19 +417,28 @@ void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_add
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
 
-        if (!symbol->src_section) panic("Unexpected null symbol->src_section for %s", name);
-        if (!symbol->src_section->dst_section) panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
+        if (symbol->is_common) {
+            RwSection *section_bss = output_elf_file->section_bss;
+            symbol->dst_value = executable_virt_address + section_bss->offset + symbol->src_value;
+            symbol->dst_section = section_bss;
+        }
+        else {
+            // Get the output section
+            RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
+            if (!rw_section) panic("Unexpected empty output section for %s", name);
+            symbol->dst_section = rw_section;
 
-        symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
+            if (!symbol->src_section)
+                panic("Unexpected null symbol->src_section for %s", name);
+            if (!symbol->src_section->dst_section)
+                panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
 
-        // Get the output section
-        RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
-        if (!rw_section) panic("Unexpected empty output section for %s", name);
-        symbol->dst_section = rw_section;
+            symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
 
-        if (DEBUG) {
-            printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
-            printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
+            if (DEBUG) {
+                printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
+                printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
+            }
         }
     }
 }
@@ -312,7 +461,7 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
-        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, 0, STB_GLOBAL, STT_NOTYPE, 0);
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, STB_GLOBAL, STT_NOTYPE, 0);
     }
 }
 

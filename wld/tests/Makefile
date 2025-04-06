@@ -8,6 +8,7 @@ test: \
 	symbol-resolution-bindings \
 	symbol-resolution-double-strong-bindings \
 	symbol-resolution-weak-strong-bindings \
+	symbol-resolution-with-common-sections \
 
 .PHONY: sanity1
 sanity1:
@@ -37,6 +38,10 @@ symbol-resolution-double-strong-bindings:
 symbol-resolution-weak-strong-bindings:
 	make -C symbol-resolution-weak-strong-bindings
 
+.PHONY: symbol-resolution-with-common-sections
+symbol-resolution-with-common-sections:
+	make -C symbol-resolution-with-common-sections
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -45,3 +50,4 @@ clean:
 	@make -C symbol-resolution-bindings clean
 	@make -C symbol-resolution-double-strong-bindings clean
 	@make -C symbol-resolution-weak-strong-bindings clean
+	@make -C symbol-resolution-with-common-sections clean

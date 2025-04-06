@@ -87,8 +87,6 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
             }
         }
     }
-
-    make_section_indexes(output_elf_file);
 }
 
 // Determine the layout of the input sections in the output sections, aligning
@@ -122,6 +120,16 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
             rw_section->size = offset + elf_section_header->sh_size;
         }
     }
+}
+
+// If there are any common symbols, create a bss section and allocate values the symbols
+static void make_bss_section(RwElfFile *output) {
+    if (!common_symbols_are_present()) return;
+
+    int starting_alignment = 1;
+    output->section_bss = add_rw_section(output, ".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, starting_alignment);
+
+    layout_common_symbols_in_bss_section(output->section_bss);
 }
 
 // Populate the null program segment header
@@ -169,7 +177,7 @@ static void make_program_segment_headers(RwElfFile *output) {
 
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
-        if (section->type != SHT_PROGBITS) continue;
+        if (section->type != SHT_PROGBITS && section->type != SHT_NOBITS) continue;
         output->elf_program_segments_count += 1;
     }
 
@@ -181,7 +189,7 @@ static void make_program_segment_headers(RwElfFile *output) {
     int count = 1;
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
-        if (section->type != SHT_PROGBITS) continue;
+        if (section->type != SHT_PROGBITS && section->type != SHT_NOBITS) continue;
 
         make_program_segment_header(output, &output->elf_program_segment_headers[count], section);
         count += 1;
@@ -235,6 +243,12 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
 
     // Determine layout of the input sections in the output sections
     layout_output_sections(input_elf_files, output_elf_file);
+
+    // If there are any common symbols, create a bss section and allocate values the symbols
+    make_bss_section(output_elf_file);
+
+    // Rearrange sections list
+    make_section_indexes(output_elf_file);
 
     // Make all ELF program segment headers
     make_program_segment_headers(output_elf_file);

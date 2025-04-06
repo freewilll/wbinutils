@@ -247,7 +247,7 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
 
         // Setup program segments if it's an executable
         if (output_elf_file->type == ET_EXEC) {
-            if (section->type == SHT_PROGBITS) {
+            if (section->type == SHT_PROGBITS || section->type == SHT_NOBITS) {
                 program_segment_index++;
 
                 ElfProgramSegmentHeader *h = &elf_program_segment_headers[program_segment_index];
@@ -258,7 +258,8 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
             }
         }
 
-        offset = ALIGN_UP(offset + section->size, 16);
+        if (section->type != SHT_NOBITS)
+            offset = ALIGN_UP(offset + section->size, 16);
     }
 
     output_elf_file->size = offset;

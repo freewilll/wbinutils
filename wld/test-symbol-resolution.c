@@ -48,7 +48,7 @@ static int add_string_to_strtab(ElfFile *elf_file, const char *name) {
     return offset;
 }
 
-static ElfSymbol *add_symbol(ElfFile *elf_file, const char *name, long size, int binding, int type, int value) {
+static ElfSymbol *add_symbol(ElfFile *elf_file, const char *name, long size, int binding, int type, int section_index, int value) {
     elf_file->symbol_count++;
     elf_file->symbol_table = realloc(elf_file->symbol_table, elf_file->symbol_count * sizeof(ElfSymbol));
 
@@ -58,7 +58,7 @@ static ElfSymbol *add_symbol(ElfFile *elf_file, const char *name, long size, int
     symbol->st_name = add_string_to_strtab(elf_file, name);
     symbol->st_size = size;
     symbol->st_info = (binding << 4) + type;
-    symbol->st_shndx = 1;
+    symbol->st_shndx = section_index;
     symbol->st_value = value;
 
     return symbol;
@@ -70,55 +70,57 @@ ElfFile *init_elf_file(void) {
     elf_file->strtab_strings = calloc(1, MAX_STRTAB_SIZE);
     add_string_to_strtab(elf_file, "");
 
-    // Create one section without data
-    elf_file->section_list = new_list(1);
+    // Create two sections without data
+    // The first is the NULL section, the second a fake section for the tests.
+    elf_file->section_list = new_list(2);
+    append_to_list(elf_file->section_list, NULL);
     append_to_list(elf_file->section_list, NULL);
 
     return elf_file;
 }
 
-static void process_one_symbol(const char *name, int size, int binding, int type, int value, int is_library) {
+static void process_one_symbol(const char *name, int size, int binding, int type, int section_index, int value, int is_library) {
     ElfFile *elf_file = init_elf_file();
-    add_symbol(elf_file, name, size, binding, type, value);
+    add_symbol(elf_file, name, size, binding, type, section_index, value);
     process_elf_file_symbols(elf_file, is_library, 0);
 }
 
-void test_two_strong_symbols(void) {
+static void test_two_strong_symbols(void) {
     // Two strong symbols are allowed if the second one is a library.
     // In that case, the first symbol takes precedence
 
     // obj - obj is fail
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
     assert_no_error("Two strong symbols in obj-obj");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
     assert_error("Multiple definition of foo", "Two strong symbols in obj-obj");
 
     // obj - lib is ok
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
     assert_no_error("Two strong symbols in obj-lib");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1);
     assert_no_error("Two strong symbols in obj-lib");
 
     // lib - lib is ok
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1);
     assert_no_error("Two strong symbols in lib-lib");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1);
     assert_no_error("Two strong symbols in lib-lib");
 }
 
-void _test_two_weak_symbols(int left_is_lib, int right_is_lib, const char *message) {
+static void _test_two_weak_symbols(int left_is_lib, int right_is_lib, const char *message) {
     init_symbols();
-    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, 1, left_is_lib);
+    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, 1, 1, left_is_lib);
     assert_no_error(message);
-    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, 2, right_is_lib);
+    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, 1, 2, right_is_lib);
     assert_no_error(message);
     assert_int(1, must_get_defined_symbol("foo")->src_value, message);
 }
 
-void test_two_weak_symbols(void) {
+static void test_two_weak_symbols(void) {
     // Two weak symbols are always allowed. The first one takes precedence
 
     _test_two_weak_symbols(0, 0, "Two weak symbols in obj-obj");
@@ -127,16 +129,16 @@ void test_two_weak_symbols(void) {
     _test_two_weak_symbols(1, 1, "Two weak symbols in lib-obj");
 }
 
-void _test_strong_and_weak_symbols(int left_is_lib, int right_is_lib, int left_binding, int right_binding, int expected_value, const char *message) {
+static void _test_strong_and_weak_symbols(int left_is_lib, int right_is_lib, int left_binding, int right_binding, int expected_value, const char *message) {
     init_symbols();
-    process_one_symbol("foo", 4, left_binding, STT_OBJECT, 1, left_is_lib);
+    process_one_symbol("foo", 4, left_binding, STT_OBJECT, 1, 1, left_is_lib);
     assert_no_error(message);
-    process_one_symbol("foo", 4, right_binding, STT_OBJECT, 2, right_is_lib);
+    process_one_symbol("foo", 4, right_binding, STT_OBJECT, 1, 2, right_is_lib);
     assert_no_error(message);
     assert_int(expected_value, must_get_defined_symbol("foo")->src_value, message);
 }
 
-void test_strong_and_weak_symbols(void) {
+static void test_strong_and_weak_symbols(void) {
     // A strong symbol always takes precedence over a weak one. The order doesn't matter.
 
     _test_strong_and_weak_symbols(0, 0, STB_GLOBAL, STB_WEAK, 1, "Two strong-weak symbols in obj-obj oo 1");
@@ -150,8 +152,44 @@ void test_strong_and_weak_symbols(void) {
     _test_strong_and_weak_symbols(1, 1, STB_WEAK, STB_GLOBAL, 2, "Two strong-weak symbols in obj-obj ll 2");
 }
 
+static void test_common_symbols(void) {
+    // One common symbol
+    init_symbols();
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
+    assert_no_error("One common");
+    assert_int(1, must_get_defined_symbol("foo")->is_common, "One common");
+
+    // Undefined, then a common symbol
+    init_symbols();
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 1);
+    assert_no_error("Undef then common");
+    assert_int(1, is_undefined_symbol("foo"), "Undef then common");
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
+    assert_no_error("Undef then common");
+    assert_int(0, is_undefined_symbol("foo"), "Undef then common");
+
+    // Defined, then a common symbol
+    init_symbols();
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
+    assert_no_error("Defined, then common");
+    assert_int(1, must_get_defined_symbol("foo")->src_value, "Defined, then common");
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
+    assert_int(1, must_get_defined_symbol("foo")->src_value, "Defined, then common");
+
+    // Common symbol, then defined
+    init_symbols();
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
+    assert_no_error("Common then defined");
+    assert_int(1, must_get_defined_symbol("foo")->src_value, "Common then defined");
+    assert_int(1, must_get_defined_symbol("foo")->is_common, "Common then defined");
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 2, 0);
+    assert_int(0, must_get_defined_symbol("foo")->is_common, "Common then defined");
+    assert_int(2, must_get_defined_symbol("foo")->src_value, "Common then defined");
+}
+
 int main() {
     test_two_strong_symbols();
     test_two_weak_symbols();
     test_strong_and_weak_symbols();
+    test_common_symbols();
 }
