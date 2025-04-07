@@ -39,19 +39,41 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                 // Get the symbol
                 ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-                char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
-                Symbol *symbol = get_defined_symbol(symbol_name);
-                if (!symbol) panic("Trying to relocate a symbol that's not defined: %s in section %s",
-                    symbol_name, input_section->name);
+                int elf_symbol_type = elf_symbol->st_info & 0xf;
+
+                int dst_value;
+                char *symbol_name = NULL;
+
+                // Get the output section
+                RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
+                if (!rw_section) panic("Unexpected null section in output when applying relocations");
+
+                if (elf_symbol_type == STT_SECTION) {
+                    // Handle a relocation to a sectio symbol
+
+                    Section *symbol_section =  (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+                    symbol_name = symbol_section->name;
+
+                    RwSection *symbol_rw_section = get_rw_section(output_elf_file, symbol_section->name);
+                    if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
+
+                    dst_value = output_elf_file->executable_virt_address + symbol_rw_section->offset + elf_symbol->st_value;
+                }
+                else {
+                    // Handle a relocation to a non-section symbol
+
+                    symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
+                    Symbol *symbol = get_defined_symbol(symbol_name);
+                    if (!symbol) panic("Trying to relocate a symbol that's not defined: %s in section %s",
+                        symbol_name, input_section->name);
+
+                    dst_value = symbol->dst_value;
+                }
 
                 if (DEBUG) {
                     printf("  offset %#08lx type=%d %s + %ld\n", relocation->r_offset, type, symbol_name, relocation->r_addend);
                     printf("    input_section->offset=%#x\n", input_section->offset);
                 }
-
-                // Get the output section
-                RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
-                if (!rw_section) panic("Unexpected null section in output when applying relocations");
 
                 // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
                 if (type == R_X86_64_PLT32) type = R_X86_64_PC32;
@@ -60,7 +82,7 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                 uint32_t A = relocation->r_addend;
                 uint32_t P = output_elf_file->executable_virt_address + rw_section->offset + offset_in_rw_section;
-                uint32_t S = symbol->dst_value;
+                uint32_t S = dst_value;
 
                 if (DEBUG) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
 
