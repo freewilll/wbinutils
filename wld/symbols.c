@@ -163,6 +163,44 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
     return result;
 }
 
+// The new symbol is ABS
+// Not very much is checked here, only undefined symbols are resolved.
+static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+    int strtab_offset = symbol->st_name;
+    char *name = &elf_file->strtab_strings[symbol->st_name];
+
+    char binding = (symbol->st_info >> 4) & 0xf;
+    char type = symbol->st_info & 0xf;
+    int size = symbol->st_size;
+    int other = symbol->st_other;
+    int value = symbol->st_value;
+
+    if (found_symbol) {
+        if (found_symbol->src_value != value)
+            fail(elf_file, "Conflicting values of absolute symbol %s: %d and %d", name, found_symbol->src_value, value);
+    }
+
+    else {
+        // The symbol has not yet been defined
+        if (!read_only) {
+            // Add a new symbol
+            Symbol *new_symbol = add_defined_symbol(name, type, binding, other, size, is_library);
+            new_symbol->src_elf_file = elf_file;
+            new_symbol->src_section = NULL;
+            new_symbol->src_value = symbol->st_value;
+            new_symbol->is_abs = 1;
+        }
+
+        if (is_undefined_symbol(name)) {
+            // This resolved an undefined symbol
+            if (!read_only) remove_undefined_symbol(name);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
 // Handle a symbol where the left side is defined. Both are not common.
 // Returns if the symbol has resolved an undefined symbol
 static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
@@ -250,13 +288,13 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
         if (type == STT_FILE) continue;
         if (binding == STB_LOCAL) continue;
 
-        if (symbol->st_shndx == SHN_ABS) panic("SHN_ABS symbols aren't handled");
-
         Section *src_section = NULL;
+        int is_abs = symbol->st_shndx == SHN_ABS;
         int is_common = symbol->st_shndx == SHN_COMMON;
+        int is_undef = symbol->st_shndx == SHN_UNDEF;
 
         // Look up the src_section unless the symbol is common
-        if (!is_common) {
+        if (!is_abs && !is_common) {
             if (symbol->st_shndx >= elf_file->section_list->length)
                 fail(elf_file, "Invalid section index in %s: %d >= %d",
                     elf_file->filename, symbol->st_shndx, elf_file->section_list->length);
@@ -264,7 +302,7 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
             src_section = elf_file->section_list->elements[symbol->st_shndx];
         }
 
-        if (symbol->st_shndx == SHN_UNDEF) {
+        if (is_undef) {
             // The new symbol is undefined
 
             Symbol *found_symbol = get_defined_symbol(name);
@@ -285,6 +323,8 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 
             if ((found_symbol && found_symbol->is_common) || is_common)
                 resolved_symbols += handle_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
+            else if ((found_symbol && found_symbol->is_abs) || is_abs)
+                resolved_symbols += handle_abs_symbol(elf_file, is_library, read_only, found_symbol, symbol);
             else
                 resolved_symbols += handle_non_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
         }
@@ -417,13 +457,19 @@ void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_add
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
 
-        if (symbol->is_common) {
+        if (symbol->is_abs) {
+            // Do nothing, it's already resolved
+        }
+        else if (symbol->is_common) {
             RwSection *section_bss = output_elf_file->section_bss;
             symbol->dst_value = executable_virt_address + section_bss->offset + symbol->src_value;
             symbol->dst_section = section_bss;
         }
         else {
             // Get the output section
+            if (!symbol->src_section) panic("Got null src_section for %s\n", symbol->name);
+            if (!symbol->src_section->dst_section) panic("Got null dst_section for %s\n", symbol->name);
+
             RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
             if (!rw_section) panic("Unexpected empty output section for %s", name);
             symbol->dst_section = rw_section;
@@ -470,6 +516,7 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(defined_symbols, name);
+        if (symbol->is_abs) continue;
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
         elf_symbol->st_value = symbol->dst_value;

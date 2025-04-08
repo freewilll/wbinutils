@@ -10,6 +10,7 @@ test: \
 	symbol-resolution-weak-strong-bindings \
 	symbol-resolution-with-common-sections \
 	local-symbols \
+	abs-symbol \
 
 .PHONY: sanity1
 sanity1:
@@ -47,6 +48,10 @@ symbol-resolution-with-common-sections:
 local-symbols:
 	make -C local-symbols
 
+.PHONY: abs-symbol
+abs-symbol:
+	make -C abs-symbol
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -57,3 +62,4 @@ clean:
 	@make -C symbol-resolution-weak-strong-bindings clean
 	@make -C symbol-resolution-with-common-sections clean
 	@make -C local-symbols clean
+	@make -C abs-symbol clean

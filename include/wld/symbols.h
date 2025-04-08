@@ -11,6 +11,7 @@ typedef struct symbol {
     int type;               // Type, e.g. function or object
     int other;              // Visibility
     int size;
+    int is_abs;             // The src value is an absolute address
     int is_common;          // The symbol is a common symbol. src_section is null.
     int src_is_library;     // 1 if the symbol was found in a library, otherwise it was found in an object file
     ElfFile *src_elf_file;  // File symbol is defined in. NULL if undefined.
