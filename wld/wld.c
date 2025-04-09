@@ -72,8 +72,9 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
             // Create a section, if it already exists, amend the alignment if necessary.
             RwSection *rw_section = get_rw_section(output_elf_file, name);
             if (!rw_section) {
-                if (sh_type == SHT_NOBITS)
+                if (!strcmp(name, ".bss")) {
                     add_bss_rw_section(output_elf_file);
+                }
                 else
                     add_rw_section(output_elf_file, name, elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
             }
