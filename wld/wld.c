@@ -51,16 +51,6 @@ static void create_default_sections(RwElfFile *output_elf_file) {
     add_to_rw_section(output_elf_file->section_strtab, "", 1);
 }
 
-// Check if a section name is supported
-int is_supported_section(const char *name) {
-    int supported_section_count = sizeof(SUPPORTED_SECTION_NAMES) / sizeof(SUPPORTED_SECTION_NAMES[0]);
-
-    for (int i = 0; i < supported_section_count; i++)
-        if (!strcmp(name, SUPPORTED_SECTION_NAMES[i])) return 1;
-
-    return 0;
-}
-
 // Loop over all sections in the input files and create the target sections in the output file.
 static void create_output_file_sections(List *input_elf_files, RwElfFile *output_elf_file) {
     create_default_sections(output_elf_file);
@@ -78,7 +68,6 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
             // Only include sections that have program data
             int sh_type = input_section->elf_section_header->sh_type;
             if (sh_type != SHT_PROGBITS && sh_type != SHT_NOBITS) continue;
-            if (!is_supported_section(name)) continue;
 
             // Create a section, if it already exists, amend the alignment if necessary.
             RwSection *rw_section = get_rw_section(output_elf_file, name);
@@ -109,12 +98,11 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
 
             // Only include sections that have program data
             if (elf_section_header->sh_type != SHT_PROGBITS && elf_section_header->sh_type != SHT_NOBITS) continue;
-            if (!is_supported_section(input_section->name)) continue;
 
             // Look up the RW section. It must already exist.
             const char *section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
             RwSection *rw_section = get_rw_section(output_elf_file, section_name);
-            if (!rw_section) panic("Unexpected null section in output when laying out sections");
+            if (!rw_section) panic("Unexpected null section in output when laying out sections for %s", section_name);
 
             // Align the section
             int offset = ALIGN_UP(rw_section->size, rw_section->align);
@@ -227,7 +215,6 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
 
             // Only include sections that have program data
             if (input_section->elf_section_header->sh_type != SHT_PROGBITS) continue;
-            if (!is_supported_section(input_section->name)) continue;
 
             const char *section_name = &input_elf_file->section_header_strings[input_elf_section_header->sh_name];
             RwSection *rw_section = get_rw_section(output_elf_file, section_name);

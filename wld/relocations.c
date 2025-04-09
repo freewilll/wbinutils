@@ -27,7 +27,6 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
             Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
 
             if (input_section->elf_section_header->sh_type != SHT_PROGBITS) continue;
-            if (!is_supported_section(input_section->name)) continue;
 
             // Loop over all relocations
             ElfRelocation *relocations = load_section(input_elf_file, j);
