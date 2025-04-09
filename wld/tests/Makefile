@@ -11,6 +11,7 @@ test: \
 	symbol-resolution-with-common-sections \
 	local-symbols \
 	abs-symbol \
+	symbol-resolution-with-mixed-bss-and-common-sections \
 
 .PHONY: sanity1
 sanity1:
@@ -52,6 +53,10 @@ local-symbols:
 abs-symbol:
 	make -C abs-symbol
 
+.PHONY: symbol-resolution-with-mixed-bss-and-common-sections
+symbol-resolution-with-mixed-bss-and-common-sections:
+	make -C symbol-resolution-with-mixed-bss-and-common-sections
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -63,3 +68,4 @@ clean:
 	@make -C symbol-resolution-with-common-sections clean
 	@make -C local-symbols clean
 	@make -C abs-symbol clean
+	@make -C symbol-resolution-with-mixed-bss-and-common-sections clean

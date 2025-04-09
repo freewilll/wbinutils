@@ -15,6 +15,8 @@ static const char *SUPPORTED_SECTION_NAMES[] = {
     ".text", ".data", ".rodata", ".bss"
 };
 
+static void add_bss_rw_section(RwElfFile *output);
+
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files) {
     List *input_elf_files = new_list(32);
@@ -74,13 +76,17 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
             const char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
 
             // Only include sections that have program data
-            if (input_section->elf_section_header->sh_type != SHT_PROGBITS) continue;
+            int sh_type = input_section->elf_section_header->sh_type;
+            if (sh_type != SHT_PROGBITS && sh_type != SHT_NOBITS) continue;
             if (!is_supported_section(name)) continue;
 
             // Create a section, if it already exists, amend the alignment if necessary.
             RwSection *rw_section = get_rw_section(output_elf_file, name);
             if (!rw_section) {
-                rw_section = add_rw_section(output_elf_file, name, elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
+                if (sh_type == SHT_NOBITS)
+                    add_bss_rw_section(output_elf_file);
+                else
+                    add_rw_section(output_elf_file, name, elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
             }
             else {
                 rw_section->align = MAX(rw_section->align, elf_section_header->sh_addralign);
@@ -102,7 +108,7 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
             ElfSectionHeader *elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
-            if (elf_section_header->sh_type != SHT_PROGBITS) continue;
+            if (elf_section_header->sh_type != SHT_PROGBITS && elf_section_header->sh_type != SHT_NOBITS) continue;
             if (!is_supported_section(input_section->name)) continue;
 
             // Look up the RW section. It must already exist.
@@ -122,12 +128,24 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
     }
 }
 
-// If there are any common symbols, create a bss section and allocate values the symbols
-static void make_bss_section(RwElfFile *output) {
-    if (!common_symbols_are_present()) return;
-
+// Unconditionally create a .bss section
+static void add_bss_rw_section(RwElfFile *output) {
     int starting_alignment = 1;
     output->section_bss = add_rw_section(output, ".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, starting_alignment);
+}
+
+// If there are any common symbols, create a bss section and allocate values the symbols
+static void add_common_symbols_to_bss(RwElfFile *output) {
+    if (!common_symbols_are_present()) return;
+
+    // A bss section is required. Check if it already exists, since e.g. symbols in glibc can also go directly to a .bss section.
+    RwSection *section_bss = get_rw_section(output, ".bss");
+
+    // Create the .bss section
+    if (!section_bss) {
+        add_bss_rw_section(output);
+        section_bss = output->section_bss;
+    }
 
     layout_common_symbols_in_bss_section(output->section_bss);
 }
@@ -245,7 +263,7 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     layout_output_sections(input_elf_files, output_elf_file);
 
     // If there are any common symbols, create a bss section and allocate values the symbols
-    make_bss_section(output_elf_file);
+    add_common_symbols_to_bss(output_elf_file);
 
     // Rearrange sections list
     make_section_indexes(output_elf_file);

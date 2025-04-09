@@ -428,7 +428,7 @@ int common_symbols_are_present(void) {
 
 // Returns 1 if any defined symbols are common
 void layout_common_symbols_in_bss_section(RwSection *bss_section) {
-    int offset = 0;
+    int offset = bss_section->size;
     int section_align = 1;
 
     for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
@@ -468,7 +468,7 @@ void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_add
         else {
             // Get the output section
             if (!symbol->src_section) panic("Got null src_section for %s\n", symbol->name);
-            if (!symbol->src_section->dst_section) panic("Got null dst_section for %s\n", symbol->name);
+            if (!symbol->src_section->dst_section) panic("Got null dst_section for %s in %s\n", symbol->name, symbol->src_section->name);
 
             RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
             if (!rw_section) panic("Unexpected empty output section for %s", name);
