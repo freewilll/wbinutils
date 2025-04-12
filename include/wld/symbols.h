@@ -5,6 +5,8 @@
 #include "rw-elf.h"
 #include "strmap.h"
 
+#define GLOBAL_OFFSET_TABLE_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
+
 typedef struct symbol {
     char *name;             // Name
     int binding;            // Binding, e.g. local or global

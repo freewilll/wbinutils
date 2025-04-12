@@ -27,11 +27,6 @@ StrMap *undefined_symbols;  // A set of undefined symbols
 
 char *last_error_message;
 
-void init_symbols(void) {
-    defined_symbols = new_strmap();
-    undefined_symbols = new_strmap();
-}
-
 // Get a symbol from the defined symbol table. Returns NULL if not present.
 Symbol *get_defined_symbol(char *name) {
     return (Symbol *) strmap_get(defined_symbols, name);
@@ -522,4 +517,12 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
         elf_symbol->st_value = symbol->dst_value;
         elf_symbol->st_shndx = symbol->dst_section->index;
     }
+}
+
+void init_symbols(void) {
+    defined_symbols = new_strmap();
+    undefined_symbols = new_strmap();
+
+    Symbol *got = add_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
+    got->is_abs = 1;
 }

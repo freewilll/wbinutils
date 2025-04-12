@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#include "elf.h"
 #include "error.h"
 #include "list.h"
 #include "ro-elf.h"
@@ -10,12 +11,63 @@
 #include "wld/relocations.h"
 #include "wld/wld.h"
 
+static const char *RELOCATION_NAMES[] = {
+    "R_X86_64_NONE",            // 0
+    "R_X86_64_64",
+    "R_X86_64_PC32",
+    "R_X86_64_GOT32",
+    "R_X86_64_PLT32",
+    "R_X86_64_COPY",
+    "R_X86_64_GLOB_DAT",
+    "R_X86_64_JUMP_SLOT",
+    "R_X86_64_RELATIVE",
+    "R_X86_64_GOTPCREL",
+    "R_X86_64_32",              // 10
+    "R_X86_64_32S",
+    "R_X86_64_16",
+    "R_X86_64_PC16",
+    "R_X86_64_8",
+    "R_X86_64_PC8",
+    "R_X86_64_DTPMOD64",
+    "R_X86_64_DTPOFF64",
+    "R_X86_64_TPOFF64",
+    "R_X86_64_TLSGD",
+    "R_X86_64_TLSLD",           // 20
+    "R_X86_64_DTPOFF32",
+    "R_X86_64_GOTTPOFF",
+    "R_X86_64_TPOFF32",
+    "R_X86_64_PC64",
+    "R_X86_64_GOTOFF64",
+    "R_X86_64_GOTPC32",
+    "R_X86_64_GOT64",
+    "R_X86_64_GOTPCREL64",
+    "R_X86_64_GOTPC64",
+    "R_X86_64_GOTPLT64",        // 30
+    "R_X86_64_PLTOFF64",
+    "R_X86_64_SIZE32",
+    "R_X86_64_SIZE64",
+    "R_X86_64_GOTPC32_TLSDESC",
+    "R_X86_64_TLSDESC_CALL",
+    "R_X86_64_TLSDESC",
+    "R_X86_64_IRELATIVE",
+    "R_X86_64_RELATIVE64",
+    "UNKNOWN", // 39
+    "UNKNOWN", // 40
+    "R_X86_64_GOTPCRELX",
+    "R_X86_64_REX_GOTPCRELX",
+    "R_X86_64_NUM",
+};
+
+int RELOCATION_NAMES_COUNT = sizeof(RELOCATION_NAMES) / sizeof(RELOCATION_NAMES[0]) - 1;
+
 void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
     if (DEBUG) printf("\nRelocations:\n");
 
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
         ElfFile *input_elf_file = input_elf_files->elements[i];
+
+        if (DEBUG) printf("%s\n", input_elf_file->filename);
 
         // Loop over all relocation sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
@@ -70,8 +122,9 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                 }
 
                 if (DEBUG) {
-                    printf("  offset %#08lx type=%d %s + %ld\n", relocation->r_offset, type, symbol_name, relocation->r_addend);
-                    printf("    input_section->offset=%#x\n", input_section->offset);
+                    const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
+                    printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
+                        input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
                 }
 
                 // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
@@ -102,9 +155,74 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                         *output = value;
                         break;
                     }
+                    case R_X86_64_GOTPCRELX: {
+                        // Relax instructions to not use the GOT
 
-                    default:
-                        panic("Unhandled relocation type %d", type);
+                        uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
+                        uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);
+                        uint8_t opcode = *popcode;
+
+                        if (opcode == 0x8b) {
+                            // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo,%eax
+                            *popcode = 0xc7;
+                            *mod_rm = 0xc0 | (*mod_rm & 0x38) >> 3;
+
+                            uint32_t value = S;
+                            if (DEBUG) printf("    value=%#x\n", value);
+                            *output = value;
+                            break;
+                        }
+
+                        else if (opcode == 0xff) {
+                            if (*mod_rm == 0x15) {
+                                // Convert callq  foo(%rip) to addr32 callq foo
+                                *popcode = 0x67;
+                                *mod_rm = 0xe8;
+                            }
+                            else
+                                panic("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", opcode, *mod_rm);
+
+                            uint32_t value = S + A - P;
+                            if (DEBUG) printf("    value=%#x\n", value);
+                            *output = value;
+                            break;
+                        }
+
+                        panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
+                    }
+
+                    case R_X86_64_REX_GOTP: {
+                        // Relax instructions to not use the GOT
+
+                        uint8_t *pprefix = (uint8_t *) (rw_section->data + offset_in_rw_section - 3);
+                        uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);
+                        uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
+                        uint8_t opcode = *popcode;
+
+                        if (opcode == 0x8b) {
+                            // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo,%rax
+
+                            // Clear REX W
+                            if (*pprefix == 0x4c)
+                                *pprefix = 0x49;
+
+                            *popcode = 0xc7;
+                            *mod_rm = 0xc0 | (*mod_rm >> 3);
+
+                            uint32_t value = S;
+                            if (DEBUG) printf("    value=%#x\n", value);
+                            *output = value;
+                            break;
+                        }
+
+                        panic("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
+
+                    }
+
+                    default: {
+                        const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
+                        panic("Unhandled relocation type %s", relocation_name);
+                    }
                 }
 
                 relocation++;

@@ -93,8 +93,8 @@
 #define R_X86_64_16             12   // Direct 8 bit                  S + A
 #define R_X86_64_16S            13   // Direct 8 bit sign extended    S + A
 #define R_X86_64_8              14   // Direct 8 bit                  S + A
+#define R_X86_64_GOTPCRELX      41   // Introduced in GNU binutils 2.26
 #define R_X86_64_REX_GOTP       42   // Introduced in GNU binutils 2.26
-
 #define E_MACHINE_TYPE_X86_64   0x3e
 
 // Object file type
