@@ -8,6 +8,13 @@
 #define EXECUTABLE_VIRTUAL_ADDRESS 0x400000
 #define ENTRYPOINT_SYMBOL          "_start"
 
+#define EXECUTABLE_SECTION_TYPE(type) \
+    ( \
+        ((type) == SHT_NULL) || \
+        ((type) == SHT_PROGBITS) || \
+        ((type) == SHT_NOBITS) \
+    )
+
 typedef struct input_file {
     char *filename;
     int is_library;       // On the command line with -l

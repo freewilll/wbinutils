@@ -46,6 +46,7 @@
 #define SHT_SYMTAB      0x02    // Symbol table
 #define SHT_STRTAB      0x03    // String table
 #define SHT_RELA        0x04    // Relocation entries with addends
+#define SHT_NOTE	    0x07    // Notes
 #define SHT_NOBITS      0x08    // Program space with no data (bss)
 #define SHF_INFO_LINK   0x40
 

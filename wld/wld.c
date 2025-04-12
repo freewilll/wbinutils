@@ -67,7 +67,7 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
 
             // Only include sections that have program data
             int sh_type = input_section->elf_section_header->sh_type;
-            if (!(input_section->elf_section_header->sh_flags | SHF_ALLOC)) continue;
+            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
 
             // Create a section, if it already exists, amend the alignment if necessary.
             RwSection *rw_section = get_rw_section(output_elf_file, name);
@@ -98,7 +98,7 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
             ElfSectionHeader *elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
-            if (!(input_section->elf_section_header->sh_flags & SHF_ALLOC)) continue;
+            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
 
             // Look up the RW section. It must already exist.
             const char *section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
@@ -184,7 +184,7 @@ static void make_program_segment_headers(RwElfFile *output) {
 
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
-        if (!(section->flags & SHF_ALLOC)) continue;
+        if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
         output->elf_program_segments_count += 1;
     }
 
@@ -196,7 +196,10 @@ static void make_program_segment_headers(RwElfFile *output) {
     int count = 1;
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
-        if (!(section->flags & SHF_ALLOC)) continue;
+        if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
+
+        // Don't include empty sections.
+        if (section->size ==0 )continue;
 
         make_program_segment_header(output, &output->elf_program_segment_headers[count], section);
         count += 1;
@@ -215,7 +218,7 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
             ElfSectionHeader *input_elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
-            if (!(input_section->elf_section_header->sh_flags & SHF_ALLOC)) continue;
+            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
 
             const char *section_name = &input_elf_file->section_header_strings[input_elf_section_header->sh_name];
             RwSection *rw_section = get_rw_section(output_elf_file, section_name);
