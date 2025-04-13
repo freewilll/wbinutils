@@ -9,7 +9,6 @@ test: main
 
 main: main.o libc.o
 	${WLD} -o main main.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o
-	# gcc -o main main.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o -nostdlib -static # wwip
 
 	@MSG=$$(./main); ERR=$$? ;\
 	if [ "$$ERR" != "42" ]; then \

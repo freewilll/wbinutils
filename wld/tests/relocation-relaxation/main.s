@@ -3,22 +3,6 @@
 
 .section .text
 .globl main
-.globl reg00
-.globl reg01
-.globl reg02
-.globl reg03
-.globl reg04
-.globl reg05
-.globl reg06
-.globl reg07
-.globl reg08
-.globl reg09
-.globl reg10
-.globl reg11
-.globl reg12
-.globl reg13
-.globl reg14
-.globl reg15
 
 # Test linker opcode rewriting. The instructions are changed by the linker to not use a GOT.
 relaxed_relocation_testing:

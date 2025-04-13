@@ -9,6 +9,8 @@
 
 #define MAX_STRTAB_SIZE 1024
 
+#define MGGS must_get_global_defined_symbol
+
 static void assert_no_error(const char *message) {
     if (last_error_message) {
         printf("%s: expected no error, got  %s\n", message, last_error_message);
@@ -117,7 +119,7 @@ static void _test_two_weak_symbols(int left_is_lib, int right_is_lib, const char
     assert_no_error(message);
     process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, 1, 2, right_is_lib);
     assert_no_error(message);
-    assert_int(1, must_get_defined_symbol("foo")->src_value, message);
+    assert_int(1, MGGS("foo")->src_value, message);
 }
 
 static void test_two_weak_symbols(void) {
@@ -135,7 +137,7 @@ static void _test_strong_and_weak_symbols(int left_is_lib, int right_is_lib, int
     assert_no_error(message);
     process_one_symbol("foo", 4, right_binding, STT_OBJECT, 1, 2, right_is_lib);
     assert_no_error(message);
-    assert_int(expected_value, must_get_defined_symbol("foo")->src_value, message);
+    assert_int(expected_value, MGGS("foo")->src_value, message);
 }
 
 static void test_strong_and_weak_symbols(void) {
@@ -157,7 +159,7 @@ static void test_common_symbols(void) {
     init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
     assert_no_error("One common");
-    assert_int(1, must_get_defined_symbol("foo")->is_common, "One common");
+    assert_int(1, MGGS("foo")->is_common, "One common");
 
     // Undefined, then a common symbol
     init_symbols();
@@ -172,19 +174,19 @@ static void test_common_symbols(void) {
     init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
     assert_no_error("Defined, then common");
-    assert_int(1, must_get_defined_symbol("foo")->src_value, "Defined, then common");
+    assert_int(1, MGGS("foo")->src_value, "Defined, then common");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
-    assert_int(1, must_get_defined_symbol("foo")->src_value, "Defined, then common");
+    assert_int(1, MGGS("foo")->src_value, "Defined, then common");
 
     // Common symbol, then defined
     init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 1);
     assert_no_error("Common then defined");
-    assert_int(1, must_get_defined_symbol("foo")->src_value, "Common then defined");
-    assert_int(1, must_get_defined_symbol("foo")->is_common, "Common then defined");
+    assert_int(1, MGGS("foo")->src_value, "Common then defined");
+    assert_int(1, MGGS("foo")->is_common, "Common then defined");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 2, 0);
-    assert_int(0, must_get_defined_symbol("foo")->is_common, "Common then defined");
-    assert_int(2, must_get_defined_symbol("foo")->src_value, "Common then defined");
+    assert_int(0, must_get_global_defined_symbol("foo")->is_common, "Common then defined");
+    assert_int(2, must_get_global_defined_symbol("foo")->src_value, "Common then defined");
 }
 
 int main() {

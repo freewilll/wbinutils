@@ -22,30 +22,65 @@ static const char *SYMBOL_VISIBILITY_NAMES[] = {
     "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
 };
 
-StrMap *defined_symbols;    // Map of defined symbols, name -> symbol
-StrMap *undefined_symbols;  // A set of undefined symbols
+SymbolTable *global_symbol_table;
+StrMap *local_symbol_tables; // Map from filename to symbol table
 
 char *last_error_message;
 
-// Get a symbol from the defined symbol table. Returns NULL if not present.
-Symbol *get_defined_symbol(char *name) {
-    return (Symbol *) strmap_get(defined_symbols, name);
+SymbolTable *new_symbol_table(void) {
+    SymbolTable *st = malloc(sizeof(SymbolTable));
+    st->defined_symbols = new_strmap();
+    st->undefined_symbols = new_strmap();
+
+    return st;
 }
 
-Symbol *must_get_defined_symbol(char *name) {
-    Symbol *symbol = get_defined_symbol(name);
+// Get a symbol from the defined symbol table. Returns NULL if not present.
+Symbol *get_defined_symbol(SymbolTable *st, char *name) {
+    return (Symbol *) strmap_get(st->defined_symbols, name);
+}
+
+// Get a symbol from the global defined symbol table. Returns NULL if not present.
+Symbol *get_global_defined_symbol(char *name) {
+    return get_defined_symbol(global_symbol_table, name);
+}
+
+// Get a symbol from the defined symbol table. Panic if it doesn't exist.
+Symbol *must_get_defined_symbol(SymbolTable *st, char *name) {
+    Symbol *symbol = get_defined_symbol(st, name);
     if (!symbol) panic("Expected a symbol %s, but got none", name);
     return symbol;
 }
 
+// Get a symbol from the global defined symbol table. Panic if it doesn't exist.
+Symbol *must_get_global_defined_symbol(char *name) {
+    return must_get_defined_symbol(global_symbol_table, name);
+}
+
+// Get an input elf file's local symbol table. Panic if it doesn't exist.
+SymbolTable *get_local_symbol_table(ElfFile *elf_file) {
+    SymbolTable *local_symbol_table = strmap_get(local_symbol_tables, elf_file->filename);
+    if (!local_symbol_table) panic("Missing local symbol table for %s", elf_file->filename);
+    return local_symbol_table;
+}
+
+// Get a symbol from either the local, otherwise the global defined symbol tables. Returns NULL if not present.
+Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
+    SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
+    Symbol *s = get_defined_symbol(local_symbol_table, name);
+    if (s) return s;
+    return get_defined_symbol(global_symbol_table, name);
+}
+
+
 // Is a symbol in the undefined symbols set?
 int is_undefined_symbol(char *name) {
-    return strmap_get(undefined_symbols, name) != NULL;
+    return strmap_get(global_symbol_table->undefined_symbols, name) != NULL;
 }
 
 // Remove a symbol from the undefined symbols set
 static void remove_undefined_symbol(char *name) {
-    strmap_delete(undefined_symbols, name);
+    strmap_delete(global_symbol_table->undefined_symbols, name);
 }
 
 static Symbol *new_symbol(char *name, int type, int binding, int other, int size, int is_library) {
@@ -61,15 +96,19 @@ static Symbol *new_symbol(char *name, int type, int binding, int other, int size
     return symbol;
 }
 
-static Symbol *add_defined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int binding, int other, int size, int is_library) {
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
-    strmap_put(defined_symbols, name, symbol);
+    strmap_put(st->defined_symbols, name, symbol);
     return symbol;
+}
+
+static Symbol *add_global_defined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+    return add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
 }
 
 static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
-    strmap_put(undefined_symbols, name, symbol);
+    strmap_put(global_symbol_table->undefined_symbols, name, symbol);
 }
 
 // Report an error, or in case we are being tested, write to last_error_message
@@ -141,7 +180,7 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
         // The symbol has not yet been defined
         if (!read_only) {
             // Add a new symbol
-            Symbol *new_symbol = add_defined_symbol(name, type, binding, other, size, is_library);
+            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
             new_symbol->src_elf_file = elf_file;
             new_symbol->src_section = NULL;
             new_symbol->src_value = symbol->st_value;
@@ -179,7 +218,7 @@ static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, S
         // The symbol has not yet been defined
         if (!read_only) {
             // Add a new symbol
-            Symbol *new_symbol = add_defined_symbol(name, type, binding, other, size, is_library);
+            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
             new_symbol->src_elf_file = elf_file;
             new_symbol->src_section = NULL;
             new_symbol->src_value = symbol->st_value;
@@ -245,7 +284,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
         // The symbol has not yet been defined
         if (!read_only) {
             // Add a new symbol
-            Symbol *new_symbol = add_defined_symbol(name, type, binding, other, size, is_library);
+            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
             new_symbol->src_elf_file = elf_file;
             new_symbol->src_section = src_section;
             new_symbol->src_value = symbol->st_value;
@@ -268,6 +307,9 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
     last_error_message = NULL;
     int resolved_symbols = 0;
 
+    SymbolTable *local_symbol_table = new_symbol_table();
+    strmap_put(local_symbol_tables, elf_file->filename, local_symbol_table);
+
     for (int i = 0; i < elf_file->symbol_count; i++) {
         ElfSymbol *symbol = &elf_file->symbol_table[i];
 
@@ -280,8 +322,9 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
         int strtab_offset = symbol->st_name;
         char *name = &elf_file->strtab_strings[symbol->st_name];
 
+        int is_local = binding == STB_LOCAL;
+
         if (type == STT_FILE) continue;
-        if (binding == STB_LOCAL) continue;
 
         Section *src_section = NULL;
         int is_abs = symbol->st_shndx == SHN_ABS;
@@ -297,10 +340,16 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
             src_section = elf_file->section_list->elements[symbol->st_shndx];
         }
 
-        if (is_undef) {
+        if (is_local) {
+            Symbol *new_symbol = add_defined_symbol(local_symbol_table, name, type, binding, other, size, is_library);
+            new_symbol->src_elf_file = elf_file;
+            new_symbol->src_section = src_section;
+            new_symbol->src_value = symbol->st_value;
+        }
+        else if (is_undef) {
             // The new symbol is undefined
 
-            Symbol *found_symbol = get_defined_symbol(name);
+            Symbol *found_symbol = get_defined_symbol(global_symbol_table, name);
             if (!found_symbol && !read_only) {
                 // Add an undefined symbol unless it already exists
                 if (!is_undefined_symbol(name)) {
@@ -314,7 +363,7 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
             if (binding != STB_GLOBAL && binding != STB_WEAK)
                 panic("Don't know how to handle a symbol with binding %d", binding);
 
-            Symbol *found_symbol = get_defined_symbol(name);
+            Symbol *found_symbol = get_defined_symbol(global_symbol_table, name);
 
             if ((found_symbol && found_symbol->is_common) || is_common)
                 resolved_symbols += handle_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
@@ -331,9 +380,9 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 void fail_on_undefined_symbols(void) {
     int count = 0;
 
-    for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(undefined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
 
         // It's ok for unresolved symbols to be weak. They just get value zero.
         if (symbol->binding == STB_WEAK) continue;
@@ -343,9 +392,9 @@ void fail_on_undefined_symbols(void) {
     if (!count) return;
 
     printf("Undefined symbols:\n");
-    for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(undefined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
 
         // It's ok for unresolved symbols to be weak. They just get value zero.
         if (symbol->binding == STB_WEAK) continue;
@@ -383,9 +432,9 @@ void debug_summarize_symbols(void) {
     printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
 
     int i = 0;
-    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(defined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
 
         char binding = symbol->binding;
         char type = symbol->type;
@@ -402,9 +451,9 @@ void debug_summarize_symbols(void) {
     }
 
     printf("Undefined symbols:\n");
-    for (StrMapIterator it = strmap_iterator(undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(undefined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
         if (symbol->binding == STB_WEAK) continue; // It's ok for unresolved symbols to be weak
         debug_print_symbol(symbol);
     }
@@ -412,9 +461,9 @@ void debug_summarize_symbols(void) {
 
 // Returns 1 if any defined symbols are common
 int common_symbols_are_present(void) {
-    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(defined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
         if (symbol->is_common) return 1;
     }
 
@@ -426,9 +475,9 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
     int offset = bss_section->size;
     int section_align = 1;
 
-    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(defined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
         if (!symbol->is_common) continue;
 
         int symbol_align = symbol->src_value;
@@ -445,12 +494,10 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
 }
 
 // Assign final values to all symbols
-void make_symbol_values(RwElfFile *output_elf_file, uint64_t executable_virt_address) {
-    if (DEBUG) printf("\nFinal symbols:\n");
-
-    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t executable_virt_address, SymbolTable *symbol_table) {
+    for (StrMapIterator it = strmap_iterator(symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(defined_symbols, name);
+        Symbol *symbol = strmap_get(symbol_table->defined_symbols, name);
 
         if (symbol->is_abs) {
             // Do nothing, it's already resolved
@@ -499,18 +546,18 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
         add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, i);
     }
 
-    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(defined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, STB_GLOBAL, STT_NOTYPE, 0);
     }
 }
 
 // Set the symbol's value and section indexes
 void update_elf_symbols(RwElfFile *output_elf_file) {
-    for (StrMapIterator it = strmap_iterator(defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(defined_symbols, name);
+        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
         if (symbol->is_abs) continue;
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
@@ -520,9 +567,9 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
 }
 
 void init_symbols(void) {
-    defined_symbols = new_strmap();
-    undefined_symbols = new_strmap();
+    global_symbol_table = new_symbol_table();
+    local_symbol_tables = new_strmap();
 
-    Symbol *got = add_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
+    Symbol *got = add_defined_symbol(global_symbol_table, GLOBAL_OFFSET_TABLE_SYMBOL_NAME, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
     got->is_abs = 1;
 }

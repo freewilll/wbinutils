@@ -114,7 +114,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                     // Handle a relocation to a non-section symbol
 
                     symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
-                    Symbol *symbol = get_defined_symbol(symbol_name);
+
+                    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
                     if (!symbol) panic("Trying to relocate a symbol that's not defined: %s in section %s",
                         symbol_name, input_section->name);
 

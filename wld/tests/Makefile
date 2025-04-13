@@ -13,6 +13,7 @@ test: \
 	abs-symbol \
 	symbol-resolution-with-mixed-bss-and-common-sections \
 	relocation-relaxation \
+	relocation-locals \
 
 .PHONY: sanity1
 sanity1:
@@ -62,6 +63,10 @@ symbol-resolution-with-mixed-bss-and-common-sections:
 relocation-relaxation:
 	make -C relocation-relaxation
 
+.PHONY: relocation-locals
+relocation-locals:
+	make -C relocation-locals
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -75,3 +80,4 @@ clean:
 	@make -C abs-symbol clean
 	@make -C symbol-resolution-with-mixed-bss-and-common-sections clean
 	@make -C relocation-relaxation clean
+	@make -C relocation-locals clean

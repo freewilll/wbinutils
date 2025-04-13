@@ -154,9 +154,25 @@ static void make_null_program_segment_header(RwElfFile *output) {
     h->p_align  = 0x1000;                           // Align on page boundaries
 }
 
+// Assign final values to all symbols
+static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file, uint64_t executable_virt_address) {
+    if (DEBUG) printf("\nGlobal symbols:\n");
+
+    // Global symbols
+    make_symbol_values_from_symbol_table(output_elf_file, executable_virt_address, global_symbol_table);
+
+    // Local symbols
+    if (DEBUG) printf("\nLocal symbols:\n");
+    for (int i = 0; i < input_elf_files->length; i++) {
+        ElfFile *elf_file = input_elf_files->elements[i];
+        SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
+        make_symbol_values_from_symbol_table(output_elf_file, executable_virt_address, local_symbol_table);
+    }
+}
+
 // Set the executable entrypoint
-void set_entrypoint(RwElfFile *output_elf_file) {
-    Symbol *symbol = get_defined_symbol(ENTRYPOINT_SYMBOL);
+static void set_entrypoint(RwElfFile *output_elf_file) {
+    Symbol *symbol = get_defined_symbol(global_symbol_table, ENTRYPOINT_SYMBOL);
     if (!symbol) error("Missing %s symbol", ENTRYPOINT_SYMBOL);
     output_elf_file->entrypoint = symbol->dst_value;
 }
@@ -275,7 +291,7 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     layout_rw_elf_sections(output_elf_file);
 
     // Assign final values to all symbols
-    make_symbol_values(output_elf_file, output_elf_file->executable_virt_address);
+    make_symbol_values(input_elf_files, output_elf_file, output_elf_file->executable_virt_address);
 
     // Set the symbol's value and section indexes
     update_elf_symbols(output_elf_file);
