@@ -12,7 +12,10 @@
     ( \
         ((type) == SHT_NULL) || \
         ((type) == SHT_PROGBITS) || \
-        ((type) == SHT_NOBITS) \
+        ((type) == SHT_NOBITS) || \
+        ((type) == SHT_INIT_ARRAY) || \
+        ((type) == SHT_FINI_ARRAY) || \
+        ((type) == SHT_PREINIT_ARRAY) \
     )
 
 typedef struct input_file {

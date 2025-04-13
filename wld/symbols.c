@@ -568,11 +568,21 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
     }
 }
 
+static void add_internal_symbol(char *name) {
+    Symbol *symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
+    symbol->is_abs = 1;
+    symbol->is_internal = 1;
+}
+
 void init_symbols(void) {
     global_symbol_table = new_symbol_table();
     local_symbol_tables = new_strmap();
 
-    Symbol *got = add_defined_symbol(global_symbol_table, GLOBAL_OFFSET_TABLE_SYMBOL_NAME, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
-    got->is_abs = 1;
-    got->is_internal = 1;
+    add_internal_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
+    add_internal_symbol(PREINIT_ARRAY_START_SYMBOL_NAME);
+    add_internal_symbol(PREINIT_ARRAY_END_SYMBOL_NAME);
+    add_internal_symbol(INIT_ARRAY_START_SYMBOL_NAME);
+    add_internal_symbol(INIT_ARRAY_END_SYMBOL_NAME);
+    add_internal_symbol(FINI_ARRAY_START_SYMBOL_NAME);
+    add_internal_symbol(FINI_ARRAY_END_SYMBOL_NAME);
 }

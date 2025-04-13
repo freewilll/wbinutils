@@ -43,6 +43,7 @@ static List *read_input_files(List *library_paths, List *input_files) {
 // Add some sections that are always present in output ELF file
 static void create_default_sections(RwElfFile *output_elf_file) {
     add_rw_section(output_elf_file, "" , SHT_NULL, 0, 0);
+
     output_elf_file->section_symtab      = add_rw_section(output_elf_file, ".symtab",   SHT_SYMTAB, 0, 8);
     output_elf_file->section_strtab      = add_rw_section(output_elf_file, ".strtab",   SHT_STRTAB, 0, 1);
     output_elf_file->section_shstrtab    = add_rw_section(output_elf_file, ".shstrtab", SHT_STRTAB, 0, 1);
@@ -155,18 +156,44 @@ static void make_null_program_segment_header(RwElfFile *output) {
 }
 
 // Assign final values to all symbols
-static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file, uint64_t executable_virt_address) {
+static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file) {
     if (DEBUG) printf("\nGlobal symbols:\n");
 
     // Global symbols
-    make_symbol_values_from_symbol_table(output_elf_file, executable_virt_address, global_symbol_table);
+    make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, global_symbol_table);
 
     // Local symbols
     if (DEBUG) printf("\nLocal symbols:\n");
     for (int i = 0; i < input_elf_files->length; i++) {
         ElfFile *elf_file = input_elf_files->elements[i];
         SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
-        make_symbol_values_from_symbol_table(output_elf_file, executable_virt_address, local_symbol_table);
+        make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, local_symbol_table);
+    }
+}
+
+static void make_array_symbol_values(RwElfFile *output_elf_file) {
+    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
+
+        #define SET_START_END(start_symbol, end_symbol) { \
+            must_get_global_defined_symbol(start_symbol)->dst_value = output_elf_file->executable_virt_address + section->offset; \
+            must_get_global_defined_symbol(end_symbol)->dst_value = output_elf_file->executable_virt_address + section->offset + section->size; \
+        }
+
+        // Fragile: if the section is empty, it won't have a value, and the start/end symbols will both be zero.
+        // This problem will go away when linker scripts are implemented since the start/end will end up somewhere
+        // in the data segment.
+        if (!strcmp(section->name, ".preinit_array")) {
+            SET_START_END(PREINIT_ARRAY_START_SYMBOL_NAME, PREINIT_ARRAY_END_SYMBOL_NAME);
+        }
+
+        if (!strcmp(section->name, ".init_array")) {
+            SET_START_END(INIT_ARRAY_START_SYMBOL_NAME, INIT_ARRAY_END_SYMBOL_NAME);
+        }
+
+        if (!strcmp(section->name, ".fini_array")) {
+            SET_START_END(FINI_ARRAY_START_SYMBOL_NAME, FINI_ARRAY_END_SYMBOL_NAME);
+        }
     }
 }
 
@@ -195,15 +222,11 @@ static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSe
 // Make all ELF program segment headers
 // There is a one-to-one mapping between the sections and the segments.
 static void make_program_segment_headers(RwElfFile *output) {
-    // Count the amount of sections. // The 0th segment is the null segment.
-    output->elf_program_segments_count = 1;
+    output->elf_program_segments_count = 0;
 
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
         if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
-
-        // Don't include empty sections.
-        if (section->size ==0 )continue;
 
         output->elf_program_segments_count += 1;
     }
@@ -213,16 +236,11 @@ static void make_program_segment_headers(RwElfFile *output) {
     output->elf_program_segment_headers = calloc(1, output->elf_program_segments_header_size);
 
     // Populate the program segment headers
-    int count = 1;
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
         if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
 
-        // Don't include empty sections.
-        if (section->size ==0 )continue;
-
-        make_program_segment_header(output, &output->elf_program_segment_headers[count], section);
-        count += 1;
+        make_program_segment_header(output, &output->elf_program_segment_headers[i], section);
     }
 }
 
@@ -295,7 +313,10 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     layout_rw_elf_sections(output_elf_file);
 
     // Assign final values to all symbols
-    make_symbol_values(input_elf_files, output_elf_file, output_elf_file->executable_virt_address);
+    make_symbol_values(input_elf_files, output_elf_file);
+
+    // Assign values to array start/end section built-in symbols
+    make_array_symbol_values(output_elf_file);
 
     // Set the symbol's value and section indexes
     update_elf_symbols(output_elf_file);

@@ -146,10 +146,17 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                 if (DEBUG) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
 
-                uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
-
                 switch (type) {
+                    case R_X86_64_64: {
+                        uint64_t *output = (uint64_t *) (rw_section->data + offset_in_rw_section);
+                        uint64_t value = S + A;
+                        if (DEBUG) printf("    value=%#lx\n", value);
+                        *output = value;
+                        break;
+                    }
+
                     case R_X86_64_PC32: {
+                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
                         uint32_t value = S + A - P;
                         if (DEBUG) printf("    value=%#x\n", value);
                         *output = value;
@@ -159,12 +166,15 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                     case R_X86_64_32:
                     case R_X86_64_32S: {
                         uint32_t value = S + A;
+                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
                         if (DEBUG) printf("    value=%#x\n", value);
                         *output = value;
                         break;
                     }
                     case R_X86_64_GOTPCRELX: {
                         // Relax instructions to not use the GOT
+
+                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
 
                         uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
                         uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);
@@ -201,6 +211,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                     case R_X86_64_REX_GOTP: {
                         // Relax instructions to not use the GOT
+
+                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
 
                         uint8_t *pprefix = (uint8_t *) (rw_section->data + offset_in_rw_section - 3);
                         uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);

@@ -247,7 +247,11 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
 
         // Setup program segments if it's an executable
         if (output_elf_file->type == ET_EXEC) {
-            if (section->type == SHT_PROGBITS || section->type == SHT_NOBITS) {
+            if (    section->type == SHT_PROGBITS ||
+                    section->type == SHT_NOBITS ||
+                    section->type == SHT_INIT_ARRAY ||
+                    section->type == SHT_FINI_ARRAY ||
+                    section->type == SHT_PREINIT_ARRAY) {
                 program_segment_index++;
 
                 ElfProgramSegmentHeader *h = &elf_program_segment_headers[program_segment_index];

@@ -6,7 +6,14 @@
 #include "strmap.h"
 #include "strmap-ordered.h"
 
-#define GLOBAL_OFFSET_TABLE_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
+#define GLOBAL_OFFSET_TABLE_SYMBOL_NAME     "_GLOBAL_OFFSET_TABLE_"
+#define PREINIT_ARRAY_START_SYMBOL_NAME     "__preinit_array_start"
+#define PREINIT_ARRAY_END_SYMBOL_NAME       "__preinit_array_end"
+#define INIT_ARRAY_START_SYMBOL_NAME        "__init_array_start"
+#define INIT_ARRAY_END_SYMBOL_NAME          "__init_array_end"
+#define FINI_ARRAY_START_SYMBOL_NAME        "__fini_array_start"
+#define FINI_ARRAY_END_SYMBOL_NAME          "__fini_array_end"
+
 
 typedef struct symbol {
     char *name;             // Name

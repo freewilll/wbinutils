@@ -41,14 +41,17 @@
 #define SHF_STRINGS       0x20
 
 // Section header types
-#define SHT_NULL        0x00    // Unused
-#define SHT_PROGBITS    0x01    // Program data
-#define SHT_SYMTAB      0x02    // Symbol table
-#define SHT_STRTAB      0x03    // String table
-#define SHT_RELA        0x04    // Relocation entries with addends
-#define SHT_NOTE	    0x07    // Notes
-#define SHT_NOBITS      0x08    // Program space with no data (bss)
-#define SHF_INFO_LINK   0x40
+#define SHT_NULL           0    // Unused
+#define SHT_PROGBITS       1    // Program data
+#define SHT_SYMTAB         2    // Symbol table
+#define SHT_STRTAB         3    // String table
+#define SHT_RELA           4    // Relocation entries with addends
+#define SHT_NOTE	       7    // Notes
+#define SHT_NOBITS         8    // Program space with no data (bss)
+#define SHT_INIT_ARRAY	  14    // Array of constructors
+#define SHT_FINI_ARRAY	  15    // Array of destructors
+#define SHT_PREINIT_ARRAY 16    // Array of pre-constructors
+#define SHF_INFO_LINK     64    // sh_info contains SHT index
 
 // Program segment types
 #define	PT_NULL		    0       // Program header table entry unused
