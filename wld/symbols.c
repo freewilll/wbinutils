@@ -132,6 +132,35 @@ static void fail(ElfFile *elf_file, char *format, ...) {
     verror_in_file(format, ap);
 }
 
+static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
+    int result = 0;
+
+    int strtab_offset = symbol->st_name;
+    char *name = &elf_file->strtab_strings[symbol->st_name];
+
+    char binding = (symbol->st_info >> 4) & 0xf;
+    char type = symbol->st_info & 0xf;
+    int size = symbol->st_size;
+    int other = symbol->st_other;
+
+    Section *src_section = elf_file->section_list->elements[symbol->st_shndx];
+
+    if (!read_only) {
+        Symbol *new_symbol = add_defined_symbol(local_symbol_table, name, type, binding, other, size, is_library);
+        new_symbol->src_elf_file = elf_file;
+        new_symbol->src_section = src_section;
+        new_symbol->src_value = symbol->st_value;
+    }
+
+    if (is_undefined_symbol(name)) {
+        // This resolved an undefined symbol
+        if (!read_only) remove_undefined_symbol(name);
+        result = 1;
+    }
+
+    return result;
+
+}
 // Handle a symbol where either the found symbol or symbol is common
 // The found symbol may be undefined.
 // Returns if the symbol has resolved an undefined symbol
@@ -342,10 +371,7 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
         }
 
         if (is_local) {
-            Symbol *new_symbol = add_defined_symbol(local_symbol_table, name, type, binding, other, size, is_library);
-            new_symbol->src_elf_file = elf_file;
-            new_symbol->src_section = src_section;
-            new_symbol->src_value = symbol->st_value;
+            resolved_symbols += handle_local_symbol(elf_file, local_symbol_table, is_library, read_only, symbol);
         }
         else if (is_undef) {
             // The new symbol is undefined
@@ -510,8 +536,8 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t e
         }
         else {
             // Get the output section
-            if (!symbol->src_section) panic("Got null src_section for %s\n", symbol->name);
-            if (!symbol->src_section->dst_section) panic("Got null dst_section for %s in %s\n", symbol->name, symbol->src_section->name);
+            if (!symbol->src_section) panic("Unexpectedly got null src_section for %s\n", symbol->name);
+            if (!symbol->src_section->dst_section) panic("Unexpectedly got null dst_section for %s from %s\n", symbol->name, symbol->src_section->name);
 
             RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
             if (!rw_section) panic("Unexpected empty output section for %s", name);

@@ -163,9 +163,9 @@ static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file
     make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, global_symbol_table);
 
     // Local symbols
-    if (DEBUG) printf("\nLocal symbols:\n");
     for (int i = 0; i < input_elf_files->length; i++) {
         ElfFile *elf_file = input_elf_files->elements[i];
+        if (DEBUG) printf("\nLocal symbols for %s:\n", elf_file->filename);
         SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
         make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, local_symbol_table);
     }
