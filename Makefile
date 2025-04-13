@@ -29,9 +29,11 @@ bin/wld: ${LIBS}
 	@make -C wld
 
 .PHONY: test
-test: bin/was bin/wld
-	make -C was test
-	make -C wld test
+test: bin/was bin/wld lib/liblist.a lib/libstrmap.a
+	@make -C was test
+	@make -C wld test
+	@make -C lib/liblist test
+	@make -C lib/libstrmap test
 
 clean:
 	@make -C lib/liblist clean
