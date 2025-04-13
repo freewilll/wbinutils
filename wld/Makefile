@@ -5,11 +5,11 @@ all: ${TARGET}
 HEADERS = \
 	list.h \
 	strmap.h \
+	strmap-ordered.h \
 	elf.h \
 	list.h \
 	ro-elf.h \
 	rw-elf.h \
-	strmap.h \
 	error.h \
 	wld/libs.h \
 	wld/relocations.h \
@@ -27,6 +27,7 @@ LIBS = \
 	error \
 	list \
 	strmap \
+	strmap_ordered \
 
 HEADERS_PATH := ${HEADERS:%=../include/%}
 

@@ -4,6 +4,7 @@
 #include "ro-elf.h"
 #include "rw-elf.h"
 #include "strmap.h"
+#include "strmap-ordered.h"
 
 #define GLOBAL_OFFSET_TABLE_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
 
@@ -26,7 +27,7 @@ typedef struct symbol {
 } Symbol;
 
 typedef struct symbol_table {
-    StrMap *defined_symbols;
+    StrMapOrdered *defined_symbols;
     StrMap *undefined_symbols;
 } SymbolTable;
 

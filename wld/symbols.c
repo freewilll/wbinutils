@@ -4,6 +4,7 @@
 
 #include "error.h"
 #include "strmap.h"
+#include "strmap-ordered.h"
 
 #include "wld/symbols.h"
 #include "wld/wld.h"
@@ -29,7 +30,7 @@ char *last_error_message;
 
 SymbolTable *new_symbol_table(void) {
     SymbolTable *st = malloc(sizeof(SymbolTable));
-    st->defined_symbols = new_strmap();
+    st->defined_symbols = new_strmap_ordered();
     st->undefined_symbols = new_strmap();
 
     return st;
@@ -37,7 +38,7 @@ SymbolTable *new_symbol_table(void) {
 
 // Get a symbol from the defined symbol table. Returns NULL if not present.
 Symbol *get_defined_symbol(SymbolTable *st, char *name) {
-    return (Symbol *) strmap_get(st->defined_symbols, name);
+    return (Symbol *) strmap_ordered_get(st->defined_symbols, name);
 }
 
 // Get a symbol from the global defined symbol table. Returns NULL if not present.
@@ -98,7 +99,7 @@ static Symbol *new_symbol(char *name, int type, int binding, int other, int size
 
 static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int binding, int other, int size, int is_library) {
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
-    strmap_put(st->defined_symbols, name, symbol);
+    strmap_ordered_put(st->defined_symbols, name, symbol);
     return symbol;
 }
 
@@ -380,7 +381,7 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 void fail_on_undefined_symbols(void) {
     int count = 0;
 
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    strmap_foreach(global_symbol_table->undefined_symbols, it) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
 
@@ -392,7 +393,7 @@ void fail_on_undefined_symbols(void) {
     if (!count) return;
 
     printf("Undefined symbols:\n");
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    strmap_foreach(global_symbol_table->undefined_symbols, it) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
 
@@ -432,9 +433,9 @@ void debug_summarize_symbols(void) {
     printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
 
     int i = 0;
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
 
         char binding = symbol->binding;
         char type = symbol->type;
@@ -451,7 +452,7 @@ void debug_summarize_symbols(void) {
     }
 
     printf("Undefined symbols:\n");
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->undefined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
+    strmap_foreach(global_symbol_table->undefined_symbols, it) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
         if (symbol->binding == STB_WEAK) continue; // It's ok for unresolved symbols to be weak
@@ -461,9 +462,9 @@ void debug_summarize_symbols(void) {
 
 // Returns 1 if any defined symbols are common
 int common_symbols_are_present(void) {
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (symbol->is_common) return 1;
     }
 
@@ -475,9 +476,9 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
     int offset = bss_section->size;
     int section_align = 1;
 
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->is_common) continue;
 
         int symbol_align = symbol->src_value;
@@ -495,9 +496,9 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
 
 // Assign final values to all symbols
 void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t executable_virt_address, SymbolTable *symbol_table) {
-    for (StrMapIterator it = strmap_iterator(symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(symbol_table->defined_symbols, name);
+    strmap_ordered_foreach(symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
 
         if (symbol->is_abs) {
             // Do nothing, it's already resolved
@@ -546,9 +547,9 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
         add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, i);
     }
 
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (symbol->is_internal) continue;
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, STB_GLOBAL, STT_NOTYPE, 0);
     }
@@ -556,9 +557,9 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
 
 // Set the symbol's value and section indexes
 void update_elf_symbols(RwElfFile *output_elf_file) {
-    for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (symbol->is_abs) continue;
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
