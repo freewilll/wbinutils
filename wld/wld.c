@@ -201,6 +201,10 @@ static void make_program_segment_headers(RwElfFile *output) {
     for (int i = 0; i < output->sections_list->length; i++) {
         RwSection *section = output->sections_list->elements[i];
         if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
+
+        // Don't include empty sections.
+        if (section->size ==0 )continue;
+
         output->elf_program_segments_count += 1;
     }
 
