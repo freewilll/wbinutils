@@ -116,10 +116,17 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                     symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
 
                     Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
-                    if (!symbol) panic("Trying to relocate a symbol that's not defined: %s in section %s",
-                        symbol_name, input_section->name);
+                    if (!symbol) {
+                        if (!is_undefined_symbol(symbol_name)) {
+                            panic("Trying to relocate a symbol that's not defined: %s in section %s",
+                                symbol_name, input_section->name);
+                        }
 
-                    dst_value = symbol->dst_value;
+                        // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
+                        dst_value = 0;
+                    } else {
+                        dst_value = symbol->dst_value;
+                    }
                 }
 
                 if (DEBUG) {

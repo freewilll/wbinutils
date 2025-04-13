@@ -8,7 +8,7 @@ test: main
 	as $< -o $@
 
 main: main.o libc.o
-	${WLD} -o main main.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o
+	${WLD} -o main main.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o
 
 	@MSG=$$(./main); ERR=$$? ;\
 	if [ "$$ERR" != "42" ]; then \

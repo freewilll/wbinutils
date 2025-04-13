@@ -1,4 +1,4 @@
-# Test relocation relaxation based on what's in crt1.o
+# Test relocation relaxation based on what's in crt1.o and crti.o
 # These would normally be linked in with libc
 
 .section .text
