@@ -549,6 +549,7 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
     for (StrMapIterator it = strmap_iterator(global_symbol_table->defined_symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
         const char *name = strmap_iterator_key(&it);
         Symbol *symbol = strmap_get(global_symbol_table->defined_symbols, name);
+        if (symbol->is_internal) continue;
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, STB_GLOBAL, STT_NOTYPE, 0);
     }
 }
@@ -572,4 +573,5 @@ void init_symbols(void) {
 
     Symbol *got = add_defined_symbol(global_symbol_table, GLOBAL_OFFSET_TABLE_SYMBOL_NAME, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
     got->is_abs = 1;
+    got->is_internal = 1;
 }
