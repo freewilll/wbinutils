@@ -338,7 +338,8 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
     int resolved_symbols = 0;
 
     SymbolTable *local_symbol_table = new_symbol_table();
-    strmap_put(local_symbol_tables, elf_file->filename, local_symbol_table);
+
+    if (!read_only) strmap_put(local_symbol_tables, elf_file->filename, local_symbol_table);
 
     for (int i = 0; i < elf_file->symbol_count; i++) {
         ElfSymbol *symbol = &elf_file->symbol_table[i];

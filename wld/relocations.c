@@ -63,7 +63,7 @@ int RELOCATION_NAMES_COUNT = sizeof(RELOCATION_NAMES) / sizeof(RELOCATION_NAMES[
 void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
     // While in development, collect all problems, report them and bail.
     // This way I know what lies ahead until the executable can be run.
-    int undefined_symbols = 0;
+    #define VERBOSE_ERROR_LIST 0
     int failed_relocations = 0;
 
     if (DEBUG) printf("\nRelocations:\n");
@@ -123,9 +123,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                     Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
                     if (!symbol) {
                         if (!is_undefined_symbol(symbol_name)) {
-                            printf("Trying to relocate a symbol that's not defined: %s in section %s\n",
+                            panic("Trying to relocate a symbol that's defined but not in a symbol table: %s in section %s",
                                 symbol_name, input_section->name);
-                            undefined_symbols++;
                         }
 
                         // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
@@ -241,7 +240,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                             break;
                         }
 
-                        printf("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
+                        if (VERBOSE_ERROR_LIST)
+                            printf("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
                         failed_relocations++;
 
                         break;
@@ -249,7 +249,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                     default: {
                         const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-                        printf("Unhandled relocation type %s\n", relocation_name);
+                        if (VERBOSE_ERROR_LIST)
+                            printf("Unhandled relocation type %s\n", relocation_name);
                         failed_relocations++;
                     }
                 }
@@ -262,8 +263,8 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
     }
 
     // Bail if there are any issues
-    if (undefined_symbols || failed_relocations) {
-        printf("Failed to apply relocations. Undefined symbols: %d, failed relocations: %d\n", undefined_symbols, failed_relocations);
+    if (failed_relocations) {
+        printf("Failed to apply relocations: failed relocations: %d\n", failed_relocations);
         exit(1);
     }
 }
