@@ -18,8 +18,8 @@ relaxed_relocation_testing:
     movq reg03@GOTPCREL(%rip),  %rbx ; movq (%rbx), %rax ; cmp $103, %rax ; jne not_ok
     movq reg06@GOTPCREL(%rip),  %rsi ; movq (%rsi), %rax ; cmp $106, %rax ; jne not_ok
     movq reg07@GOTPCREL(%rip),  %rdi ; movq (%rdi), %rax ; cmp $107, %rax ; jne not_ok
-    movq reg08@GOTPCREL(%rip),  %r8  ; movq (%r8 ), %rax ; cmp $108, %rax ; jne not_ok
-    movq reg09@GOTPCREL(%rip),  %r9  ; movq (%r9 ), %rax ; cmp $109, %rax ; jne not_ok
+    movq reg08@GOTPCREL(%rip),  %r8  ; movq (%r8),  %rax ; cmp $108, %rax ; jne not_ok
+    movq reg09@GOTPCREL(%rip),  %r9  ; movq (%r9),  %rax ; cmp $109, %rax ; jne not_ok
     movq reg10@GOTPCREL(%rip),  %r10 ; movq (%r10), %rax ; cmp $110, %rax ; jne not_ok
     movq reg11@GOTPCREL(%rip),  %r11 ; movq (%r11), %rax ; cmp $111, %rax ; jne not_ok
     movq reg12@GOTPCREL(%rip),  %r12 ; movq (%r12), %rax ; cmp $112, %rax ; jne not_ok
@@ -31,25 +31,39 @@ relaxed_relocation_testing:
     mov %rsp, %rbx # Make backups
     mov %rbp, %rcx
 
-    movq reg04@GOTPCREL(%rip),  %rsp ; movq (%rsp), %rax ; cmp $104, %rax ; jne stack_not_ok
-    movq reg05@GOTPCREL(%rip),  %rbp ; movq (%rbp), %rax ; cmp $105, %rax ; jne stack_not_ok
+    movq reg04@GOTPCREL(%rip),  %rsp ; movq (%rsp), %rax ; cmp $104, %rax ; jne not_ok
+    movq reg05@GOTPCREL(%rip),  %rbp ; movq (%rbp), %rax ; cmp $105, %rax ; jne not_ok
 
     jmp stack_ok
 
 not_ok:
-    movl $1, %eax;
-    ret
-
-stack_not_ok:
     movl $1, %eax;
     mov %rbx, %rsp  # Restore the stack registers
     mov %rcx, %rbp
     ret
 
 stack_ok:
-    movl $0, %eax;
     mov %rbx, %rsp  # Restore the stack registers
     mov %rcx, %rbp
+
+    # Check compare instructions
+    # Not doing rsp and rbp for convenience. They aren't special cases in the encoding anyways.
+    movq $reg00, %rax ; cmpq reg00@GOTPCREL(%rip), %rax ; jne not_ok
+    movq $reg01, %rcx ; cmpq reg01@GOTPCREL(%rip), %rcx ; jne not_ok
+    movq $reg02, %rdx ; cmpq reg02@GOTPCREL(%rip), %rdx ; jne not_ok
+    movq $reg03, %rbx ; cmpq reg03@GOTPCREL(%rip), %rbx ; jne not_ok
+    movq $reg06, %rsi ; cmpq reg06@GOTPCREL(%rip), %rsi ; jne not_ok
+    movq $reg07, %rdi ; cmpq reg07@GOTPCREL(%rip), %rdi ; jne not_ok
+    movq $reg08, %r8  ; cmpq reg08@GOTPCREL(%rip), %r8  ; jne not_ok
+    movq $reg09, %r9  ; cmpq reg09@GOTPCREL(%rip), %r9  ; jne not_ok
+    movq $reg10, %r10 ; cmpq reg10@GOTPCREL(%rip), %r10 ; jne not_ok
+    movq $reg11, %r11 ; cmpq reg11@GOTPCREL(%rip), %r11 ; jne not_ok
+    movq $reg12, %r12 ; cmpq reg12@GOTPCREL(%rip), %r12 ; jne not_ok
+    movq $reg13, %r13 ; cmpq reg13@GOTPCREL(%rip), %r13 ; jne not_ok
+    movq $reg14, %r14 ; cmpq reg14@GOTPCREL(%rip), %r14 ; jne not_ok
+    movq $reg15, %r15 ; cmpq reg15@GOTPCREL(%rip), %r15 ; jne not_ok
+
+    movl $0, %eax;
     ret
 
 main:

@@ -183,9 +183,10 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                         uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
                         uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);
+                        uint8_t *pprefix = (uint8_t *) (rw_section->data + offset_in_rw_section - 3);
                         uint8_t opcode = *popcode;
 
-                        if (opcode == 0x8b) {
+                        if (offset_in_rw_section > 1 && opcode == 0x8b) {
                             // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo,%eax
                             *popcode = 0xc7;
                             *mod_rm = 0xc0 | (*mod_rm & 0x38) >> 3;
@@ -196,14 +197,14 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                             break;
                         }
 
-                        else if (opcode == 0xff) {
+                        else if (offset_in_rw_section > 1 && opcode == 0xff) {
                             if (*mod_rm == 0x15) {
                                 // Convert callq  foo(%rip) to addr32 callq foo
                                 *popcode = 0x67;
                                 *mod_rm = 0xe8;
                             }
                             else
-                                panic("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", opcode, *mod_rm);
+                                panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *mod_rm);
 
                             uint32_t value = S + A - P;
                             if (DEBUG) printf("    value=%#x\n", value);
@@ -224,7 +225,7 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                         uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
                         uint8_t opcode = *popcode;
 
-                        if (opcode == 0x8b) {
+                        if (offset_in_rw_section > 2 && opcode == 0x8b) {
                             // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo,%rax
 
                             // Clear REX W
@@ -233,6 +234,22 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
 
                             *popcode = 0xc7;
                             *mod_rm = 0xc0 | (*mod_rm >> 3);
+
+                            uint32_t value = S;
+                            if (DEBUG) printf("    value=%#x\n", value);
+                            *output = value;
+                            break;
+                        }
+
+                        else if (offset_in_rw_section > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
+                            // Convert cmpq foo@GOTPCREL(%rip), %rax to cmpq foo, %rax
+                            int mod_r = (*pprefix >> 2) & 1;        // The high bit of the register is in REX W (bit 2)
+                            *pprefix = 0x48 | mod_r;                // The high bit of the register is in REX B (bit 0)
+                            *popcode = 0x81;                        // 0x81 encodes 8 bit operations: add=0, or=1, ..., cmp=7
+                            int binary_operation = 7;
+
+                            // Convert mod_rm byte; 0xc0 is absolute mode. Move the 3 low bits of the register from reg to rm
+                            *mod_rm = 0xc0 | (binary_operation << 3) | ((*mod_rm & 0x38) >> 3);
 
                             uint32_t value = S;
                             if (DEBUG) printf("    value=%#x\n", value);
