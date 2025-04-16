@@ -257,6 +257,23 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
                             break;
                         }
 
+                        else if (offset_in_rw_section > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
+                            // Convert subq foo@GOTPCREL(%rip), %rax to subq foo, %rax
+                            int mod_r = (*pprefix >> 2) & 1;        // The high bit of the register is in REX W (bit 2)
+                            *pprefix = 0x48 | mod_r;                // The high bit of the register is in REX B (bit 0)
+                            *popcode = 0x81;                        // 0x81 encodes 8 bit operations: add=0, or=1, ..., sub=5
+                            int binary_operation = 5;
+
+                            // Convert mod_rm byte; 0xc0 is absolute mode. Move the 3 low bits of the register from reg to rm
+                            *mod_rm = 0xc0 | (binary_operation << 3) | ((*mod_rm & 0x38) >> 3);
+
+                            uint32_t value = S;
+                            if (DEBUG) printf("    value=%#x\n", value);
+                            *output = value;
+                            break;
+                        }
+
+
                         if (VERBOSE_ERROR_LIST)
                             printf("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
                         failed_relocations++;
