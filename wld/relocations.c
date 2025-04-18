@@ -91,7 +91,9 @@ void convert_Gvqp_to_Evqp(void *output_pointer, uint8_t opcode, uint8_t binary_o
 }
 
 // This function rewrites the output code. All ELF file details are abstracted away, so that function can be easily tested.
-int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address, uint64_t value, void *output_pointer, uint64_t output_offset) {
+int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t rw_section_offset, uint64_t output_offset, ElfRelocation *relocation, uint64_t value, int is_tls_value) {
+    uint32_t output_virtual_address = output_elf_file->executable_virt_address + rw_section_offset + output_offset;
+
     output_pointer += output_offset;
     int type = relocation->r_info & 0xffffffff;
 
@@ -116,6 +118,11 @@ int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address,
         case R_X86_64_PC32: {
             uint32_t *output = (uint32_t *) output_pointer;
             uint32_t value = S + A - P;
+
+            // Unusual case of accessing a TLS template variable directly.
+            // This is mostly to make an unusual TLS test case work.
+            if (is_tls_value) value += output_elf_file->tls_template_virt_address;
+
             if (DEBUG) printf("    value=%#x\n", value);
             *output = value;
             break;
@@ -134,7 +141,7 @@ int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address,
 
             uint32_t *output = (uint32_t *) output_pointer;
 
-            uint8_t *mod_rm = (uint8_t *) (output_pointer - 1);
+            uint8_t *pmod_rm = (uint8_t *) (output_pointer - 1);
             uint8_t *popcode = (uint8_t *) (output_pointer - 2);
             uint8_t *pprefix = (uint8_t *) (output_pointer - 3);
             uint8_t opcode = *popcode;
@@ -142,22 +149,22 @@ int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address,
             if (output_offset > 1 && opcode == 0x8b) {
                 // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo, %eax
                 *popcode = 0xc7;
-                *mod_rm = 0xc0 | (*mod_rm & 0x38) >> 3;
+                *pmod_rm = 0xc0 | (*pmod_rm & 0x38) >> 3;
 
-                uint32_t value = S;
+                uint32_t value = S; // Ignore the addend, this is an absolute address
                 if (DEBUG) printf("    value=%#x\n", value);
                 *output = value;
                 break;
             }
 
             else if (output_offset > 1 && opcode == 0xff) {
-                if (*mod_rm == 0x15) {
+                if (*pmod_rm == 0x15) {
                     // Convert callq foo(%rip) to addr32 callq foo
                     *popcode = 0x67;
-                    *mod_rm = 0xe8;
+                    *pmod_rm = 0xe8;
                 }
                 else
-                    panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *mod_rm);
+                    panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *pmod_rm);
 
                 uint32_t value = S + A - P;
                 if (DEBUG) printf("    value=%#x\n", value);
@@ -175,7 +182,6 @@ int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address,
 
             uint8_t *pprefix = (uint8_t *) (output_pointer - 3);
             uint8_t *popcode = (uint8_t *) (output_pointer - 2);
-            uint8_t *mod_rm = (uint8_t *) (output_pointer - 1);
             uint8_t opcode = *popcode;
 
             if (output_offset > 2 && opcode == 0x8b) {
@@ -204,6 +210,14 @@ int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address,
             break;
         }
 
+        case R_X86_64_TPOFF32: {
+            uint32_t *output = (uint32_t *) output_pointer;
+            uint32_t value = S + A - output_elf_file->tls_template_size;
+            if (DEBUG) printf("    value=%#x\n", value);
+            *output = value;
+            break;
+        }
+
         default: {
             const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
             if (VERBOSE_ERROR_LIST)
@@ -226,6 +240,7 @@ int apply_relocation_with_elf_files(RwElfFile *output_elf_file, ElfFile *input_e
 
     int dst_value;
     char *symbol_name = NULL;
+    int is_tls_value = 0;
 
     // Get the output section
     RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
@@ -235,7 +250,7 @@ int apply_relocation_with_elf_files(RwElfFile *output_elf_file, ElfFile *input_e
     if (elf_symbol_type == STT_SECTION) {
         // Handle a relocation to a section symbol
 
-        Section *symbol_section =  (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+        Section *symbol_section = (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
         symbol_name = symbol_section->name;
 
         RwSection *symbol_rw_section = get_rw_section(output_elf_file, symbol_section->name);
@@ -259,6 +274,7 @@ int apply_relocation_with_elf_files(RwElfFile *output_elf_file, ElfFile *input_e
             dst_value = 0;
         } else {
             dst_value = symbol->dst_value;
+            is_tls_value = symbol->type == STT_TLS;
         }
     }
 
@@ -270,10 +286,7 @@ int apply_relocation_with_elf_files(RwElfFile *output_elf_file, ElfFile *input_e
 
     uint64_t output_offset = input_section->offset + relocation->r_offset;
 
-    // P is the virtual address of the relocation
-    uint32_t output_virtual_address = output_elf_file->executable_virt_address + rw_section->offset + output_offset;
-
-    return apply_relocation(relocation, output_virtual_address, dst_value, rw_section->data, output_offset);
+    return apply_relocation(output_elf_file, rw_section->data, rw_section->offset, output_offset, relocation, dst_value, is_tls_value);
 }
 
 void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {

@@ -14,6 +14,7 @@ test: \
 	symbol-resolution-with-mixed-bss-and-common-sections \
 	relocation-relaxation \
 	relocation-locals \
+	relocation-tls \
 	array-lifecycle \
 
 .PHONY: sanity1
@@ -68,6 +69,10 @@ relocation-relaxation:
 relocation-locals:
 	make -C relocation-locals
 
+.PHONY: relocation-tls
+relocation-tls:
+	make -C relocation-tls
+
 .PHONY: array-lifecycle
 array-lifecycle:
 	make -C array-lifecycle
@@ -86,4 +91,5 @@ clean:
 	@make -C symbol-resolution-with-mixed-bss-and-common-sections clean
 	@make -C relocation-relaxation clean
 	@make -C relocation-locals clean
+	@make -C relocation-tls clean
 	@make -C array-lifecycle clean

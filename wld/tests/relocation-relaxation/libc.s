@@ -7,7 +7,7 @@
 .globl __libc_csu_init
 
 __libc_start_main:
-    call main@GOTPCREL(%rip)
+    call *main@GOTPCREL(%rip)
     movl %eax, %ebx;
     movl $1, %eax;
     int $0x80

@@ -204,6 +204,29 @@ static void set_entrypoint(RwElfFile *output_elf_file) {
     output_elf_file->entrypoint = symbol->dst_value;
 }
 
+// Find the virtual address and size of the TLS template, if present
+static void prepare_tls_template(RwElfFile *output_elf_file) {
+    RwSection *tdata_section = get_rw_section(output_elf_file, ".tdata");
+    RwSection *tbss_section = get_rw_section(output_elf_file, ".tbss");
+
+    // If there are both .tdata and .bss sections, ensure they are are consecutive
+    if (tdata_section && tbss_section && tdata_section->index != tbss_section->index - 1)
+        panic(".tdata and .tss sections aren't consecutive: %d != %d - 1", tdata_section->index, tbss_section->index);
+
+    if (tdata_section && !tbss_section) {
+        output_elf_file->tls_template_size = tdata_section->size;
+        output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + tdata_section->offset;
+    }
+    else if (!tdata_section && tbss_section) {
+        output_elf_file->tls_template_size = tbss_section->size;
+        output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + tbss_section->offset;
+    }
+    else if (tdata_section && tbss_section) {
+        output_elf_file->tls_template_size = tbss_section->offset - tdata_section->offset + tbss_section->size;
+        output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + tdata_section->offset;
+    }
+}
+
 // Make an ELF program segment header
 static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSegmentHeader *psh, RwSection *section) {
     psh->p_flags = PF_R;
@@ -326,6 +349,8 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
 
     // Make the ELF headers, program segment headers and section headers
     make_elf_headers(output_elf_file);
+
+    prepare_tls_template(output_elf_file);
 
     // Copy the memory for all program sections in the input files to the output file
     copy_input_elf_sections_to_output(input_elf_files, output_elf_file);

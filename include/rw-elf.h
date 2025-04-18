@@ -9,6 +9,7 @@
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ALIGN_UP(offset, alignment) ((((offset) + alignment - 1) & ~(alignment - 1)))
+#define ALIGN_DOWN(offset, alignment) (((offset) & ~(alignment - 1)))
 
 typedef struct rw_section  {
     int index;                       // Index in the section header table
@@ -43,6 +44,9 @@ typedef struct rw_elf  {
     int local_symbol_end;                                   // Index of last local symbol
     uint64_t executable_virt_address;                       // Virtual address of executable
     uint64_t entrypoint;                                    // Entry point of executable
+    uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
+    uint64_t tls_template_size;                             // Size of the TLS template
+    uint64_t tls_template_virt_address;                     // Virtual address of the TLS template
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

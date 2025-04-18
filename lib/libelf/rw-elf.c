@@ -152,6 +152,44 @@ void make_elf_headers(RwElfFile *output) {
     memcpy(output->data + output->elf_section_headers_offset, output->elf_section_headers, output->elf_section_headers_size);
 }
 
+// If both are present, ensure that the .tdata and .tbss sections are consecutive
+static void place_tls_sections(List *sections_list) {
+    int tdata_section_index = 0;
+    int tbss_section_index = 0;
+
+    for (int i = 0; i < sections_list->length; i++) {
+        RwSection *section = sections_list->elements[i];
+        if (!strcmp(section->name, ".tdata")) tdata_section_index = i;
+        if (!strcmp(section->name, ".tbss")) tbss_section_index = i;
+    }
+
+    if (!tdata_section_index || !tbss_section_index || tdata_section_index == tbss_section_index - 1) return;
+
+    // Ensure the .tdata section comes first
+    if (tdata_section_index > tbss_section_index) {
+        RwSection *tmp = sections_list->elements[tdata_section_index];
+        sections_list->elements[tdata_section_index] = sections_list->elements[tbss_section_index];
+        sections_list->elements[tbss_section_index] = tmp;
+
+        int tmp2 = tdata_section_index;
+        tdata_section_index = tbss_section_index;
+        tbss_section_index = tmp2;
+
+        // Update the section indexes to match their new positions
+        ((RwSection *) sections_list->elements[tdata_section_index])->index = tdata_section_index;
+        ((RwSection *) sections_list->elements[tbss_section_index])->index = tbss_section_index;
+    }
+
+    // The .tdata section is now not last. Swap the next section with the .tbss section
+    RwSection *tmp = sections_list->elements[tdata_section_index + 1];
+    sections_list->elements[tdata_section_index + 1] = sections_list->elements[tbss_section_index];
+    sections_list->elements[tbss_section_index] = tmp;
+
+    // Update the section indexes to match their new positions
+    ((RwSection *) sections_list->elements[tdata_section_index + 1])->index = tdata_section_index + 1;
+    ((RwSection *) sections_list->elements[tbss_section_index])->index = tbss_section_index;
+}
+
 // Rearrange sections list so that .symtab, .strtab and .shstrtab are last.
 // Then set the index.
 void make_section_indexes(RwElfFile *output_elf_file) {
@@ -187,6 +225,8 @@ void make_section_indexes(RwElfFile *output_elf_file) {
     }
 
     free_list(selected_sections_list);
+
+    place_tls_sections(new_sections_list);
 
     output_elf_file->sections_list = new_sections_list;
 }
@@ -235,8 +275,17 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
+        // Align TLS .tdata section to page boundaries, but move the data to the end of the section
+        if (section->type == SHT_PROGBITS && (section->flags & SHF_TLS)) {
+            uint64_t end = ALIGN_UP(offset + section->size, 0x1000);
+            offset = ALIGN_DOWN(end - section->size, section->align);
+            output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + offset;
+            output_elf_file->tls_template_offset = offset;
+        }
+
         // Align program sections to page boundaries
-        if (section->type == SHT_PROGBITS) offset = ALIGN_UP(offset, 0x1000);
+        else if (section->type == SHT_PROGBITS)
+            offset = ALIGN_UP(offset, 0x1000);
 
         // Determine executable address of the section
         uint64_t vaddr = output_elf_file->executable_virt_address + offset;
@@ -264,6 +313,10 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
 
         if (section->type != SHT_NOBITS)
             offset = ALIGN_UP(offset + section->size, 16);
+
+        // Save the total size of the .tdata + .tbss sections
+        if (section->type == SHT_NOBITS && (section->flags & SHF_TLS))
+            output_elf_file->tls_template_size = offset - output_elf_file->tls_template_offset + section->size;
     }
 
     output_elf_file->size = offset;

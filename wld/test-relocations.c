@@ -53,14 +53,27 @@ void assert_data(char *data, ...) {
     va_end(ap);
 }
 
-void run_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value) {
+// Runs a relocation with TLS args
+void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_virt_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value) {
+    RwElfFile *output_elf_file = new_rw_elf_file("", ET_EXEC);
+    output_elf_file->tls_template_virt_address = tls_template_virt_address;
+    output_elf_file->tls_template_size = tls_template_size;
+
     ElfRelocation relocation = {.r_info = type, .r_addend = addend};
 
-    int result = apply_relocation(&relocation, output_virtual_address, value, output_data, output_offset);
+    output_elf_file->executable_virt_address = 0x400000;
+    uint64_t rw_section_offset = output_virtual_address - output_elf_file->executable_virt_address - output_offset;
+
+    int result = apply_relocation(output_elf_file, output_data, rw_section_offset, output_offset, &relocation, value, is_tls_value);
     if (result) {
         printf("Relocation failed\n");
         exit(1);
     }
+}
+
+// Runs a relocation without TLS args
+void run_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value) {
+    run_tls_relocation(output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0);
 }
 
 void test_R_X86_64_64(void) {
@@ -77,11 +90,25 @@ void test_R_X86_64_PC32(void) {
     assert_uint32(-1, (output_data)[1], "R_X86_64_PC32");
     assert_uint32(0x1010, (output_data)[2], "R_X86_64_PC32");
     assert_uint32(-1, (output_data)[3], "R_X86_64_PC32");
+
+    // Unusual case of accessing a TLS template variable directly.
+    // This is mostly to make an unusual TLS test case work.
+    // The program counter is 0x401000
+    // The address of the TLS template is 0x402000
+    // So the relative address is 0x402000 - 0x401000 = 0x1000
+    uint8_t output_data2[16]; memset(output_data, -1, 16);
+    run_tls_relocation(output_data2, 0, 0x402000, 8, R_X86_64_PC32, 0, 0x401000, 0, 1);
+    assert_data(output_data2, 0x00, 0x10, 0x00, 0x00, END);
+
+    // Same as above, but with an addend of 1
+    uint8_t output_data3[16]; memset(output_data, -1, 16);
+    run_tls_relocation(output_data3, 0, 0x402000, 8, R_X86_64_PC32, 1, 0x401000, 0, 1);
+    assert_data(output_data3, 0x01, 0x10, 0x00, 0x00, END);
 }
 
 void test_R_X86_64_32s(int type) {
     uint32_t output_data[4]; memset(output_data, -1, 16);
-    run_relocation(output_data, 8, type, 0x10, 0x400000, 0x401000);
+    run_relocation(output_data, 8,  type, 0x10, 0x400000, 0x401000);
     assert_uint32(-1, (output_data)[1], "R_X86_64_32*");
     assert_uint32(0x401010, (output_data)[2], "R_X86_64_32*");
     assert_uint32(-1, (output_data)[3], "R_X86_64_32*");
@@ -126,6 +153,13 @@ int test_R_X86_64_REX_GOTPCRELX() {
     assert_data(output_data6, 0x49, 0x81, 0xe9, 0x00, 0x10, 0x40, 0x00, END);       // sub $0x401000, %r9
 }
 
+void test_R_X86_64_TPOFF32() {
+    // With a TLS template size of 8, and symbol value of 0, the relative offset to the end of the TLS template is -8.
+    uint8_t output_data1[] = {0x00, 0x00, 0x00, 0x00};
+    run_tls_relocation(output_data1, 0, 0, 8, R_X86_64_TPOFF32, 0, 0x400000, 0, 1);
+    assert_data(output_data1, 0xf8, 0xff, 0xff, 0xff, END);
+}
+
 int main() {
     test_R_X86_64_64();
     test_R_X86_64_PC32();
@@ -133,4 +167,5 @@ int main() {
     test_R_X86_64_32s(R_X86_64_32S);
     test_R_X86_64_GOTPCRELX();
     test_R_X86_64_REX_GOTPCRELX();
+    test_R_X86_64_TPOFF32();
 }

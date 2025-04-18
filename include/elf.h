@@ -31,14 +31,15 @@
 #define EV_CURRENT	1               // Current version
 #define EV_NUM		2
 
-#define SHN_UNDEF         0        // This section table index means the symbol is undefined. When the link editor combines this object file with another that defines the indicated symbol, this file's references to the symbol will be linked to the actual definition.
-#define SHN_ABS           65521    // The symbol has an absolute value that will not change because of relocation.#define
-#define SHN_COMMON        65522    // This symbol labels a common block that has not yet been allocate
-#define SHF_WRITE         0x01
-#define SHF_ALLOC         0x02
-#define SHF_EXECINSTR     0x04
-#define SHF_MERGE         0x10
-#define SHF_STRINGS       0x20
+#define SHN_UNDEF         0         // This section table index means the symbol is undefined. When the link editor combines this object file with another that defines the indicated symbol, this file's references to the symbol will be linked to the actual definition.
+#define SHN_ABS           65521     // The symbol has an absolute value that will not change because of relocation.#define
+#define SHN_COMMON        65522     // This symbol labels a common block that has not yet been allocate
+#define SHF_WRITE         (1 << 0)  // Writeable
+#define SHF_ALLOC         (1 << 1)  // Occupies memory
+#define SHF_EXECINSTR     (1 << 2)  // Executable
+#define SHF_MERGE         (1 << 4)  // Could be merged
+#define SHF_STRINGS       (1 << 5)  // Contains strings
+#define SHF_TLS		      (1 << 10)	// TLS
 
 // Section header types
 #define SHT_NULL           0    // Unused
@@ -85,6 +86,7 @@
 // G Represents the offset into the global offset table at which the relocation entry’s symbol will reside during execution.
 // L Represents the place (section offset or address) of the Procedure Linkage Table entry for a symbol.
 // P Represents the place (section offset or address) of the storage unit being relocated (computed using r_offset).
+// T is the start of the TLS template
 // https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/host/x86_64-linux-glibc2.7-4.6/+/02075080d51c371ae87b9898bf84a085e436ee27/sysroot/usr/include/elf.h#2526
 #define R_X86_64_NONE            0   // No calculation
 #define R_X86_64_64              1   // Direct 64 bit                 S + A
@@ -96,6 +98,7 @@
 #define R_X86_64_16             12   // Direct 8 bit                  S + A
 #define R_X86_64_16S            13   // Direct 8 bit sign extended    S + A
 #define R_X86_64_8              14   // Direct 8 bit                  S + A
+#define R_X86_64_TPOFF32        23   // Offset in initial TLS block   S + A - T
 #define R_X86_64_GOTPCRELX      41   // Introduced in GNU binutils 2.26
 #define R_X86_64_REX_GOTPCRELX  42   // Introduced in GNU binutils 2.26
 #define E_MACHINE_TYPE_X86_64   0x3e
