@@ -11,6 +11,10 @@ relaxed_relocation_testing:
     movq (%rax), %rax ; cmp $100, %rax
     jne exit_with_not_ok
 
+    movl reg00@GOTPCREL(%rip), %ecx
+    movq (%rcx), %rax ; cmp $100, %rax
+    jne exit_with_not_ok
+
     # Test R_X86_64_REX_GOTPCRELX
     movq reg00@GOTPCREL(%rip),  %rax ; movq (%rax), %rax ; cmp $100, %rax ; jne exit_with_not_ok
     movq reg01@GOTPCREL(%rip),  %rcx ; movq (%rcx), %rax ; cmp $101, %rax ; jne exit_with_not_ok

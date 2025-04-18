@@ -11,6 +11,8 @@
 #include "wld/relocations.h"
 #include "wld/wld.h"
 
+#define VERBOSE_ERROR_LIST 0
+
 static const char *RELOCATION_NAMES[] = {
     "R_X86_64_NONE",            // 0
     "R_X86_64_64",
@@ -58,12 +60,225 @@ static const char *RELOCATION_NAMES[] = {
     "R_X86_64_NUM",
 };
 
+// mod_rem encoding and decoding
+#define MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING 3
+
+#define ENCODE_MOD_RM(mod, reg, rm) ((((mod) & 3) << 6) | (((reg) & 7) << 3) | ((rm) & 7))
+#define DECODE_MOD_RM_MODE(mod_rm) ((mod_rm) >> 6)
+#define DECODE_MOD_RM_REG(mod_rm) (((mod_rm) >> 3) & 7)
+#define DECODE_MOD_RM_RM(mod_rm) ((mod_rm) & 7)
+
 int RELOCATION_NAMES_COUNT = sizeof(RELOCATION_NAMES) / sizeof(RELOCATION_NAMES[0]) - 1;
+
+// Convert an opcode where the first operand is in G encoding to E encoding
+// G: The reg field of the ModR/M byte selects a general register
+// E: A ModR/M byte follows the opcode and specifies the operand. The operand is either a general-purpose register or a memory address.
+void convert_Gvqp_to_Evqp(void *output_pointer, uint8_t opcode, uint8_t binary_operation, uint32_t value) {
+    uint32_t *output = (uint32_t *) output_pointer;
+    uint8_t *pprefix = (uint8_t *) (output_pointer - 3);
+    uint8_t *popcode = (uint8_t *) (output_pointer - 2);
+    uint8_t *mod_rm = (uint8_t *) (output_pointer - 1);
+
+    int mod_r = (*pprefix >> 2) & 1;        // The high bit of the register is in REX W (bit 2)
+    *pprefix = 0x48 | mod_r;                // The high bit of the register is in REX B (bit 0)
+    *popcode = opcode;
+
+    // Move the register from reg to rm. reg = binary_operation
+    *mod_rm = ENCODE_MOD_RM(MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING, binary_operation, DECODE_MOD_RM_REG(*mod_rm));
+
+    if (DEBUG) printf("    value=%#x\n", value);
+    *output = value;
+}
+
+// This function rewrites the output code. All ELF file details are abstracted away, so that function can be easily tested.
+int apply_relocation(ElfRelocation *relocation, uint32_t output_virtual_address, uint64_t value, void *output_pointer, uint64_t output_offset) {
+    output_pointer += output_offset;
+    int type = relocation->r_info & 0xffffffff;
+
+    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
+    if (type == R_X86_64_PLT32) type = R_X86_64_PC32;
+
+    uint32_t A = relocation->r_addend;
+    uint32_t P = output_virtual_address;
+    uint32_t S = value;
+
+    if (DEBUG) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
+
+    switch (type) {
+        case R_X86_64_64: {
+            uint64_t *output = (uint64_t *) output_pointer;
+            uint64_t value = S + A;
+            if (DEBUG) printf("    value=%#lx\n", value);
+            *output = value;
+            break;
+        }
+
+        case R_X86_64_PC32: {
+            uint32_t *output = (uint32_t *) output_pointer;
+            uint32_t value = S + A - P;
+            if (DEBUG) printf("    value=%#x\n", value);
+            *output = value;
+            break;
+        }
+
+        case R_X86_64_32:
+        case R_X86_64_32S: {
+            uint32_t value = S + A;
+            uint32_t *output = (uint32_t *) output_pointer;
+            if (DEBUG) printf("    value=%#x\n", value);
+            *output = value;
+            break;
+        }
+        case R_X86_64_GOTPCRELX: {
+            // Relax instructions to not use the GOT
+
+            uint32_t *output = (uint32_t *) output_pointer;
+
+            uint8_t *mod_rm = (uint8_t *) (output_pointer - 1);
+            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
+            uint8_t *pprefix = (uint8_t *) (output_pointer - 3);
+            uint8_t opcode = *popcode;
+
+            if (output_offset > 1 && opcode == 0x8b) {
+                // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo, %eax
+                *popcode = 0xc7;
+                *mod_rm = 0xc0 | (*mod_rm & 0x38) >> 3;
+
+                uint32_t value = S;
+                if (DEBUG) printf("    value=%#x\n", value);
+                *output = value;
+                break;
+            }
+
+            else if (output_offset > 1 && opcode == 0xff) {
+                if (*mod_rm == 0x15) {
+                    // Convert callq foo(%rip) to addr32 callq foo
+                    *popcode = 0x67;
+                    *mod_rm = 0xe8;
+                }
+                else
+                    panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *mod_rm);
+
+                uint32_t value = S + A - P;
+                if (DEBUG) printf("    value=%#x\n", value);
+                *output = value;
+                break;
+            }
+
+            panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
+        }
+
+        case R_X86_64_REX_GOTPCRELX: {
+            // Relax instructions to not use the GOT
+
+            uint32_t *output = (uint32_t *) output_pointer;
+
+            uint8_t *pprefix = (uint8_t *) (output_pointer - 3);
+            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
+            uint8_t *mod_rm = (uint8_t *) (output_pointer - 1);
+            uint8_t opcode = *popcode;
+
+            if (output_offset > 2 && opcode == 0x8b) {
+                // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo,%rax
+                convert_Gvqp_to_Evqp(output_pointer, 0xc7, 0, S);
+                break;
+            }
+
+            else if (output_offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
+                // Convert cmpq foo@GOTPCREL(%rip), %rax to cmpq foo, %rax
+                convert_Gvqp_to_Evqp(output_pointer, 0x81, 7, S);
+                break;
+            }
+
+            else if (output_offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
+                // Convert subq foo@GOTPCREL(%rip), %rax to subq foo, %rax
+                convert_Gvqp_to_Evqp(output_pointer, 0x81, 5, S);
+                break;
+            }
+
+
+            if (VERBOSE_ERROR_LIST)
+                printf("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
+            return 1;
+
+            break;
+        }
+
+        default: {
+            const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
+            if (VERBOSE_ERROR_LIST)
+                printf("Unhandled relocation type %s\n", relocation_name);
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+// Given an input file, output file, input section and relocation, process the relocation by modifying the output.
+int apply_relocation_with_elf_files(RwElfFile *output_elf_file, ElfFile *input_elf_file, Section *input_section, ElfRelocation *relocation) {
+    int type = relocation->r_info & 0xffffffff;
+    int symbol_index = relocation->r_info >> 32;
+
+    // Get the symbol
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    int elf_symbol_type = elf_symbol->st_info & 0xf;
+
+    int dst_value;
+    char *symbol_name = NULL;
+
+    // Get the output section
+    RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
+    if (!rw_section) panic("Unexpected null section in output when applying relocations");
+
+    // Determine the value of the symbol
+    if (elf_symbol_type == STT_SECTION) {
+        // Handle a relocation to a section symbol
+
+        Section *symbol_section =  (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+        symbol_name = symbol_section->name;
+
+        RwSection *symbol_rw_section = get_rw_section(output_elf_file, symbol_section->name);
+        if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
+
+        dst_value = output_elf_file->executable_virt_address + symbol_rw_section->offset + elf_symbol->st_value;
+    }
+    else {
+        // Handle a relocation to a non-section symbol
+
+        symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
+
+        Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
+        if (!symbol) {
+            if (!is_undefined_symbol(symbol_name)) {
+                panic("Trying to relocate a symbol that's defined but not in a symbol table: %s in section %s",
+                    symbol_name, input_section->name);
+            }
+
+            // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
+            dst_value = 0;
+        } else {
+            dst_value = symbol->dst_value;
+        }
+    }
+
+    if (DEBUG) {
+        const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
+        printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
+            input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
+    }
+
+    uint64_t output_offset = input_section->offset + relocation->r_offset;
+
+    // P is the virtual address of the relocation
+    uint32_t output_virtual_address = output_elf_file->executable_virt_address + rw_section->offset + output_offset;
+
+    return apply_relocation(relocation, output_virtual_address, dst_value, rw_section->data, output_offset);
+}
 
 void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
     // While in development, collect all problems, report them and bail.
     // This way I know what lies ahead until the executable can be run.
-    #define VERBOSE_ERROR_LIST 0
     int failed_relocations = 0;
 
     if (DEBUG) printf("\nRelocations:\n");
@@ -89,206 +304,9 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file) {
             ElfRelocation *relocations = load_section(input_elf_file, j);
             ElfRelocation *relocation = relocations;
             ElfRelocation *end = ((void *) relocations) + rela_input_elf_section_header->sh_size;
+
             while (relocation < end) {
-                int type = relocation->r_info & 0xffffffff;
-                int symbol_index = relocation->r_info >> 32;
-
-                // Get the symbol
-                ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-                int elf_symbol_type = elf_symbol->st_info & 0xf;
-
-                int dst_value;
-                char *symbol_name = NULL;
-
-                // Get the output section
-                RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
-                if (!rw_section) panic("Unexpected null section in output when applying relocations");
-
-                if (elf_symbol_type == STT_SECTION) {
-                    // Handle a relocation to a sectio symbol
-
-                    Section *symbol_section =  (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
-                    symbol_name = symbol_section->name;
-
-                    RwSection *symbol_rw_section = get_rw_section(output_elf_file, symbol_section->name);
-                    if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
-
-                    dst_value = output_elf_file->executable_virt_address + symbol_rw_section->offset + elf_symbol->st_value;
-                }
-                else {
-                    // Handle a relocation to a non-section symbol
-
-                    symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
-
-                    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
-                    if (!symbol) {
-                        if (!is_undefined_symbol(symbol_name)) {
-                            panic("Trying to relocate a symbol that's defined but not in a symbol table: %s in section %s",
-                                symbol_name, input_section->name);
-                        }
-
-                        // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
-                        dst_value = 0;
-                    } else {
-                        dst_value = symbol->dst_value;
-                    }
-                }
-
-                if (DEBUG) {
-                    const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-                    printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
-                        input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
-                }
-
-                // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
-                if (type == R_X86_64_PLT32) type = R_X86_64_PC32;
-
-                uint64_t offset_in_rw_section = input_section->offset + relocation->r_offset;
-
-                uint32_t A = relocation->r_addend;
-                uint32_t P = output_elf_file->executable_virt_address + rw_section->offset + offset_in_rw_section;
-                uint32_t S = dst_value;
-
-                if (DEBUG) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
-
-                switch (type) {
-                    case R_X86_64_64: {
-                        uint64_t *output = (uint64_t *) (rw_section->data + offset_in_rw_section);
-                        uint64_t value = S + A;
-                        if (DEBUG) printf("    value=%#lx\n", value);
-                        *output = value;
-                        break;
-                    }
-
-                    case R_X86_64_PC32: {
-                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
-                        uint32_t value = S + A - P;
-                        if (DEBUG) printf("    value=%#x\n", value);
-                        *output = value;
-                        break;
-                    }
-
-                    case R_X86_64_32:
-                    case R_X86_64_32S: {
-                        uint32_t value = S + A;
-                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
-                        if (DEBUG) printf("    value=%#x\n", value);
-                        *output = value;
-                        break;
-                    }
-                    case R_X86_64_GOTPCRELX: {
-                        // Relax instructions to not use the GOT
-
-                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
-
-                        uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
-                        uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);
-                        uint8_t *pprefix = (uint8_t *) (rw_section->data + offset_in_rw_section - 3);
-                        uint8_t opcode = *popcode;
-
-                        if (offset_in_rw_section > 1 && opcode == 0x8b) {
-                            // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo,%eax
-                            *popcode = 0xc7;
-                            *mod_rm = 0xc0 | (*mod_rm & 0x38) >> 3;
-
-                            uint32_t value = S;
-                            if (DEBUG) printf("    value=%#x\n", value);
-                            *output = value;
-                            break;
-                        }
-
-                        else if (offset_in_rw_section > 1 && opcode == 0xff) {
-                            if (*mod_rm == 0x15) {
-                                // Convert callq  foo(%rip) to addr32 callq foo
-                                *popcode = 0x67;
-                                *mod_rm = 0xe8;
-                            }
-                            else
-                                panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *mod_rm);
-
-                            uint32_t value = S + A - P;
-                            if (DEBUG) printf("    value=%#x\n", value);
-                            *output = value;
-                            break;
-                        }
-
-                        panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
-                    }
-
-                    case R_X86_64_REX_GOTP: {
-                        // Relax instructions to not use the GOT
-
-                        uint32_t *output = (uint32_t *) (rw_section->data + offset_in_rw_section);
-
-                        uint8_t *pprefix = (uint8_t *) (rw_section->data + offset_in_rw_section - 3);
-                        uint8_t *popcode = (uint8_t *) (rw_section->data + offset_in_rw_section - 2);
-                        uint8_t *mod_rm = (uint8_t *) (rw_section->data + offset_in_rw_section - 1);
-                        uint8_t opcode = *popcode;
-
-                        if (offset_in_rw_section > 2 && opcode == 0x8b) {
-                            // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo,%rax
-
-                            // Clear REX W
-                            if (*pprefix == 0x4c)
-                                *pprefix = 0x49;
-
-                            *popcode = 0xc7;
-                            *mod_rm = 0xc0 | (*mod_rm >> 3);
-
-                            uint32_t value = S;
-                            if (DEBUG) printf("    value=%#x\n", value);
-                            *output = value;
-                            break;
-                        }
-
-                        else if (offset_in_rw_section > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
-                            // Convert cmpq foo@GOTPCREL(%rip), %rax to cmpq foo, %rax
-                            int mod_r = (*pprefix >> 2) & 1;        // The high bit of the register is in REX W (bit 2)
-                            *pprefix = 0x48 | mod_r;                // The high bit of the register is in REX B (bit 0)
-                            *popcode = 0x81;                        // 0x81 encodes 8 bit operations: add=0, or=1, ..., cmp=7
-                            int binary_operation = 7;
-
-                            // Convert mod_rm byte; 0xc0 is absolute mode. Move the 3 low bits of the register from reg to rm
-                            *mod_rm = 0xc0 | (binary_operation << 3) | ((*mod_rm & 0x38) >> 3);
-
-                            uint32_t value = S;
-                            if (DEBUG) printf("    value=%#x\n", value);
-                            *output = value;
-                            break;
-                        }
-
-                        else if (offset_in_rw_section > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
-                            // Convert subq foo@GOTPCREL(%rip), %rax to subq foo, %rax
-                            int mod_r = (*pprefix >> 2) & 1;        // The high bit of the register is in REX W (bit 2)
-                            *pprefix = 0x48 | mod_r;                // The high bit of the register is in REX B (bit 0)
-                            *popcode = 0x81;                        // 0x81 encodes 8 bit operations: add=0, or=1, ..., sub=5
-                            int binary_operation = 5;
-
-                            // Convert mod_rm byte; 0xc0 is absolute mode. Move the 3 low bits of the register from reg to rm
-                            *mod_rm = 0xc0 | (binary_operation << 3) | ((*mod_rm & 0x38) >> 3);
-
-                            uint32_t value = S;
-                            if (DEBUG) printf("    value=%#x\n", value);
-                            *output = value;
-                            break;
-                        }
-
-
-                        if (VERBOSE_ERROR_LIST)
-                            printf("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
-                        failed_relocations++;
-
-                        break;
-                    }
-
-                    default: {
-                        const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-                        if (VERBOSE_ERROR_LIST)
-                            printf("Unhandled relocation type %s\n", relocation_name);
-                        failed_relocations++;
-                    }
-                }
-
+                failed_relocations += apply_relocation_with_elf_files(output_elf_file, input_elf_file, input_section, relocation);
                 relocation++;
             }
 

@@ -450,7 +450,7 @@ static void preprocess_op_relocation(Operand *op, char *identifier) {
         char *symbol_name = strdup(identifier);
         symbol_name[strlen(identifier) - 9] = 0;
         identifier = symbol_name;
-        op->relocation_type = R_X86_64_REX_GOTP;
+        op->relocation_type = R_X86_64_REX_GOTPCRELX;
     }
     else
         identifier = strdup(identifier);
@@ -719,7 +719,7 @@ void emit_section_code(RwSection *section) {
             if (
                     instr->relocation.symbol->section != section ||
                     instr->relocation.symbol->binding == STB_GLOBAL ||
-                    instr->relocation.type == R_X86_64_REX_GOTP
+                    instr->relocation.type == R_X86_64_REX_GOTPCRELX
                     ) {
 
                 // For code relocations , a relative relocation is calculated from the end of the instruction.

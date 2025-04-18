@@ -1201,7 +1201,7 @@ void test_GOTPCREL_relocations(void) {
         0x48, 0x8b, 0x05, 0x00, 0x00, 0x00, 0x00, END);
 
     assert_relocations(".rela.text",
-        R_X86_64_REX_GOTP, get_symbol_symtab_index("foo"), 0x03, -4,
+        R_X86_64_REX_GOTPCRELX, get_symbol_symtab_index("foo"), 0x03, -4,
         END
     );
 
@@ -1212,7 +1212,7 @@ void test_GOTPCREL_relocations(void) {
         END);
 
     assert_relocations(".rela.text",
-        R_X86_64_REX_GOTP, get_symbol_symtab_index("foo"), 0x04, -4,
+        R_X86_64_REX_GOTPCRELX, get_symbol_symtab_index("foo"), 0x04, -4,
         END
     );
 
@@ -1222,7 +1222,7 @@ void test_GOTPCREL_relocations(void) {
         END);
 
     assert_relocations(".rela.text",
-        R_X86_64_REX_GOTP, get_symbol_symtab_index("foo"), 0x01, -4,
+        R_X86_64_REX_GOTPCRELX, get_symbol_symtab_index("foo"), 0x01, -4,
         END
     );
 
@@ -1233,7 +1233,7 @@ void test_GOTPCREL_relocations(void) {
         END);
 
     assert_relocations(".rela.text",
-        R_X86_64_REX_GOTP, get_symbol_symtab_index("foo"), 0x02, -4,
+        R_X86_64_REX_GOTPCRELX, get_symbol_symtab_index("foo"), 0x02, -4,
         END
     );
 }

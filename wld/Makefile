@@ -40,7 +40,7 @@ LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 ${TARGET}: ${OBJECTS} main.o ${LIBS_PATH}
 	gcc -g -Werror -I ../include -L../lib ${OBJECTS} main.o ${LIBS_PREFIXED_L} -o ${TARGET}
 
-test: ${TARGET} run-test-archive-loading run-test-symbol-resolution
+test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations
 	make -C tests
 
 libtest-archive-loading.a: test-archive-loading.o
@@ -65,6 +65,13 @@ test-symbol-resolution: ${OBJECTS} test-symbol-resolution.o
 run-test-symbol-resolution: test-symbol-resolution
 	./test-symbol-resolution
 
+test-relocations: ${OBJECTS} test-relocations.o
+	gcc -g -Werror ${OBJECTS} test-relocations.o -L../lib ${LIBS_PREFIXED_L} -o test-relocations
+
+.PHONY: run-test-relocations
+run-test-relocations: test-relocations
+	./test-relocations
+
 clean:
 	@rm -f *.o
 	@rm -f ${TARGET}
@@ -73,3 +80,4 @@ clean:
 	@rm -f libtest-archive-loading.a
 	@rm -f libtest-archive-loading-long.a
 	@rm -f test-symbol-resolution
+	@rm -f test-relocations
