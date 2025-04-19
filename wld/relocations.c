@@ -97,12 +97,18 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
     output_pointer += output_offset;
     int type = relocation->r_info & 0xffffffff;
 
-    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
-    if (type == R_X86_64_PLT32) type = R_X86_64_PC32;
-
     uint32_t A = relocation->r_addend;
     uint32_t P = output_virtual_address;
     uint32_t S = value;
+
+    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
+    if (type == R_X86_64_PLT32) type = R_X86_64_PC32;
+
+    if (type == R_X86_64_GOTTPOFF) {
+        // Convert a foo@GOTTPOFF(%rip) to foo@GOTPCREL(%rip)
+        type = R_X86_64_REX_GOTPCRELX;
+        S -= output_elf_file->tls_template_size;
+    }
 
     if (DEBUG) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
 
@@ -185,7 +191,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
             uint8_t opcode = *popcode;
 
             if (output_offset > 2 && opcode == 0x8b) {
-                // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo,%rax
+                // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo, %rax
                 convert_Gvqp_to_Evqp(output_pointer, 0xc7, 0, S);
                 break;
             }
@@ -202,12 +208,9 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
                 break;
             }
 
-
             if (VERBOSE_ERROR_LIST)
                 printf("Unhandled instruction rewrite for R_X86_64_REX_GOTP: %#02x %#02x\n", *pprefix, opcode);
             return 1;
-
-            break;
         }
 
         case R_X86_64_TPOFF32: {

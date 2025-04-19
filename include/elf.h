@@ -98,6 +98,7 @@
 #define R_X86_64_16             12   // Direct 8 bit                  S + A
 #define R_X86_64_16S            13   // Direct 8 bit sign extended    S + A
 #define R_X86_64_8              14   // Direct 8 bit                  S + A
+#define R_X86_64_GOTTPOFF       22	 // 32 bit signed PC relative offset to GOT entry for IE symbol
 #define R_X86_64_TPOFF32        23   // Offset in initial TLS block   S + A - T
 #define R_X86_64_GOTPCRELX      41   // Introduced in GNU binutils 2.26
 #define R_X86_64_REX_GOTPCRELX  42   // Introduced in GNU binutils 2.26

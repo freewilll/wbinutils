@@ -81,6 +81,12 @@ clear_tbss_loop:
 
     movq %fs:bar@TPOFF, %rax ; cmp $0, %rax  ; jne not_ok
 
+    # R_X86_64_GOTTPOFF relocation
+    movq foo@GOTTPOFF(%rip), %rax
+    movq %fs:(%rax), %rax
+    cmp $42, %rax
+    jne not_ok
+
 ok:
     mov $0, %edi                    # Return zero if %edi is 42, the expected value
     mov $60, %eax                   # exit(%edi)
