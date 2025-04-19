@@ -17,3 +17,8 @@ __libc_csu_fini:
 
 __libc_csu_init:
     ret
+
+.section .data
+.globl external_data
+external_data:
+    .quad 200

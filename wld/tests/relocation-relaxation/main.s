@@ -86,12 +86,17 @@ stack_ok:
     movq $reg14, %r14 ; subq reg14@GOTPCREL(%rip), %r14 ; jnz exit_with_not_ok
     movq $reg15, %r15 ; subq reg15@GOTPCREL(%rip), %r15 ; jnz exit_with_not_ok
 
+    .extern external_data
+    movq external_data@GOTPCREL(%rip), %rax
+    movq (%rax), %rax
+    cmp $200, %rax
+    jne exit_with_not_ok
+
     movl $0, %eax;
     ret
 
 main:
     call relaxed_relocation_testing
-    addl $42, %eax
     ret
 
 .section .data

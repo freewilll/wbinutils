@@ -181,6 +181,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
             panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
         }
 
+        case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
             // Relax instructions to not use the GOT
 
