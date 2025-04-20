@@ -38,19 +38,23 @@ static void *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint6
     if (read != size) error("Unable to read input file: %s", elf_file->filename);
 }
 
-// Read a section into dst
-void load_section_into_buffer(ElfFile *elf_file, int section_index, void *dst) {
-    ElfSectionHeader *section_header = &elf_file->section_headers[section_index];
-    read_from_file(elf_file, dst, section_header->sh_offset, section_header->sh_size);
-}
-
 // Allocate memory for a section, read it, and return it
-void *load_section(ElfFile *elf_file, int section_index) {
+void *load_section_uncached(ElfFile *elf_file, int section_index) {
     ElfSectionHeader *section_header = &elf_file->section_headers[section_index];
     void *result = malloc(section_header->sh_size);
-    load_section_into_buffer(elf_file, section_index, result);
+    read_from_file(elf_file, result, section_header->sh_offset, section_header->sh_size);
 
     return result;
+}
+
+// Unless already done, allocate memory for a section, read it, and return it
+void *load_section(ElfFile *elf_file, Section *section) {
+    if (section->data) return section->data;
+    ElfSectionHeader *section_header = section->elf_section_header;
+    section->data = malloc(section_header->sh_size);
+    read_from_file(elf_file, section->data, section_header->sh_offset, section_header->sh_size);
+
+    return section->data;
 }
 
 // Ensure the file is an x86_64 ELF object file
@@ -109,7 +113,7 @@ static void load_sections(ElfFile *elf_file) {
     read_from_file(elf_file, elf_file->section_headers, elf_file->elf_header->e_shoff, section_headers_size);
 
     // Load the section header strings
-    elf_file->section_header_strings = load_section(elf_file, elf_file->elf_header->e_shstrndx);
+    elf_file->section_header_strings = load_section_uncached(elf_file, elf_file->elf_header->e_shstrndx);
 
     // Loop over all sections and populate the section headers list and map
     for (int i = 0; i < elf_file->elf_header->e_shnum; i++) {
@@ -129,7 +133,7 @@ static void load_sections(ElfFile *elf_file) {
     if (!strtab_section)
         elf_file->strtab_strings = NULL;
     else
-        elf_file->strtab_strings = load_section(elf_file, strtab_section->index);
+        elf_file->strtab_strings = load_section_uncached(elf_file, strtab_section->index);
 
     // Look up symbol table
     Section *symtab_section = get_input_section(elf_file, ".symtab");
@@ -138,7 +142,7 @@ static void load_sections(ElfFile *elf_file) {
         elf_file->symbol_count = 0;
     }
     else {
-        elf_file->symbol_table = load_section(elf_file, symtab_section->index);
+        elf_file->symbol_table = load_section_uncached(elf_file, symtab_section->index);
         elf_file->symbol_count = symtab_section->elf_section_header->sh_size / sizeof(ElfSymbol);
     }
 }

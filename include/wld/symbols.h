@@ -25,6 +25,8 @@ typedef struct symbol {
     int is_common;          // The symbol is a common symbol. src_section is null.
     int is_internal;        // Used by the linker
     int src_is_library;     // 1 if the symbol was found in a library, otherwise it was found in an object file
+    int needs_got;          // Set if the symbol needs an entry in the Global Offset Table (GOT)
+    uint64_t got_offset;    // Offset in the GOT, if present
     ElfFile *src_elf_file;  // File symbol is defined in. NULL if undefined.
     Section *src_section;   // Section the symbol is defined in. NULL if the symbol is undefined or common.
     RwSection *dst_section;
@@ -61,5 +63,7 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section);
 void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t executable_virt_address, SymbolTable *symbol_table);
 void make_elf_symbols(RwElfFile *output_elf_file);
 void update_elf_symbols(RwElfFile *output_elf_file);
+void create_global_offset_table(RwElfFile *output_elf_file);
+void update_got_symbol_values(RwElfFile *output_elf_file);
 
 #endif

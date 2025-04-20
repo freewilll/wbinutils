@@ -14,6 +14,7 @@ test: \
 	symbol-resolution-with-mixed-bss-and-common-sections \
 	relocation-relaxation \
 	relocation-locals \
+	relocation-got \
 	relocation-tls \
 	array-lifecycle \
 
@@ -69,6 +70,10 @@ relocation-relaxation:
 relocation-locals:
 	make -C relocation-locals
 
+.PHONY: relocation-got
+relocation-got:
+	make -C relocation-got
+
 .PHONY: relocation-tls
 relocation-tls:
 	make -C relocation-tls
@@ -91,5 +96,6 @@ clean:
 	@make -C symbol-resolution-with-mixed-bss-and-common-sections clean
 	@make -C relocation-relaxation clean
 	@make -C relocation-locals clean
+	@make -C relocation-got clean
 	@make -C relocation-tls clean
 	@make -C array-lifecycle clean

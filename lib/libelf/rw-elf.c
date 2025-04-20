@@ -101,7 +101,7 @@ void add_elf_relocation(RwElfFile *output_elf_file, RwSection *section, int type
 
 // Create a new RwElfFile object and set some defaults
 RwElfFile *new_rw_elf_file(const char *filename, int type) {
-    RwElfFile *result = malloc(sizeof(RwElfFile));
+    RwElfFile *result = calloc(1, sizeof(RwElfFile));
 
     result->filename = strdup(filename);
     result->type = type;

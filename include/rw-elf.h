@@ -41,12 +41,14 @@ typedef struct rw_elf  {
     RwSection *section_symtab;
     RwSection *section_strtab;
     RwSection *section_shstrtab;                            // Section header string table
+    RwSection *section_got;                                 // Global Offset Table section
     int local_symbol_end;                                   // Index of last local symbol
     uint64_t executable_virt_address;                       // Virtual address of executable
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
     uint64_t tls_template_size;                             // Size of the TLS template
     uint64_t tls_template_virt_address;                     // Virtual address of the TLS template
+    uint64_t got_virt_address;                              // Virtual address of the GOT
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

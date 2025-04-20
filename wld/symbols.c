@@ -73,7 +73,6 @@ Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
     return get_defined_symbol(global_symbol_table, name);
 }
 
-
 // Is a symbol in the undefined symbols set?
 int is_undefined_symbol(char *name) {
     return strmap_ordered_get(global_symbol_table->undefined_symbols, name) != NULL;
@@ -415,9 +414,8 @@ void finalize_symbols(void) {
         Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
 
         // Weak undefined symbols become defined with value zero
-        if (symbol->binding == STB_WEAK)  {
+        if (symbol->binding == STB_WEAK) {
             symbol->dst_value = 0;
-            remove_undefined_symbol(symbol->name);
             strmap_ordered_put(global_symbol_table->defined_symbols, name, symbol);
         }
         else
@@ -430,6 +428,7 @@ void finalize_symbols(void) {
     strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
+        if (symbol->binding == STB_WEAK) continue;
 
         printf("  %s\n", name);
     }
@@ -627,4 +626,48 @@ void init_symbols(void) {
     add_internal_symbol(INIT_ARRAY_END_SYMBOL_NAME);
     add_internal_symbol(FINI_ARRAY_START_SYMBOL_NAME);
     add_internal_symbol(FINI_ARRAY_END_SYMBOL_NAME);
+}
+
+void create_global_offset_table(RwElfFile *output_elf_file) {
+    // Scan the symbol table and count the amount of GOT entries
+    int got_entries_count = 0;
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+        if (symbol->needs_got) got_entries_count++;
+    }
+
+    if (!got_entries_count) return;
+
+    output_elf_file->section_got = add_rw_section(output_elf_file, ".got", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+    output_elf_file->section_got->size = 8 * got_entries_count;
+    output_elf_file->section_got->data = calloc(1, output_elf_file->section_got->size);
+}
+
+// Set the symbol values in the GOT (if present)
+void update_got_symbol_values(RwElfFile *output_elf_file) {
+    if (!output_elf_file->section_got) return; // No GOT, do nothing
+
+    // Set the special GOT symbol to the virtual address of the GOT
+    Symbol *got_symbol = must_get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
+    got_symbol->dst_value = output_elf_file->executable_virt_address + output_elf_file->section_got->offset;
+
+    // Set the address of the GOT
+    output_elf_file->got_virt_address = got_symbol->dst_value;
+
+    // Add the GOT entries
+    uint64_t *got_entries = (uint64_t *) output_elf_file->section_got->data;
+
+    int i = 0;
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+        if (!symbol->needs_got) continue;
+
+        if (i * 8 >= output_elf_file->section_got ->size) panic("Trying to write beyond the allocated space in the GOT");
+        got_entries[i] = symbol->dst_value;
+        symbol->got_offset = i * 8;
+
+        i++;
+    }
 }

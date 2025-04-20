@@ -84,6 +84,8 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
             }
         }
     }
+
+    create_global_offset_table(output_elf_file);
 }
 
 // Determine the layout of the input sections in the output sections, aligning
@@ -288,8 +290,9 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
             // Allocate memory if not already done in a previous loop
             if (!rw_section->data) rw_section->data = calloc(1, rw_section->size);
 
-            // Load the section data
-            load_section_into_buffer(input_elf_file, input_section->index, rw_section->data + input_section->offset);
+            // Load the section data. It may already have been loaded and modified by relocations.
+            load_section(input_elf_file, input_section);
+            memcpy(rw_section->data + input_section->offset, input_section->data, input_section->elf_section_header->sh_size);
         }
     }
 }
@@ -303,6 +306,9 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
 
     // At this point all symbols should be defined. Ensure this is the case.
     finalize_symbols();
+
+    // Relax instructions where possible and determine which symbols need to be in the GOT
+    apply_relocations(input_elf_files, NULL, RELOCATION_PHASE_SCAN);
 
     // Create output file
     RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
@@ -341,6 +347,9 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Assign values to array start/end section built-in symbols
     make_array_symbol_values(output_elf_file);
 
+    // Update the GOT (if there is one)
+    update_got_symbol_values(output_elf_file);
+
     // Set the symbol's value and section indexes
     update_elf_symbols(output_elf_file);
 
@@ -358,8 +367,8 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Copy all the section data to the final positions in the ELF file.
     copy_rw_sections_to_elf(output_elf_file);
 
-    // Write relocated data to the ELF file
-    apply_relocations(input_elf_files, output_elf_file);
+    // Write relocated symbol values to the output ELF file
+    apply_relocations(input_elf_files, output_elf_file, RELOCATION_PHASE_APPLY);
 
     // Write the ELF file
     write_elf_file(output_elf_file);
