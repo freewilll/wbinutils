@@ -31,7 +31,7 @@ char *last_error_message;
 SymbolTable *new_symbol_table(void) {
     SymbolTable *st = malloc(sizeof(SymbolTable));
     st->defined_symbols = new_strmap_ordered();
-    st->undefined_symbols = new_strmap();
+    st->undefined_symbols = new_strmap_ordered();
 
     return st;
 }
@@ -76,12 +76,12 @@ Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
 
 // Is a symbol in the undefined symbols set?
 int is_undefined_symbol(char *name) {
-    return strmap_get(global_symbol_table->undefined_symbols, name) != NULL;
+    return strmap_ordered_get(global_symbol_table->undefined_symbols, name) != NULL;
 }
 
 // Remove a symbol from the undefined symbols set
 static void remove_undefined_symbol(char *name) {
-    strmap_delete(global_symbol_table->undefined_symbols, name);
+    strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
 }
 
 static Symbol *new_symbol(char *name, int type, int binding, int other, int size, int is_library) {
@@ -109,7 +109,7 @@ static Symbol *add_global_defined_symbol(char *name, int type, int binding, int 
 
 static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
-    strmap_put(global_symbol_table->undefined_symbols, name, symbol);
+    strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
 }
 
 // Report an error, or in case we are being tested, write to last_error_message
@@ -306,6 +306,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
                     found_symbol->src_section = src_section;
                     found_symbol->src_value = symbol->st_value;
                     found_symbol->is_common = 0;
+                    found_symbol->binding = binding;
                 }
             }
         }
@@ -405,27 +406,31 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
     return resolved_symbols;
 }
 
-void fail_on_undefined_symbols(void) {
+// Treat all weak symbols as defined, with value zero. Fail if any undefined symbols are left
+void finalize_symbols(void) {
     int count = 0;
 
-    strmap_foreach(global_symbol_table->undefined_symbols, it) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
 
-        // It's ok for unresolved symbols to be weak. They just get value zero.
-        if (symbol->binding == STB_WEAK) continue;
-        count++;
+        // Weak undefined symbols become defined with value zero
+        if (symbol->binding == STB_WEAK)  {
+            symbol->dst_value = 0;
+            remove_undefined_symbol(symbol->name);
+            strmap_ordered_put(global_symbol_table->defined_symbols, name, symbol);
+        }
+        else
+            count++;
     }
 
-    if (!count) return;
+    if (!count) return; // All symbols are defined
 
     printf("Undefined symbols:\n");
-    strmap_foreach(global_symbol_table->undefined_symbols, it) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
 
-        // It's ok for unresolved symbols to be weak. They just get value zero.
-        if (symbol->binding == STB_WEAK) continue;
         printf("  %s\n", name);
     }
 
@@ -479,9 +484,9 @@ void debug_summarize_symbols(void) {
     }
 
     printf("Undefined symbols:\n");
-    strmap_foreach(global_symbol_table->undefined_symbols, it) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(global_symbol_table->undefined_symbols, name);
+    strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
         if (symbol->binding == STB_WEAK) continue; // It's ok for unresolved symbols to be weak
         debug_print_symbol(symbol);
     }
@@ -536,27 +541,33 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t e
             symbol->dst_section = section_bss;
         }
         else {
-            // Get the output section
-            if (!symbol->src_section) panic("Unexpectedly got null src_section for %s\n", symbol->name);
-            if (!symbol->src_section->dst_section) panic("Unexpectedly got null dst_section for %s from %s\n", symbol->name, symbol->src_section->name);
+            // Skip weak undefined symbols that don't have a src_section
+            if (symbol->src_section) {
+                // Get the output section
+                if (!symbol->src_section->dst_section) panic("Unexpectedly got null dst_section for %s from %s\n", symbol->name, symbol->src_section->name);
 
-            RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
-            if (!rw_section) panic("Unexpected empty output section for %s", name);
-            symbol->dst_section = rw_section;
+                RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
+                if (!rw_section) panic("Unexpected empty output section for %s", name);
+                symbol->dst_section = rw_section;
 
-            if (!symbol->src_section)
-                panic("Unexpected null symbol->src_section for %s", name);
-            if (!symbol->src_section->dst_section)
-                panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
+                if (!symbol->src_section)
+                    panic("Unexpected null symbol->src_section for %s", name);
+                if (!symbol->src_section->dst_section)
+                    panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
 
-            if (symbol->type == STT_TLS)
-                symbol->dst_value = symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value - output_elf_file->tls_template_offset;
-            else
-                symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
+                if (symbol->type == STT_TLS)
+                    symbol->dst_value = symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value - output_elf_file->tls_template_offset;
+                else
+                    symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
+            }
 
             if (DEBUG) {
                 printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
-                printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
+
+                if (symbol->binding != STB_WEAK)
+                    printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
+                else
+                    printf("\n");
             }
         }
     }
@@ -590,6 +601,7 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+        if (symbol->binding == STB_WEAK) continue;
         if (symbol->is_abs) continue;
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];

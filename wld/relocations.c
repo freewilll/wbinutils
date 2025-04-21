@@ -269,11 +269,6 @@ int apply_relocation_with_elf_files(RwElfFile *output_elf_file, ElfFile *input_e
 
         Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
         if (!symbol) {
-            if (!is_undefined_symbol(symbol_name)) {
-                panic("Trying to relocate a symbol that's defined but not in a symbol table: %s in section %s",
-                    symbol_name, input_section->name);
-            }
-
             // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
             dst_value = 0;
         } else {

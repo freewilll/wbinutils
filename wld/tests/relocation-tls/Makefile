@@ -7,7 +7,7 @@ test: run-main
 %.o: %.s
 	as $< -o $@
 
-main: main.o
+main: ${WLD} main.o
 	${WLD} -o main main.o
 
 run-main: main

@@ -302,7 +302,7 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     List *input_elf_files = read_input_files(library_paths, input_files);
 
     // At this point all symbols should be defined. Ensure this is the case.
-    fail_on_undefined_symbols();
+    finalize_symbols();
 
     // Create output file
     RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);

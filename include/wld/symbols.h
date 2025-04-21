@@ -35,7 +35,7 @@ typedef struct symbol {
 
 typedef struct symbol_table {
     StrMapOrdered *defined_symbols;
-    StrMap *undefined_symbols;
+    StrMapOrdered *undefined_symbols;
 } SymbolTable;
 
 extern SymbolTable *global_symbol_table;
@@ -53,7 +53,7 @@ SymbolTable *get_local_symbol_table(ElfFile *elf_file);
 Symbol *lookup_symbol(ElfFile *elf_file, char *name);
 int is_undefined_symbol(char *name);
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
-void fail_on_undefined_symbols(void);
+void finalize_symbols(void);
 void debug_print_symbol(Symbol *symbol);
 void debug_summarize_symbols(void);
 int common_symbols_are_present(void);
