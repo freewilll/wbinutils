@@ -55,8 +55,9 @@
 #define SHF_INFO_LINK     64    // sh_info contains SHT index
 
 // Program segment types
-#define	PT_NULL		    0       // Program header table entry unused
-#define PT_LOAD		    1       // Loadable program segment
+#define	PT_NULL         0       // Program header table entry unused
+#define PT_LOAD         1       // Loadable program segment
+#define PT_TLS          7       // Thread-local storage segment
 
 // Program segment flags
 #define PF_X            0x01 // Segment is executable

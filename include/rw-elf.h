@@ -26,6 +26,7 @@ typedef struct rw_section  {
     long entsize;                    // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
     long symtab_index;               // Index in the symbol table for this section
     struct rw_section *rela_section; // Optional related relocation section
+    int program_segment_index;       // Used by wld
     List *chunks;                    // Used by was
 } RwSection;
 
@@ -46,6 +47,8 @@ typedef struct rw_elf  {
     uint64_t executable_virt_address;                       // Virtual address of executable
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
+    uint64_t tls_template_tdata_size;                       // Size of the data part of the TLS template
+    uint64_t tls_template_tbss_size;                        // Size of the bss part of the TLS template
     uint64_t tls_template_size;                             // Size of the TLS template
     uint64_t tls_template_virt_address;                     // Virtual address of the TLS template
     uint64_t got_virt_address;                              // Virtual address of the GOT
@@ -76,6 +79,7 @@ void make_elf_headers(RwElfFile *output);
 void make_section_indexes(RwElfFile *output_elf_file);
 void make_rw_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, RwSection *section);
 void make_rw_section_headers(RwElfFile *output_elf_file);
+void make_program_segment_headers(RwElfFile *output);
 void layout_rw_elf_sections(RwElfFile *output_elf_file);
 void copy_rw_sections_to_elf(RwElfFile *output_elf_file);
 void write_elf_file(RwElfFile *output_elf_file);

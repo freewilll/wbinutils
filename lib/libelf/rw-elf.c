@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 
 #include "elf.h"
+#include "error.h"
 #include "list.h"
 #include "strmap.h"
 #include "rw-elf.h"
@@ -246,7 +247,7 @@ void make_rw_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, Rw
 
 // Make all output section headers
 void make_rw_section_headers(RwElfFile *output_elf_file) {
-    // Allocat ememory
+    // Allocate ememory
     output_elf_file->elf_section_headers_size = sizeof(ElfSectionHeader) * output_elf_file->sections_list->length;
     output_elf_file->elf_section_headers = calloc(1, output_elf_file->elf_section_headers_size);
 
@@ -261,7 +262,6 @@ void make_rw_section_headers(RwElfFile *output_elf_file) {
 // and allocate memory for the output
 void layout_rw_elf_sections(RwElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_headers = output_elf_file->elf_section_headers;
-    ElfProgramSegmentHeader *elf_program_segment_headers = output_elf_file->elf_program_segment_headers;
 
     // Determine section offsets
     // Align start of the sections on a page boundary after the ELF, program segments and section headers
@@ -271,7 +271,6 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
         output_elf_file->elf_section_headers_size;              // Section headers
 
     // Loop over all output sections
-    int program_segment_index = 0;
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
@@ -281,6 +280,7 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
             offset = ALIGN_DOWN(end - section->size, section->align);
             output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + offset;
             output_elf_file->tls_template_offset = offset;
+            output_elf_file->tls_template_tdata_size = section->size;
         }
 
         // Align program sections to page boundaries
@@ -294,31 +294,17 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
         elf_section_headers[i].sh_offset = offset;
         elf_section_headers[i].sh_addr = vaddr;
 
-        // Setup program segments if it's an executable
-        if (output_elf_file->type == ET_EXEC) {
-            if (    section->type == SHT_PROGBITS ||
-                    section->type == SHT_NOBITS ||
-                    section->type == SHT_INIT_ARRAY ||
-                    section->type == SHT_FINI_ARRAY ||
-                    section->type == SHT_PREINIT_ARRAY) {
-                program_segment_index++;
-
-                ElfProgramSegmentHeader *h = &elf_program_segment_headers[program_segment_index];
-
-                h->p_offset = offset;
-                h->p_vaddr = vaddr;
-                h->p_paddr = vaddr;
-            }
-        }
-
         if (section->type != SHT_NOBITS)
             offset = ALIGN_UP(offset + section->size, 16);
 
         // Save the total size of the .tdata + .tbss sections
-        if (section->type == SHT_NOBITS && (section->flags & SHF_TLS))
+        if (section->type == SHT_NOBITS && (section->flags & SHF_TLS)) {
             output_elf_file->tls_template_size = offset - output_elf_file->tls_template_offset + section->size;
+            output_elf_file->tls_template_tbss_size = section->size;
+        }
     }
 
+    // Allocate memory for the output file
     output_elf_file->size = offset;
     output_elf_file->data = calloc(1, output_elf_file->size);
 }

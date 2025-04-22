@@ -142,8 +142,8 @@ static void add_common_symbols_to_bss(RwElfFile *output) {
     layout_common_symbols_in_bss_section(output->section_bss);
 }
 
-// Populate the null program segment header
-static void make_null_program_segment_header(RwElfFile *output) {
+// Populate the first program segment header. This contains a page that has the start of the executable
+static void make_first_program_segment_header(RwElfFile *output) {
     ElfProgramSegmentHeader *h = &output->elf_program_segment_headers[0];
 
     int size = output->elf_section_headers_offset + output->elf_section_headers_size;
@@ -155,6 +155,92 @@ static void make_null_program_segment_header(RwElfFile *output) {
     h->p_filesz = size;
     h->p_memsz  = size;
     h->p_align  = 0x1000;                           // Align on page boundaries
+}
+
+// Make an ELF program segment header
+static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSegmentHeader *psh, RwSection *section) {
+    psh->p_flags = PF_R;
+
+    if (section->flags & SHF_WRITE) psh->p_flags |= PF_W;
+    if (section->flags & SHF_EXECINSTR) psh->p_flags |= PF_X;
+
+    psh->p_type = PT_LOAD;          // Segment type
+    psh->p_filesz = section->size;  // Segment size in file
+    psh->p_memsz = section->size;   // Segment size in memory
+}
+
+// Make all ELF program segment headers
+void make_program_segment_headers(RwElfFile *output) {
+    int needs_tls = 0;
+
+    // Determine the amount of program segments
+    output->elf_program_segments_count = 0;
+    for (int i = 0; i < output->sections_list->length; i++) {
+        RwSection *section = output->sections_list->elements[i];
+
+        // Setup program segments if it's an executable
+        if (EXECUTABLE_SECTION_TYPE(section->type)) {
+            if (section->flags & SHF_TLS) {
+                needs_tls = 1;
+
+                // Include .tdata section, but not .tbss section
+                if (section->type == SHT_PROGBITS)
+                    section->program_segment_index = output->elf_program_segments_count++;
+            }
+            else {
+                section->program_segment_index = output->elf_program_segments_count++;
+            }
+        }
+    }
+
+    int tls_program_segment_index;
+    if (needs_tls)
+        tls_program_segment_index = output->elf_program_segments_count++;
+
+    // Allocate memory for the program segment headers
+    output->elf_program_segments_header_size = sizeof(ElfProgramSegmentHeader) * output->elf_program_segments_count;
+    output->elf_program_segment_headers = calloc(1, output->elf_program_segments_header_size);
+
+    // Populate the null program segment header
+    make_first_program_segment_header(output);
+
+    ElfSectionHeader *elf_section_headers = output->elf_section_headers;
+    ElfProgramSegmentHeader *elf_program_segment_headers = output->elf_program_segment_headers;
+
+    // Loop over all output sections
+    for (int i = 0; i < output->sections_list->length; i++) {
+        RwSection *section = output->sections_list->elements[i];
+
+        if (!EXECUTABLE_SECTION_TYPE(section->type) || section->type == SHT_NULL) continue;
+
+        int program_segment_index = section->program_segment_index;
+        if (program_segment_index >= output->elf_program_segments_count)
+        panic("Bad accounting in program segments loop: %d >= %d", program_segment_index, output->elf_program_segments_count);
+
+        make_program_segment_header(output, &output->elf_program_segment_headers[program_segment_index], section);
+
+        ElfProgramSegmentHeader *h = &elf_program_segment_headers[program_segment_index];
+
+        int offset = elf_section_headers[i].sh_offset;
+        uint64_t vaddr = elf_section_headers[i].sh_addr;
+
+        h->p_offset = offset;
+        h->p_vaddr = vaddr;
+        h->p_paddr = vaddr;
+    }
+
+    if (needs_tls) {
+        ElfProgramSegmentHeader *h = &elf_program_segment_headers[tls_program_segment_index];
+
+        h->p_type = PT_TLS;
+        h->p_flags = PF_R;
+        h->p_offset = output->tls_template_offset;
+        h->p_filesz = output->tls_template_tdata_size;
+        h->p_memsz = output->tls_template_tdata_size + output->tls_template_tbss_size;
+        h->p_vaddr = output->tls_template_virt_address;
+        h->p_paddr = output->tls_template_virt_address;
+        h->p_align = 0x1000;
+    }
 }
 
 // Assign final values to all symbols
@@ -229,46 +315,6 @@ static void prepare_tls_template(RwElfFile *output_elf_file) {
     }
 }
 
-// Make an ELF program segment header
-static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSegmentHeader *psh, RwSection *section) {
-    psh->p_flags = PF_R;
-
-    if (section->flags & SHF_WRITE) psh->p_flags |= PF_W;
-    if (section->flags & SHF_EXECINSTR) psh->p_flags |= PF_X;
-
-    psh->p_type = PT_LOAD;          // Segment type
-    psh->p_vaddr = 0;               // Segment virtual address
-    psh->p_paddr = 0;               // Segment physical address
-    psh->p_filesz = section->size;  // Segment size in file
-    psh->p_memsz = section->size;   // Segment size in memory
-    psh->p_align = 0x1000;		    // Segments are aligned on page boundaries
-}
-
-// Make all ELF program segment headers
-// There is a one-to-one mapping between the sections and the segments.
-static void make_program_segment_headers(RwElfFile *output) {
-    output->elf_program_segments_count = 0;
-
-    for (int i = 0; i < output->sections_list->length; i++) {
-        RwSection *section = output->sections_list->elements[i];
-        if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
-
-        output->elf_program_segments_count += 1;
-    }
-
-    // Allocate memory for the program segment headers
-    output->elf_program_segments_header_size = sizeof(ElfProgramSegmentHeader) * output->elf_program_segments_count;
-    output->elf_program_segment_headers = calloc(1, output->elf_program_segments_header_size);
-
-    // Populate the program segment headers
-    for (int i = 0; i < output->sections_list->length; i++) {
-        RwSection *section = output->sections_list->elements[i];
-        if (!EXECUTABLE_SECTION_TYPE(section->type)) continue;
-
-        make_program_segment_header(output, &output->elf_program_segment_headers[i], section);
-    }
-}
-
 // Copy the memory for all program sections in the input files to the output file
 static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *output_elf_file) {
     // Loop over all files
@@ -326,20 +372,17 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Rearrange sections list
     make_section_indexes(output_elf_file);
 
-    // Make all ELF program segment headers
-    make_program_segment_headers(output_elf_file);
-
     // Add the symbols to the ELF symbol table
     make_elf_symbols(output_elf_file);
 
     // Make all ELF section headers
     make_rw_section_headers(output_elf_file);
 
-    // Populate the null program segment header
-    make_null_program_segment_header(output_elf_file);
-
     // Layout the sections & allocate memory for the output
     layout_rw_elf_sections(output_elf_file);
+
+    // Make the program segment headers
+    make_program_segment_headers(output_elf_file);
 
     // Assign final values to all symbols
     make_symbol_values(input_elf_files, output_elf_file);
