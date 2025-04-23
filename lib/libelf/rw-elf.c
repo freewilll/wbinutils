@@ -114,12 +114,10 @@ RwElfFile *new_rw_elf_file(const char *filename, int type) {
 
 // Make an ELF header
 void make_elf_headers(RwElfFile *output) {
-    // Layout the first page as follows:
+    // The layout the first page as follows:
     // - ELF header
     // - Program segment headers
-    // - Segment headers
-    output->elf_program_segments_offset  = sizeof(ElfSectionHeader);
-    output->elf_section_headers_offset  = output->elf_program_segments_offset + output->elf_program_segments_header_size;
+    // - Section headers
 
     // ELF header
     ElfHeader *elf_header = (ElfHeader *) output->data;
@@ -262,6 +260,14 @@ void make_rw_section_headers(RwElfFile *output_elf_file) {
 // and allocate memory for the output
 void layout_rw_elf_sections(RwElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_headers = output_elf_file->elf_section_headers;
+
+    // The layout the first page as follows:
+    // - ELF header
+    // - Program segment headers
+    // - Section headers
+
+    output_elf_file->elf_program_segments_offset  = sizeof(ElfSectionHeader);
+    output_elf_file->elf_section_headers_offset  = output_elf_file->elf_program_segments_offset + output_elf_file->elf_program_segments_header_size;
 
     // Determine section offsets
     // Align start of the sections on a page boundary after the ELF, program segments and section headers

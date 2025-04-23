@@ -199,6 +199,7 @@ void make_program_segment_headers(RwElfFile *output) {
 
     // Allocate memory for the program segment headers
     output->elf_program_segments_header_size = sizeof(ElfProgramSegmentHeader) * output->elf_program_segments_count;
+    free(output->elf_program_segment_headers); // Clear up potential headers from the last pass
     output->elf_program_segment_headers = calloc(1, output->elf_program_segments_header_size);
 
     // Populate the null program segment header
@@ -378,10 +379,13 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
     // Make all ELF section headers
     make_rw_section_headers(output_elf_file);
 
+    // Make the program segment headers: 1st pass, this to determine the size
+    make_program_segment_headers(output_elf_file);
+
     // Layout the sections & allocate memory for the output
     layout_rw_elf_sections(output_elf_file);
 
-    // Make the program segment headers
+    // Make the program segment headers: 2nd pass, this sets the offsets
     make_program_segment_headers(output_elf_file);
 
     // Assign final values to all symbols
@@ -406,9 +410,6 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
 
     // Copy the memory for all program sections in the input files to the output file
     copy_input_elf_sections_to_output(input_elf_files, output_elf_file);
-
-    // Copy all the section data to the final positions in the ELF file.
-    copy_rw_sections_to_elf(output_elf_file);
 
     // Write relocated symbol values to the output ELF file
     apply_relocations(input_elf_files, output_elf_file, RELOCATION_PHASE_APPLY);
