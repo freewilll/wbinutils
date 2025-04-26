@@ -10,6 +10,7 @@
 
 #include "wld/libs.h"
 #include "wld/symbols.h"
+#include "wld/wld.h"
 
 const char *BUILTIN_LIBRARY_PATHS[] = {
     "/usr/local/lib/x86_64-linux-gnu",
@@ -195,6 +196,7 @@ void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
             if (strmap_get(included_objects_map, obj->filename)) continue;
 
             ElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
+            if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s in archive %s\n", elf_file->filename, ar_file->filename);
             int resolved_symbols = process_elf_file_symbols(elf_file, 1, 1);
             if (resolved_symbols) {
                 // Use the object file
@@ -211,6 +213,7 @@ void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
     for (int i = 0; i < included_objects_list->length; i++) {
         ElfFile *elf_file = included_objects_list->elements[i];
         append_to_list(input_elf_files, elf_file);
+        if (DEBUG_SYMBOL_RESOLUTION) printf("Including %s\n", elf_file->filename);
     }
 
     free_strmap(included_objects_map);

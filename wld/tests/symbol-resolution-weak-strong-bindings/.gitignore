@@ -1,4 +1,4 @@
 *.o
 *.a
-main_*
-main_*
+mains_*
+mainw_*

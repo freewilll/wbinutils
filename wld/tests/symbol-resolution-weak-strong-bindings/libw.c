@@ -1,4 +1,4 @@
 #pragma weak f
 int f() {
-    return 1;
+    return 2;
 }

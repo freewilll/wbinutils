@@ -1,24 +1,32 @@
-# These tests also have much more concise unit tests,
-# so are redundant. But they are left here anyways, since
-# they are good e2e tests.
+# Add three symbols of the same name:
+# The first one is undefined in a main object file. It is either strong or weak.
+# The second one can be a object or lib and weak or strong
+# The third is like the second
 
+# These tests also have much more concise unit tests,
+# so are somewhat redundant. But they are left here anyways, since
+# they are good e2e tests.
 WLD = ../../../bin/wld
 
 all: test
 
 test: \
-	run-main_o1_o2 \
-	run-main_l1_o2 \
-	run-main_o1_l2 \
-	run-main_l1_l2 \
-	run-main_o2_o1 \
-	run-main_l2_o1 \
-	run-main_o2_l1 \
-	run-main_l2_l1 \
-
-# Test a weak symbol in file 1 and a strong symbol in file 2.
-# In all cases, the object files should link and the strong symbol
-# takes precedence over the weak.
+	run-mains_os_ow \
+	run-mains_ls_ow \
+	run-mains_os_lw \
+	run-mains_ls_lw \
+	run-mains_ow_os \
+	run-mains_lw_os \
+	run-mains_ow_ls \
+	run-mains_lw_ls \
+	run-mainw_os_ow \
+	run-mainw_ls_ow \
+	run-mainw_os_lw \
+	run-mainw_ls_lw \
+	run-mainw_ow_os \
+	run-mainw_lw_os \
+	run-mainw_ow_ls \
+	run-mainw_lw_ls \
 
 %.o: %.c
 	gcc $< -c -o $@
@@ -29,36 +37,84 @@ test: \
 %.a: %.o
 	ar rcs $@ $<
 
-main_o1_o2: main.o lib1.o lib2.o ${WLD}
-	${WLD} main.o lib1.o lib2.o -o main_o1_o2
+mains_os_ow: mains.o libs.o libw.o ${WLD}
+	${WLD} mains.o libs.o libw.o -o mains_os_ow
 
-main_l1_o2: main.o lib1.a lib2.o ${WLD}
-	${WLD} main.o -L . -l1 lib2.o -o main_l1_o2
+mains_ls_ow: mains.o libs.a libw.o ${WLD}
+	${WLD} mains.o -L . -ls libw.o -o mains_ls_ow
 
-main_o1_l2: main.o lib1.o lib2.a ${WLD}
-	${WLD} main.o lib1.o -L . -l2 -o main_o1_l2
+mains_os_lw: mains.o libs.o libw.a ${WLD}
+	${WLD} mains.o libs.o -L . -lw -o mains_os_lw
 
-main_l1_l2: main.o lib1.a lib2.a ${WLD}
-	${WLD} main.o -L . -l1 -l2 -o main_l1_l2
+mains_ls_lw: mains.o libs.a libw.a ${WLD}
+	${WLD} mains.o -L . -ls -lw -o mains_ls_lw
 
-main_o2_o1: main.o lib1.o lib2.o ${WLD1}
-	${WLD} main.o lib2.o lib1.o -o main_o2_o1
+mains_ow_os: mains.o libs.o libw.o ${WLD1}
+	${WLD} mains.o libw.o libs.o -o mains_ow_os
 
-main_o2_l1: main.o lib1.a lib2.o ${WLD}
-	${WLD} main.o lib2.o -L . -l1 -o main_o2_l1
+mains_ow_ls: mains.o libs.a libw.o ${WLD}
+	${WLD} mains.o libw.o -L . -ls -o mains_ow_ls
 
-main_l2_o1: main.o lib1.o lib2.a ${WLD}
-	${WLD} main.o -L . -l2 lib1.o -o main_l2_o1
+mains_lw_os: mains.o libs.o libw.a ${WLD}
+	${WLD} mains.o -L . -lw libs.o -o mains_lw_os
 
-main_l2_l1: main.o lib1.a lib2.a ${WLD}
-	${WLD} main.o -L . -l2 -l1 -o main_l2_l1
+mains_lw_ls: mains.o libs.a libw.a ${WLD}
+	${WLD} mains.o -L . -lw -ls -o mains_lw_ls
 
-run-main_%: main_%
-	@./$<
+mainw_os_ow: mainw.o libs.o libw.o ${WLD}
+	${WLD} mainw.o libs.o libw.o -o mainw_os_ow
+
+mainw_ls_ow: mainw.o libs.a libw.o ${WLD}
+	${WLD} mainw.o -L . -ls libw.o -o mainw_ls_ow
+
+mainw_os_lw: mainw.o libs.o libw.a ${WLD}
+	${WLD} mainw.o libs.o -L . -lw -o mainw_os_lw
+
+mainw_ls_lw: mainw.o libs.a libw.a ${WLD}
+	${WLD} mainw.o -L . -ls -lw -o mainw_ls_lw
+
+mainw_ow_os: mainw.o libs.o libw.o ${WLD1}
+	${WLD} mainw.o libw.o libs.o -o mainw_ow_os
+
+mainw_ow_ls: mainw.o libs.a libw.o ${WLD}
+	${WLD} mainw.o libw.o -L . -ls -o mainw_ow_ls
+
+mainw_lw_os: mainw.o libs.o libw.a ${WLD}
+	${WLD} mainw.o -L . -lw libs.o -o mainw_lw_os
+
+mainw_lw_ls: mainw.o libs.a libw.a ${WLD}
+	${WLD} mainw.o -L . -lw -ls -o mainw_lw_ls
+
+run-mains_%: mains_%
+	@./$<; ERR=$$? ; if [ "$$ERR" != "1" ]; then echo "Exit code was $$ERR, not 1."; exit 1; fi
+	@echo "lib-object-file-selection $< test passed"
+
+run-mains_%_ls: mains_%_ls
+	@./$<; ERR=$$? ; if [ "$$ERR" != "2" ]; then echo "Exit code was $$ERR, not 2."; exit 1; fi
+	@echo "lib-object-file-selection $< test passed"
+
+run-mainw_%: mainw_%
+	@./$<; ERR=$$? ; if [ "$$ERR" != "2" ]; then echo "Exit code was $$ERR, not 2."; exit 1; fi
+	@echo "lib-object-file-selection $< test passed"
+
+run-mainw_os_%: mainw_os_%
+	@./$<; ERR=$$? ; if [ "$$ERR" != "1" ]; then echo "Exit code was $$ERR, not 1."; exit 1; fi
+	@echo "lib-object-file-selection $< test passed"
+
+run-mainw_ls_lw: mainw_ls_lw
+	@./$<; ERR=$$? ; if [ "$$ERR" != "0" ]; then echo "Exit code was $$ERR, not 0."; exit 1; fi
+	@echo "lib-object-file-selection $< test passed"
+
+run-mainw_%_os: mainw_%_os
+	@./$<; ERR=$$? ; if [ "$$ERR" != "1" ]; then echo "Exit code was $$ERR, not 1."; exit 1; fi
+	@echo "lib-object-file-selection $< test passed"
+
+run-mainw_lw_ls: mainw_lw_ls
+	@./$<; ERR=$$? ; if [ "$$ERR" != "0" ]; then echo "Exit code was $$ERR, not 0."; exit 1; fi
 	@echo "lib-object-file-selection $< test passed"
 
 clean:
 	@rm -f *.o
 	@rm -f *.a
-	@rm -f main_*
-
+	@rm -f mains_*
+	@rm -f mainw_*

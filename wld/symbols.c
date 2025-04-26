@@ -73,13 +73,19 @@ Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
     return get_defined_symbol(global_symbol_table, name);
 }
 
+// Get an undefined symbol. Returns NULL if not present.
+Symbol *get_undefined_symbol(char *name) {
+    return strmap_ordered_get(global_symbol_table->undefined_symbols, name);
+}
+
 // Is a symbol in the undefined symbols set?
 int is_undefined_symbol(char *name) {
-    return strmap_ordered_get(global_symbol_table->undefined_symbols, name) != NULL;
+    return get_undefined_symbol(name) != NULL;
 }
 
 // Remove a symbol from the undefined symbols set
 static void remove_undefined_symbol(char *name) {
+    printf("  removed undefined %s\n", name);
     strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
 }
 
@@ -97,6 +103,7 @@ static Symbol *new_symbol(char *name, int type, int binding, int other, int size
 }
 
 static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int binding, int other, int size, int is_library) {
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Adding defined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_ordered_put(st->defined_symbols, name, symbol);
     return symbol;
@@ -107,6 +114,7 @@ static Symbol *add_global_defined_symbol(char *name, int type, int binding, int 
 }
 
 static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Adding undefined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
 }
@@ -131,9 +139,23 @@ static void fail(ElfFile *elf_file, char *format, ...) {
     verror_in_file(format, ap);
 }
 
-static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
-    int result = 0;
+// Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
+// Returns 1 if an undefined symbol has been resolved.
+static int resolve_undefined_symbol(char *name, char binding, int is_library, int read_only) {
+    Symbol *undefined_symbol = get_undefined_symbol(name);
+    if (!undefined_symbol) return 0;
 
+    // Resolve the undefined symbol.
+    if (!read_only) remove_undefined_symbol(name);
+
+    // Weak undefined symbols don't get resolved if also found in a library.
+    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
+
+    return 1;
+}
+
+
+static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
     char *name = &elf_file->strtab_strings[symbol->st_name];
 
@@ -151,15 +173,9 @@ static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_tabl
         new_symbol->src_value = symbol->st_value;
     }
 
-    if (is_undefined_symbol(name)) {
-        // This resolved an undefined symbol
-        if (!read_only) remove_undefined_symbol(name);
-        result = 1;
-    }
-
-    return result;
-
+    return resolve_undefined_symbol(name, binding, is_library, read_only);
 }
+
 // Handle a symbol where either the found symbol or symbol is common
 // The found symbol may be undefined.
 // Returns if the symbol has resolved an undefined symbol
@@ -216,11 +232,7 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
             new_symbol->is_common = 1;
         }
 
-        if (is_undefined_symbol(name)) {
-            // This resolved an undefined symbol
-            if (!read_only) remove_undefined_symbol(name);
-            result = 1;
-        }
+        result = resolve_undefined_symbol(name, binding, is_library, read_only);
     }
 
     return result;
@@ -254,11 +266,7 @@ static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, S
             new_symbol->is_abs = 1;
         }
 
-        if (is_undefined_symbol(name)) {
-            // This resolved an undefined symbol
-            if (!read_only) remove_undefined_symbol(name);
-            return 1;
-        }
+        return resolve_undefined_symbol(name, binding, is_library, read_only);
     }
 
     return 0;
@@ -296,7 +304,8 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
             ; // Do nothing
         else {
             // One is strong and one is weak.
-            if (binding != STB_WEAK) {
+            // If the new symbol is strong and not in a library, it resolves the exiting weak one
+            if (binding != STB_WEAK && !is_library) {
                 // The new symbol is strong and takes over
                 result = 1;
 
@@ -321,11 +330,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
             new_symbol->is_common = 0;
         }
 
-        if (is_undefined_symbol(name)) {
-            // This resolved an undefined symbol
-            if (!read_only) remove_undefined_symbol(name);
-            result = 1;
-        }
+        result = resolve_undefined_symbol(name, binding, is_library, read_only);
     }
 
     return result;
@@ -560,7 +565,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t e
                     symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
             }
 
-            if (DEBUG) {
+            if (DEBUG_RELOCATIONS) {
                 printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK)

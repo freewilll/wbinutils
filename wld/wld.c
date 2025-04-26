@@ -24,6 +24,7 @@ static List *read_input_files(List *library_paths, List *input_files) {
     for (int i = 0; i < input_files->length; i++) {
         InputFile *input_file = input_files->elements[i];
         char *input_filename = input_file->filename;
+        if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s\n", input_filename);
 
         if (input_file->is_library) {
             char *path = search_for_library(library_paths, input_filename);
@@ -113,7 +114,7 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
             input_section->offset = offset;
             input_section->dst_section = rw_section;
 
-            if (DEBUG) printf("File %s section %s is at offset %#08x in target section\n", elf_file->filename, input_section->name, offset);
+            if (DEBUG_RELOCATIONS) printf("File %s section %s is at offset %#08x in target section\n", elf_file->filename, input_section->name, offset);
 
             rw_section->size = offset + elf_section_header->sh_size;
         }
@@ -246,7 +247,7 @@ void make_program_segment_headers(RwElfFile *output) {
 
 // Assign final values to all symbols
 static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file) {
-    if (DEBUG) printf("\nGlobal symbols:\n");
+    if (DEBUG_RELOCATIONS) printf("\nGlobal symbols:\n");
 
     // Global symbols
     make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, global_symbol_table);
@@ -254,7 +255,7 @@ static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file
     // Local symbols
     for (int i = 0; i < input_elf_files->length; i++) {
         ElfFile *elf_file = input_elf_files->elements[i];
-        if (DEBUG) printf("\nLocal symbols for %s:\n", elf_file->filename);
+        if (DEBUG_RELOCATIONS) printf("\nLocal symbols for %s:\n", elf_file->filename);
         SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
         make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, local_symbol_table);
     }

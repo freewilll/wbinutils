@@ -108,13 +108,13 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
         S -= output_elf_file->tls_template_size;
     }
 
-    if (DEBUG) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
+    if (DEBUG_RELOCATIONS) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
 
     switch (type) {
         case R_X86_64_64: {
             uint64_t *output = (uint64_t *) output_pointer;
             uint64_t value = S + A;
-            if (DEBUG) printf("    value=%#lx\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             *output = value;
             break;
         }
@@ -127,7 +127,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
             // This is mostly to make an unusual TLS test case work.
             if (is_tls_value) value += output_elf_file->tls_template_virt_address;
 
-            if (DEBUG) printf("    value=%#x\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             *output = value;
             break;
         }
@@ -136,7 +136,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
         case R_X86_64_32S: {
             uint32_t value = S + A;
             uint32_t *output = (uint32_t *) output_pointer;
-            if (DEBUG) printf("    value=%#x\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             *output = value;
             break;
         }
@@ -149,14 +149,14 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
 
             if (output_offset > 1 && opcode == 0xc7) {
                 uint32_t value = S; // Ignore the addend, this is an absolute address
-                if (DEBUG) printf("    value=%#x\n", value);
+                if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
                 *output = value;
                 break;
             }
 
             else if (output_offset > 1 && opcode == 0x67) {
                 uint32_t value = S + A - P;
-                if (DEBUG) printf("    value=%#x\n", value);
+                if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
                 *output = value;
                 break;
             }
@@ -174,7 +174,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
                 S = output_elf_file->got_virt_address + value_got_offset + A - P;
             }
 
-            if (DEBUG) printf("    value=%#x\n", S);
+            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", S);
             uint32_t *output = (uint32_t *) output_pointer;
             *output = S;
             break;
@@ -185,7 +185,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
         case R_X86_64_TPOFF32: {
             uint32_t *output = (uint32_t *) output_pointer;
             uint32_t value = S + A - output_elf_file->tls_template_size;
-            if (DEBUG) printf("    value=%#x\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             *output = value;
             break;
         }
@@ -247,7 +247,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
         }
     }
 
-    if (DEBUG) {
+    if (DEBUG_RELOCATIONS) {
         const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
         printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
             input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
@@ -391,13 +391,13 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file, int ph
     // This way I know what lies ahead until the executable can be run.
     int failed_relocations = 0;
 
-    if (DEBUG) printf("\nRelocations:\n");
+    if (DEBUG_RELOCATIONS) printf("\nRelocations:\n");
 
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
         ElfFile *input_elf_file = input_elf_files->elements[i];
 
-        if (DEBUG) printf("%s\n", input_elf_file->filename);
+        if (DEBUG_RELOCATIONS) printf("%s\n", input_elf_file->filename);
 
         // Loop over all relocation sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
