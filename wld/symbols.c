@@ -85,7 +85,7 @@ int is_undefined_symbol(char *name) {
 
 // Remove a symbol from the undefined symbols set
 static void remove_undefined_symbol(char *name) {
-    printf("  removed undefined %s\n", name);
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s\n", name);
     strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
 }
 
@@ -103,7 +103,7 @@ static Symbol *new_symbol(char *name, int type, int binding, int other, int size
 }
 
 static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int binding, int other, int size, int is_library) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Adding defined symbol %s\n", name);
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s binding=%s\n", name, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_ordered_put(st->defined_symbols, name, symbol);
     return symbol;
@@ -114,7 +114,7 @@ static Symbol *add_global_defined_symbol(char *name, int type, int binding, int 
 }
 
 static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Adding undefined symbol %s\n", name);
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
 }
@@ -605,7 +605,7 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
-        if (symbol->binding == STB_WEAK) continue;
+        if (!symbol->dst_section) continue; // Weak symbols may not be defined
         if (symbol->is_abs) continue;
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
