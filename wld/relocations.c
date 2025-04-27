@@ -217,7 +217,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
 
     // Get the output section
     RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
-    if (!rw_section) panic("Unexpected null section in output when applying relocations");
+    if (!rw_section) return 0; // The section is not included
 
     // Determine the value of the symbol
     if (elf_symbol_type == STT_SECTION) {
