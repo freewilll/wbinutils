@@ -596,7 +596,7 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (symbol->is_internal) continue;
-        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, STB_GLOBAL, symbol->type, 0);
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, 0);
     }
 }
 
