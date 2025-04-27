@@ -151,8 +151,8 @@ static void make_first_program_segment_header(RwElfFile *output) {
 
     h->p_type   = PT_LOAD;                          // Loadable
     h->p_flags  = PF_R;                             // Read only
-    h->p_vaddr  = output->executable_virt_address;  // Start of the executable
-    h->p_paddr  = output->executable_virt_address;
+    h->p_vaddr  = output->executable_address;       // Start of the executable
+    h->p_paddr  = output->executable_address;
     h->p_filesz = size;
     h->p_memsz  = size;
     h->p_align  = 0x1000;                           // Align on page boundaries
@@ -239,8 +239,8 @@ void make_program_segment_headers(RwElfFile *output) {
         h->p_offset = output->tls_template_offset;
         h->p_filesz = output->tls_template_tdata_size;
         h->p_memsz = output->tls_template_tdata_size + output->tls_template_tbss_size;
-        h->p_vaddr = output->tls_template_virt_address;
-        h->p_paddr = output->tls_template_virt_address;
+        h->p_vaddr = output->tls_template_address;
+        h->p_paddr = output->tls_template_address;
         h->p_align = 0x1000;
     }
 }
@@ -250,14 +250,14 @@ static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file
     if (DEBUG_RELOCATIONS) printf("\nGlobal symbols:\n");
 
     // Global symbols
-    make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, global_symbol_table);
+    make_symbol_values_from_symbol_table(output_elf_file, global_symbol_table);
 
     // Local symbols
     for (int i = 0; i < input_elf_files->length; i++) {
         ElfFile *elf_file = input_elf_files->elements[i];
         if (DEBUG_RELOCATIONS) printf("\nLocal symbols for %s:\n", elf_file->filename);
         SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
-        make_symbol_values_from_symbol_table(output_elf_file, output_elf_file->executable_virt_address, local_symbol_table);
+        make_symbol_values_from_symbol_table(output_elf_file, local_symbol_table);
     }
 }
 
@@ -266,8 +266,8 @@ static void make_array_symbol_values(RwElfFile *output_elf_file) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
         #define SET_START_END(start_symbol, end_symbol) { \
-            must_get_global_defined_symbol(start_symbol)->dst_value = output_elf_file->executable_virt_address + section->offset; \
-            must_get_global_defined_symbol(end_symbol)->dst_value = output_elf_file->executable_virt_address + section->offset + section->size; \
+            must_get_global_defined_symbol(start_symbol)->dst_value = output_elf_file->executable_address + section->offset; \
+            must_get_global_defined_symbol(end_symbol)->dst_value = output_elf_file->executable_address + section->offset + section->size; \
         }
 
         // Fragile: if the section is empty, it won't have a value, and the start/end symbols will both be zero.
@@ -305,15 +305,15 @@ static void prepare_tls_template(RwElfFile *output_elf_file) {
 
     if (tdata_section && !tbss_section) {
         output_elf_file->tls_template_size = tdata_section->size;
-        output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + tdata_section->offset;
+        output_elf_file->tls_template_address = output_elf_file->executable_address + tdata_section->offset;
     }
     else if (!tdata_section && tbss_section) {
         output_elf_file->tls_template_size = tbss_section->size;
-        output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + tbss_section->offset;
+        output_elf_file->tls_template_address = output_elf_file->executable_address + tbss_section->offset;
     }
     else if (tdata_section && tbss_section) {
         output_elf_file->tls_template_size = tbss_section->offset - tdata_section->offset + tbss_section->size;
-        output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + tdata_section->offset;
+        output_elf_file->tls_template_address = output_elf_file->executable_address + tdata_section->offset;
     }
 }
 
@@ -360,7 +360,7 @@ void run(List *library_paths, List *input_files, const char *output_filename) {
 
     // Create output file
     RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
-    output_elf_file->executable_virt_address = EXECUTABLE_VIRTUAL_ADDRESS;
+    output_elf_file->executable_address = EXECUTABLE_VIRTUAL_ADDRESS;
 
     // Create sections in the output file
     create_output_file_sections(input_elf_files, output_elf_file);

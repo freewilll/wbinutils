@@ -53,26 +53,27 @@ void assert_data(char *data, ...) {
     va_end(ap);
 }
 
-void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_virt_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset) {
+void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset) {
     RwElfFile *output_elf_file = new_rw_elf_file("", ET_EXEC);
-    output_elf_file->tls_template_virt_address = tls_template_virt_address;
+    output_elf_file->tls_template_address = tls_template_address;
     output_elf_file->tls_template_size = tls_template_size;
 
     ElfRelocation relocation = {.r_offset = output_offset, .r_info = type, .r_addend = addend};
 
-    output_elf_file->executable_virt_address = 0x400000;
+    output_elf_file->executable_address = 0x400000;
     output_elf_file->got_virt_address = 0x500000;
-    uint64_t rw_section_offset = output_virtual_address - output_elf_file->executable_virt_address - output_offset;
+    uint64_t rw_section_address = output_virtual_address - output_offset;
+    uint64_t rw_section_offset = rw_section_address - output_elf_file->executable_address;
 
     int result = scan_relocation(output_data, &relocation);
     if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);
-    result = apply_relocation(output_elf_file, output_data, rw_section_offset, output_offset, &relocation, value, is_tls_value, value_got_offset);
+    result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, &relocation, value, is_tls_value, value_got_offset);
     if (result) panic("Relocation apply failed");
 }
 
 // Runs a relocation with TLS args
-void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_virt_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value) {
-    run_full_relocation(output_data, output_offset, tls_template_virt_address, tls_template_size, type, addend, output_virtual_address, value, is_tls_value, 0);
+void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value) {
+    run_full_relocation(output_data, output_offset, tls_template_address, tls_template_size, type, addend, output_virtual_address, value, is_tls_value, 0);
 }
 
 // Runs a relocation without TLS args

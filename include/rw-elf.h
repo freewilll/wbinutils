@@ -23,6 +23,7 @@ typedef struct rw_section  {
     int allocated;                   // Amount of bytes allocated for data
     int size;                        // Size in bytes
     int offset;                      // Offset in the file
+    int address;                     // Address in the executable
     long entsize;                    // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
     long symtab_index;               // Index in the symbol table for this section
     struct rw_section *rela_section; // Optional related relocation section
@@ -44,13 +45,13 @@ typedef struct rw_elf  {
     RwSection *section_shstrtab;                            // Section header string table
     RwSection *section_got;                                 // Global Offset Table section
     int local_symbol_end;                                   // Index of last local symbol
-    uint64_t executable_virt_address;                       // Virtual address of executable
+    uint64_t executable_address;                            // Virtual address of executable
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
     uint64_t tls_template_tdata_size;                       // Size of the data part of the TLS template
     uint64_t tls_template_tbss_size;                        // Size of the bss part of the TLS template
     uint64_t tls_template_size;                             // Size of the TLS template
-    uint64_t tls_template_virt_address;                     // Virtual address of the TLS template
+    uint64_t tls_template_address;                          // Virtual address of the TLS template
     uint64_t got_virt_address;                              // Virtual address of the GOT
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers

@@ -277,32 +277,40 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
         output_elf_file->elf_program_segments_header_size +     // Program segments headers
         output_elf_file->elf_section_headers_size;              // Section headers
 
+    int address = output_elf_file->executable_address + offset;
+
     // Loop over all output sections
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
         // Align TLS .tdata section to page boundaries, but move the data to the end of the section
         if (section->type == SHT_PROGBITS && (section->flags & SHF_TLS)) {
-            uint64_t end = ALIGN_UP(offset + section->size, 0x1000);
-            offset = ALIGN_DOWN(end - section->size, section->align);
-            output_elf_file->tls_template_virt_address = output_elf_file->executable_virt_address + offset;
+            uint64_t offset_end = ALIGN_UP(offset + section->size, 0x1000);
+            offset = ALIGN_DOWN(offset_end - section->size, section->align);
+
+            uint64_t address_end = ALIGN_UP(address + section->size, 0x1000);
+            address = ALIGN_DOWN(address_end - section->size, section->align);
+
+            output_elf_file->tls_template_address = address;
             output_elf_file->tls_template_offset = offset;
             output_elf_file->tls_template_tdata_size = section->size;
         }
 
         // Align program sections to page boundaries
-        else if (section->type == SHT_PROGBITS)
+        else if (section->type == SHT_PROGBITS) {
             offset = ALIGN_UP(offset, 0x1000);
-
-        // Determine executable address of the section
-        uint64_t vaddr = output_elf_file->executable_virt_address + offset;
+            address = ALIGN_UP(address, 0x1000);
+        }
 
         section->offset = offset;
+        section->address = address;
         elf_section_headers[i].sh_offset = offset;
-        elf_section_headers[i].sh_addr = vaddr;
+        elf_section_headers[i].sh_addr = address;
 
         if (section->type != SHT_NOBITS)
             offset = ALIGN_UP(offset + section->size, 16);
+
+        address = ALIGN_UP(address + section->size, 16);
 
         // Save the total size of the .tdata + .tbss sections
         if (section->type == SHT_NOBITS && (section->flags & SHF_TLS)) {

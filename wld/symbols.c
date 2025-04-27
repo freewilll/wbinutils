@@ -531,7 +531,7 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
 }
 
 // Assign final values to all symbols
-void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t executable_virt_address, SymbolTable *symbol_table) {
+void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTable *symbol_table) {
     strmap_ordered_foreach(symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
@@ -541,7 +541,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t e
         }
         else if (symbol->is_common) {
             RwSection *section_bss = output_elf_file->section_bss;
-            symbol->dst_value = executable_virt_address + section_bss->offset + symbol->src_value;
+            symbol->dst_value = section_bss->address + symbol->src_value;
             symbol->dst_section = section_bss;
         }
         else {
@@ -562,7 +562,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, uint64_t e
                 if (symbol->type == STT_TLS)
                     symbol->dst_value = symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value - output_elf_file->tls_template_offset;
                 else
-                    symbol->dst_value = executable_virt_address + symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value;
+                    symbol->dst_value = symbol->src_section->dst_section->address + symbol->src_section->offset + symbol->src_value;
             }
 
             if (DEBUG_RELOCATIONS) {
@@ -654,7 +654,7 @@ void update_got_symbol_values(RwElfFile *output_elf_file) {
 
     // Set the special GOT symbol to the virtual address of the GOT
     Symbol *got_symbol = must_get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
-    got_symbol->dst_value = output_elf_file->executable_virt_address + output_elf_file->section_got->offset;
+    got_symbol->dst_value = output_elf_file->section_got->address;
 
     // Set the address of the GOT
     output_elf_file->got_virt_address = got_symbol->dst_value;

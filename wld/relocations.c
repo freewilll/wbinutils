@@ -89,8 +89,8 @@ static void convert_Gvqp_to_Evqp(void *data, uint8_t opcode, uint8_t binary_oper
 // This function updates the values in the output ELF file. The code may already have been relaxed by
 // scan_relocation().
 // All ELF file details are abstracted away, so that function can be easily tested.
-int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t rw_section_offset, uint64_t output_offset, ElfRelocation *relocation, uint64_t value, int is_tls_value, int value_got_offset) {
-    uint32_t output_virtual_address = output_elf_file->executable_virt_address + rw_section_offset + output_offset;
+int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t rw_section_offset, uint64_t rw_section_address, uint64_t output_offset, ElfRelocation *relocation, uint64_t value, int is_tls_value, int value_got_offset) {
+    uint32_t output_virtual_address = rw_section_address + output_offset;
 
     output_pointer += output_offset;
     int type = relocation->r_info & 0xffffffff;
@@ -125,7 +125,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
 
             // Unusual case of accessing a TLS template variable directly.
             // This is mostly to make an unusual TLS test case work.
-            if (is_tls_value) value += output_elf_file->tls_template_virt_address;
+            if (is_tls_value) value += output_elf_file->tls_template_address;
 
             if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             *output = value;
@@ -229,7 +229,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
         RwSection *symbol_rw_section = get_rw_section(output_elf_file, symbol_section->name);
         if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
 
-        dst_value = output_elf_file->executable_virt_address + symbol_rw_section->offset + elf_symbol->st_value;
+        dst_value = output_elf_file->executable_address + symbol_rw_section->offset + elf_symbol->st_value;
     }
     else {
         // Handle a relocation to a non-section symbol
@@ -255,7 +255,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
 
     uint64_t output_offset = input_section->offset + relocation->r_offset;
 
-    return apply_relocation(output_elf_file, rw_section->data, rw_section->offset, output_offset, relocation, dst_value, is_tls_value, got_offset);
+    return apply_relocation(output_elf_file, rw_section->data, rw_section->offset, rw_section->address, output_offset, relocation, dst_value, is_tls_value, got_offset);
 }
 
 // Given an input file and a relocation, relax any instructions where possible and determine if the symbol needs to be in the GOT.
