@@ -69,7 +69,7 @@ RwSection *add_rw_section(RwElfFile *rw_elf_file, const char *name, int type, in
 int add_to_rw_section(RwSection *section, const void *src, int size);
 int add_repeated_value_to_rw_section(RwSection *section, char value, int size);
 int add_zeros_to_rw_section(RwSection *section, int size);
-int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int section_index);
+int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index);
 void add_file_symbol(RwElfFile *output_elf_file, char *filename);
 void add_elf_relocation(RwElfFile *output_elf_file, RwSection *section, int type, int symbol_index, long offset, long addend);
 

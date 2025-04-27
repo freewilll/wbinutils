@@ -1,6 +1,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "elf.h"
+
 #include "was/elf.h"
 #include "was/strmap.h"
 #include "was/symbols.h"
@@ -81,7 +83,7 @@ void make_symbols_section(void) {
         int dot_local = strlen(name) >= 2 && name[0] == '.' && name[1] == 'L';
         if (symbol->binding != STB_GLOBAL && !dot_local) {
             const char *elf_name = symbol->type == STT_SECTION ? "" : name;
-            symbol->symtab_index = add_elf_symbol(output_elf_file, elf_name, symbol->value, symbol->size, symbol->binding, symbol->type, symbol->section_index);
+            symbol->symtab_index = add_elf_symbol(output_elf_file, elf_name, symbol->value, symbol->size, symbol->binding, symbol->type, STV_DEFAULT, symbol->section_index);
 
             if (symbol->type == STT_SECTION) {
                 RwSection *section = get_rw_section(output_elf_file, name);
@@ -98,7 +100,7 @@ void make_symbols_section(void) {
         if (symbol->section) symbol->section_index = symbol->section->index;
 
         if (symbol->binding == STB_GLOBAL)
-            symbol->symtab_index = add_elf_symbol(output_elf_file, name, symbol->value, symbol->size, symbol->binding, symbol->type, symbol->section_index);
+            symbol->symtab_index = add_elf_symbol(output_elf_file, name, symbol->value, symbol->size, symbol->binding, symbol->type, STV_DEFAULT, symbol->section_index);
     }
 
     output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
@@ -121,5 +123,5 @@ void init_default_sections(void) {
     // Start string table entries at 1, so that the zero value goes to an empty string
     add_to_rw_section(output_elf_file->section_strtab, "", 1);
 
-    add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, SHN_UNDEF); // Null symbol
+    add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 }

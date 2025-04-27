@@ -585,18 +585,17 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
     output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
     output_elf_file->section_symtab->info = output_elf_file->sections_list->length; // Index of the first global symbol
 
-    add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, SHN_UNDEF); // Null symbol
+    add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
-        add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, i);
+        add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, STV_DEFAULT, i);
     }
 
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
-        if (symbol->is_internal) continue;
-        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, 0);
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, 0);
     }
 }
 
@@ -614,23 +613,23 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
     }
 }
 
-static void add_internal_symbol(char *name) {
+static void add_hidden_symbol(char *name) {
     Symbol *symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
     symbol->is_abs = 1;
-    symbol->is_internal = 1;
+    symbol->visibility = STV_HIDDEN;
 }
 
 void init_symbols(void) {
     global_symbol_table = new_symbol_table();
     local_symbol_tables = new_strmap();
 
-    add_internal_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
-    add_internal_symbol(PREINIT_ARRAY_START_SYMBOL_NAME);
-    add_internal_symbol(PREINIT_ARRAY_END_SYMBOL_NAME);
-    add_internal_symbol(INIT_ARRAY_START_SYMBOL_NAME);
-    add_internal_symbol(INIT_ARRAY_END_SYMBOL_NAME);
-    add_internal_symbol(FINI_ARRAY_START_SYMBOL_NAME);
-    add_internal_symbol(FINI_ARRAY_END_SYMBOL_NAME);
+    add_hidden_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
+    add_hidden_symbol(PREINIT_ARRAY_START_SYMBOL_NAME);
+    add_hidden_symbol(PREINIT_ARRAY_END_SYMBOL_NAME);
+    add_hidden_symbol(INIT_ARRAY_START_SYMBOL_NAME);
+    add_hidden_symbol(INIT_ARRAY_END_SYMBOL_NAME);
+    add_hidden_symbol(FINI_ARRAY_START_SYMBOL_NAME);
+    add_hidden_symbol(FINI_ARRAY_END_SYMBOL_NAME);
 }
 
 void create_global_offset_table(RwElfFile *output_elf_file) {

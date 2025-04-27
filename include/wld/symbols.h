@@ -23,7 +23,7 @@ typedef struct symbol {
     int size;
     int is_abs;             // The src value is an absolute address
     int is_common;          // The symbol is a common symbol. src_section is null.
-    int is_internal;        // Used by the linker
+    int visibility;         // Used by the linker
     int src_is_library;     // 1 if the symbol was found in a library, otherwise it was found in an object file
     int needs_got;          // Set if the symbol needs an entry in the Global Offset Table (GOT)
     uint64_t got_offset;    // Offset in the GOT, if present

@@ -66,7 +66,7 @@ int add_zeros_to_rw_section(RwSection *section, int size) {
 
 // Add a symbol to the ELF symbol table symtab
 // This function must be called with all local symbols first, then all global symbols
-int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int section_index) {
+int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index) {
     // Add a string to the strtab unless name is "".
     // Empty names are all mapped to the first entry in the string table.
     int strtab_offset = *name ? add_to_rw_section(output_elf_file->section_strtab, name, strlen(name) + 1) : 0;
@@ -77,6 +77,7 @@ int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, lon
     symbol->st_value = value;
     symbol->st_size = size;
     symbol->st_info = (binding << 4) + type;
+    symbol->st_other = visibility;
     symbol->st_shndx = section_index;
 
     int index = symbol - (ElfSymbol *) output_elf_file->section_symtab->data;
@@ -88,7 +89,7 @@ int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, lon
 
 // Add a special symbol with the source filename
 void add_file_symbol(RwElfFile *output_elf_file, char *filename) {
-    add_elf_symbol(output_elf_file, filename, 0, 0, STB_LOCAL, STT_FILE, SHN_ABS);
+    add_elf_symbol(output_elf_file, filename, 0, 0, STB_LOCAL, STT_FILE, SHN_ABS, 0);
 }
 
 // Add a relocation to the ELF rela_text section.
