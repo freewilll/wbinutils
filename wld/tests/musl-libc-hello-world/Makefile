@@ -10,8 +10,7 @@ all: run-main
 	as $< -o $@
 
 main.o: main.c
-	# AS=${WAS} ${WCC} -c main.c -o main.o # TODO
-	gcc main.c -c -o main.o
+	AS=${WAS} ${WCC} -c main.c -o main.o
 
 main: main.o ${WLD}
 	${WLD} \

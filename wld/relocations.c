@@ -216,7 +216,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
     int got_offset = -1;
 
     // Get the output section
-    RwSection *rw_section = get_rw_section(output_elf_file, input_section->name);
+    RwSection *rw_section = input_section->dst_section;
     if (!rw_section) return 0; // The section is not included
 
     // Determine the value of the symbol
@@ -226,7 +226,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
         Section *symbol_section = (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
         symbol_name = symbol_section->name;
 
-        RwSection *symbol_rw_section = get_rw_section(output_elf_file, symbol_section->name);
+        RwSection *symbol_rw_section = symbol_section->dst_section;
         if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
 
         dst_value = output_elf_file->executable_address + symbol_rw_section->offset + symbol_section->offset + elf_symbol->st_value;

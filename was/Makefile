@@ -62,7 +62,7 @@ scripts/venv:
 opcodes-generated.c: scripts/parse-x86reference.xml.py scripts/opcodes.j2 scripts/venv
 	scripts/venv/bin/python3 scripts/parse-x86reference.xml.py ../../x86reference-2.xml opcodes-generated.c
 
-${TARGET}: ${OBJECTS} main.o ${HEADERS_PATH}
+${TARGET}: ${OBJECTS} main.o ${HEADERS_PATH} ${LIBS_PATH}
 	gcc -g -Werror -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} main.o -o ${TARGET}
 
 .PHONY: test

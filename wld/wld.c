@@ -11,10 +11,6 @@
 #include "wld/symbols.h"
 #include "wld/wld.h"
 
-static const char *SUPPORTED_SECTION_NAMES[] = {
-    ".text", ".data", ".rodata", ".bss"
-};
-
 static void add_bss_rw_section(RwElfFile *output);
 
 // Go down all input files which are either object files or libraries
@@ -57,6 +53,15 @@ static int string_begins_with(const char *str, const char *prefix) {
      return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
+static const char *get_output_section_name_from_input_section(const char *input_section_name) {
+    char *output_section_name = strdup(input_section_name);
+    if (string_begins_with(input_section_name, ".text")) output_section_name = ".text";
+    if (string_begins_with(input_section_name, ".data")) output_section_name = ".data";
+    if (string_begins_with(input_section_name, ".bss")) output_section_name = ".bss";
+    if (string_begins_with(input_section_name, ".rodata")) output_section_name = ".rodata";
+    return output_section_name;
+}
+
 // Loop over all sections in the input files and create the target sections in the output file.
 static void create_output_file_sections(List *input_elf_files, RwElfFile *output_elf_file) {
     create_default_sections(output_elf_file);
@@ -79,13 +84,15 @@ static void create_output_file_sections(List *input_elf_files, RwElfFile *output
             if (string_begins_with(input_section->name, ".debug")) continue;
 
             // Create a section, if it already exists, amend the alignment if necessary.
-            RwSection *rw_section = get_rw_section(output_elf_file, name);
+            const char *output_section_name = get_output_section_name_from_input_section(name);
+            RwSection *rw_section = get_rw_section(output_elf_file, output_section_name);
             if (!rw_section) {
                 if (!strcmp(name, ".bss")) {
                     add_bss_rw_section(output_elf_file);
                 }
-                else
-                    add_rw_section(output_elf_file, name, elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
+                else {
+                    add_rw_section(output_elf_file, output_section_name, elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
+                }
             }
             else {
                 rw_section->align = MAX(rw_section->align, elf_section_header->sh_addralign);
@@ -112,8 +119,9 @@ static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_
             if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
 
             // Look up the RW section. It must already exist.
-            const char *section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
-            RwSection *rw_section = get_rw_section(output_elf_file, section_name);
+            const char *input_section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
+            const char *output_section_name = get_output_section_name_from_input_section(input_section_name);
+            RwSection *rw_section = get_rw_section(output_elf_file, output_section_name);
             if (!rw_section) continue; // The section is not included
 
             // Align the section
@@ -343,7 +351,7 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
             if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
 
             const char *section_name = &input_elf_file->section_header_strings[input_elf_section_header->sh_name];
-            RwSection *rw_section = get_rw_section(output_elf_file, section_name);
+            RwSection *rw_section = input_section->dst_section;
             if (!rw_section) continue; // The section is not included
 
             // Allocate memory if not already done in a previous loop

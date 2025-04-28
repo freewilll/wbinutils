@@ -550,7 +550,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
                 // Get the output section
                 if (!symbol->src_section->dst_section) panic("Unexpectedly got null dst_section for %s from %s\n", symbol->name, symbol->src_section->name);
 
-                RwSection *rw_section = get_rw_section(output_elf_file, symbol->src_section->dst_section->name);
+                RwSection *rw_section = symbol->src_section->dst_section;
                 if (!rw_section) panic("Unexpected empty output section for %s", name);
                 symbol->dst_section = rw_section;
 
