@@ -307,9 +307,11 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
         elf_section_headers[i].sh_offset = offset;
         elf_section_headers[i].sh_addr = address;
 
-        if (section->type != SHT_NOBITS)
-            offset = ALIGN_UP(offset + section->size, 16);
-
+        // For now, treat bss sections in the same way as data sections.
+        // i.e., the space is allocated in the file. This is to workaround
+        // the execvc in the kernel not being able to mmap the same part of a file to two memory addresses.
+        // This will go away when the linker script arrives.
+        offset = ALIGN_UP(offset + section->size, 16);
         address = ALIGN_UP(address + section->size, 16);
 
         // Save the total size of the .tdata + .tbss sections
@@ -331,8 +333,11 @@ void copy_rw_sections_to_elf(RwElfFile *output_elf_file) {
     for (int i = 0; i < sections->length; i++) {
         RwSection *section = sections->elements[i];
 
-        // All sections have data other than .bss
-        if (strcmp(section->name, ".bss")) {
+        // bss sections temporarily have zeroes in the executable.
+        if (section->type == SHT_NOBITS) {
+            memset(&output_elf_file->data[section->offset], 0, section->size);
+        }
+        else {
             memcpy(&output_elf_file->data[section->offset], section->data, section->size);
         }
     }
