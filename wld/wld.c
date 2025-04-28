@@ -272,9 +272,13 @@ static void make_array_symbol_values(RwElfFile *output_elf_file) {
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
-        #define SET_START_END(start_symbol, end_symbol) { \
-            must_get_global_defined_symbol(start_symbol)->dst_value = output_elf_file->executable_address + section->offset; \
-            must_get_global_defined_symbol(end_symbol)->dst_value = output_elf_file->executable_address + section->offset + section->size; \
+        #define SET_START_END(start_symbol_name, end_symbol_name) { \
+            Symbol *start_symbol = must_get_global_defined_symbol(start_symbol_name); \
+            Symbol *end_symbol = must_get_global_defined_symbol(end_symbol_name); \
+            start_symbol->dst_value = output_elf_file->executable_address + section->offset; \
+            end_symbol->dst_value = output_elf_file->executable_address + section->offset + section->size; \
+            start_symbol->dst_section = section; \
+            end_symbol->dst_section = section; \
         }
 
         // Fragile: if the section is empty, it won't have a value, and the start/end symbols will both be zero.

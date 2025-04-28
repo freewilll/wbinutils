@@ -566,7 +566,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
             }
 
             if (DEBUG_RELOCATIONS) {
-                printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file->filename, symbol->dst_value);
+                printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK)
                     printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
@@ -605,7 +605,6 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->dst_section) continue; // Weak symbols may not be defined
-        if (symbol->is_abs) continue;
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
         elf_symbol->st_value = symbol->dst_value;
