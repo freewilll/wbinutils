@@ -4,6 +4,7 @@ test: \
 	sanity1 \
 	sanity2 \
 	libc-with-gcc-ld \
+	musl-libc-hello-world \
 	lib-object-file-selection \
 	symbol-resolution-bindings \
 	symbol-resolution-double-strong-bindings \
@@ -29,6 +30,10 @@ sanity2:
 .PHONY: libc-with-gcc-ld
 libc-with-gcc-ld:
 	make -C libc-with-gcc-ld
+
+.PHONY: musl-libc-hello-world
+musl-libc-hello-world:
+	make -C musl-libc-hello-world
 
 .PHONY: lib-object-file-selection
 lib-object-file-selection:
@@ -86,6 +91,7 @@ clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
 	@make -C libc-with-gcc-ld clean
+	@make -C musl-libc-hello-world clean
 	@make -C lib-object-file-selection clean
 	@make -C symbol-resolution-bindings clean
 	@make -C symbol-resolution-double-strong-bindings clean
