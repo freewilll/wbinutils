@@ -89,7 +89,7 @@ int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, lon
 
 // Add a special symbol with the source filename
 void add_file_symbol(RwElfFile *output_elf_file, char *filename) {
-    add_elf_symbol(output_elf_file, filename, 0, 0, STB_LOCAL, STT_FILE, SHN_ABS, 0);
+    add_elf_symbol(output_elf_file, filename, 0, 0, STB_LOCAL, STT_FILE, STV_DEFAULT, SHN_ABS);
 }
 
 // Add a relocation to the ELF rela_text section.
@@ -117,8 +117,10 @@ RwElfFile *new_rw_elf_file(const char *filename, int type) {
 void make_elf_headers(RwElfFile *output) {
     // The layout the first page as follows:
     // - ELF header
-    // - Program segment headers
+    // - Program segment headers (if an executable)
     // - Section headers
+
+    int e_phentsize = output->type == ET_EXEC ? sizeof(ElfProgramSegmentHeader) : 0;
 
     // ELF header
     ElfHeader *elf_header = (ElfHeader *) output->data;
@@ -138,9 +140,9 @@ void make_elf_headers(RwElfFile *output) {
     elf_header->e_phoff     = output->elf_program_segments_offset; // Offset to program header table
     elf_header->e_shoff     = output->elf_section_headers_offset;  // Offset to section header table
     elf_header->e_ehsize    = sizeof(ElfHeader);                   // The size of this header, 0x40 for 64-bit
-    elf_header->e_phentsize = sizeof(ElfProgramSegmentHeader);     // The size of the program header
+    elf_header->e_phentsize = e_phentsize;                         // The size of a program header
     elf_header->e_phnum     = output->elf_program_segments_count;  // Number of program header entries
-    elf_header->e_shentsize = sizeof(ElfSectionHeader);            // The size of the section header
+    elf_header->e_shentsize = sizeof(ElfSectionHeader);            // The size of a section header
     elf_header->e_shnum     = output->sections_list->length;       // Number of section header entries
     elf_header->e_shstrndx  = output->section_shstrtab->index;     // The section header string table index
 
@@ -267,8 +269,13 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
     // - Program segment headers
     // - Section headers
 
-    output_elf_file->elf_program_segments_offset  = sizeof(ElfSectionHeader);
-    output_elf_file->elf_section_headers_offset  = output_elf_file->elf_program_segments_offset + output_elf_file->elf_program_segments_header_size;
+    if (output_elf_file->type == ET_EXEC) {
+        output_elf_file->elf_program_segments_offset  = sizeof(ElfSectionHeader);
+        output_elf_file->elf_section_headers_offset  = output_elf_file->elf_program_segments_offset + output_elf_file->elf_program_segments_header_size;
+    }
+    else {
+        output_elf_file->elf_section_headers_offset  = sizeof(ElfSectionHeader);
+    }
 
     // Determine section offsets
     // Align start of the sections on a page boundary after the ELF, program segments and section headers
@@ -280,7 +287,7 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
     int address = output_elf_file->executable_address + offset;
 
     // Loop over all output sections
-    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+    for (int i = 1; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
         // Align TLS .tdata section to page boundaries, but move the data to the end of the section
@@ -296,16 +303,19 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
             output_elf_file->tls_template_tdata_size = section->size;
         }
 
-        // Align program sections to page boundaries
-        else if (section->type == SHT_PROGBITS) {
+        // Align program sections to page boundaries if it's an executable
+        else if (output_elf_file->type == ET_EXEC && section->type == SHT_PROGBITS) {
             offset = ALIGN_UP(offset, 0x1000);
             address = ALIGN_UP(address, 0x1000);
         }
 
         section->offset = offset;
-        section->address = address;
         elf_section_headers[i].sh_offset = offset;
-        elf_section_headers[i].sh_addr = address;
+
+        if (output_elf_file->type == ET_EXEC) {
+            section->address = address;
+            elf_section_headers[i].sh_addr = address;
+        }
 
         // For now, treat bss sections in the same way as data sections.
         // i.e., the space is allocated in the file. This is to workaround
