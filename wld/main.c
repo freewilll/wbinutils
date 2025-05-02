@@ -56,6 +56,11 @@ int main(int argc, char **argv) {
                 argc--;
                 argv++;
             }
+            else if (!strcmp(argv[0], "-static")) {
+                // Do nothing
+                argc--;
+                argv++;
+            }
             else {
                 error("Unknown parameter %s\n", argv[0]);
             }
@@ -73,8 +78,9 @@ int main(int argc, char **argv) {
     if (help) {
         printf("Usage: wld [-] [-o OUTPUT-FILE] INPUT-FILE...\n\n");
         printf("Flags\n");
-        printf("-h      Help\n");
-        printf("-o      Output filename\n");
+        printf("-h       Help\n");
+        printf("-o       Output filename\n");
+        printf("-static  Link static executable\n");
         exit(1);
     }
 
