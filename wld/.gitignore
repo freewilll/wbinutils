@@ -10,9 +10,11 @@ test
 /hello.c
 /hello.s
 /hello
+test.ld
 .vscode
 test-archive-loading
 libtest-archive-loading.a
 libtest-archive-loading-long.a
 test-symbol-resolution
 test-relocations
+test-parser

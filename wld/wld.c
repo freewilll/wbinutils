@@ -8,6 +8,7 @@
 
 #include "wld/libs.h"
 #include "wld/relocations.h"
+#include "wld/script.h"
 #include "wld/symbols.h"
 #include "wld/wld.h"
 
@@ -364,9 +365,11 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
     }
 }
 
-void run(List *library_paths, List *input_files, const char *output_filename) {
+void run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename) {
     // Setup symbol tables
     init_symbols();
+
+    parse_linker_scripts(library_paths, linker_scripts);
 
     // Read input file
     List *input_elf_files = read_input_files(library_paths, input_files);

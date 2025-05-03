@@ -13,6 +13,7 @@ int main(int argc, char **argv) {
     List *input_files = new_list(32);
     char *output_filename = NULL;
     List *library_paths = new_list(32);
+    List *linker_scripts = new_list(32);
 
     argc--;
     argv++;
@@ -56,6 +57,12 @@ int main(int argc, char **argv) {
                 argc--;
                 argv++;
             }
+            // -T x
+            else if (argc > 1 && !strcmp(argv[0], "-T")) {
+                append_to_list(linker_scripts, argv[1]);
+                argc -= 2;
+                argv += 2;
+            }
             else if (!strcmp(argv[0], "-static")) {
                 // Do nothing
                 argc--;
@@ -95,7 +102,7 @@ int main(int argc, char **argv) {
         error("Missing input filename");
     }
 
-    run(library_paths, input_files, output_filename);
+    run(library_paths, linker_scripts, input_files, output_filename);
 
     exit(exit_code);
 }

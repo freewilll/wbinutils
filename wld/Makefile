@@ -11,15 +11,23 @@ HEADERS = \
 	ro-elf.h \
 	rw-elf.h \
 	error.h \
+	wld/lexer.h \
 	wld/libs.h \
+	wld/parser.h \
 	wld/relocations.h \
+	wld/script.h \
 	wld/symbols.h \
+	wld/utils.h \
 	wld/wld.h \
 
 OBJECTS = \
+	lexer.o \
 	libs.o \
+	parser.o \
 	relocations.o \
+	script.o \
 	symbols.o \
+	utils.o \
 	wld.o \
 
 LIBS = \
@@ -40,7 +48,7 @@ LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 ${TARGET}: ${OBJECTS} main.o ${LIBS_PATH}
 	gcc -g -Werror -I ../include -L../lib ${OBJECTS} main.o ${LIBS_PREFIXED_L} -o ${TARGET}
 
-test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations
+test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser
 	make -C tests
 
 libtest-archive-loading.a: test-archive-loading.o
@@ -72,6 +80,13 @@ test-relocations: ${OBJECTS} test-relocations.o
 run-test-relocations: test-relocations
 	./test-relocations
 
+test-parser: ${OBJECTS} test-parser.o
+	gcc -g -Werror ${OBJECTS} test-parser.o -L../lib ${LIBS_PREFIXED_L} -o test-parser
+
+.PHONY: run-test-parser
+run-test-parser: test-parser
+	./test-parser
+
 clean:
 	@rm -f *.o
 	@rm -f ${TARGET}
@@ -81,3 +96,4 @@ clean:
 	@rm -f libtest-archive-loading-long.a
 	@rm -f test-symbol-resolution
 	@rm -f test-relocations
+	@rm -f test-parser

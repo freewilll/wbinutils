@@ -24,6 +24,6 @@ typedef struct input_file {
     int is_library;       // On the command line with -l
 } InputFile;
 
-void run(List *library_paths, List *input_files, const char *output_filename);
+void run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename);
 
 #endif
