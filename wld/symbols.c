@@ -74,7 +74,7 @@ Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
 }
 
 // Get an undefined symbol. Returns NULL if not present.
-Symbol *get_undefined_symbol(char *name) {
+static Symbol *get_undefined_symbol(char *name) {
     return strmap_ordered_get(global_symbol_table->undefined_symbols, name);
 }
 
@@ -109,8 +109,11 @@ static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int bin
     return symbol;
 }
 
-static Symbol *add_global_defined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
-    return add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
+Symbol *get_or_add_linker_script_symbol(char *name) {
+    Symbol *result = get_global_defined_symbol(name);
+    if (result) return result;
+    result = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
+    return result;
 }
 
 static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {

@@ -54,6 +54,7 @@ Symbol *must_get_global_defined_symbol(char *name);
 SymbolTable *get_local_symbol_table(ElfFile *elf_file);
 Symbol *lookup_symbol(ElfFile *elf_file, char *name);
 int is_undefined_symbol(char *name);
+Symbol *get_or_add_linker_script_symbol(char *name);
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
 void finalize_symbols(void);
 void debug_print_symbol(Symbol *symbol);

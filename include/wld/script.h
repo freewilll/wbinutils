@@ -3,18 +3,44 @@
 
 #include "list.h"
 
-typedef enum script_command_type  {
-    CMD_ENTRY = 1,
+#include "wld/expr.h"
+
+// Section commands
+typedef enum sections_command_type {
+    SECTIONS_CMD_ASSIGNMENT = 1,
+} SectionsCommandType;
+
+typedef struct sections_command_assignment  {
+    char *symbol;
+    Node *node;
+} SectionsCommandAssignment;
+
+typedef struct sections_command  {
+    SectionsCommandType type;
+    union {
+        SectionsCommandAssignment assignment;
+    };
+} SectionsCommand;
+
+// Script commands
+typedef enum script_command_type {
+    CMD_ENTRY    = 1,
+    CMD_SECTIONS = 2,
 } ScriptCommandType;
 
-typedef struct script_command_entry  {
+typedef struct script_command_entry {
     char *symbol;
 } ScriptCommandEntry;
 
-typedef struct script_command  {
+typedef struct script_command_section {
+    List *commands;
+} ScriptCommandSections;
+
+typedef struct script_command {
     ScriptCommandType type;
     union {
         ScriptCommandEntry entry;
+        ScriptCommandSections sections;
     };
 } ScriptCommand;
 

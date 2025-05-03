@@ -4,6 +4,7 @@
 #define MAX_IDENTIFIER_SIZE           1024
 #define MAX_STRING_LITERAL_SIZE       4095
 
+// Tokens in order of precedence
 enum {
     TOK_EOF = 1,
     TOK_EOL,
@@ -12,11 +13,29 @@ enum {
     TOK_LABEL,
     TOK_IDENTIFIER,
     TOK_ENTRY,
-    TOK_DOT_SYMBOL,
+    TOK_SECTIONS,
+    TOK_PROVIDE,
+    TOK_CONSTANT,
+    TOK_MAXPAGESIZE,
+    TOK_COMMONPAGESIZE,
     TOK_SEMICOLON,
     TOK_RPAREN,
     TOK_LPAREN,
+    TOK_RCURLY,
+    TOK_LCURLY,
     TOK_COMMA,
+    TOK_EQ,
+    TOK_TERNARY,
+    TOK_COLON,
+    TOK_OR,
+    TOK_AND,
+    TOK_XOR,
+    TOK_DBL_EQ,
+    TOK_NOT_EQ,
+    TOK_LT,
+    TOK_GT,
+    TOK_LE,
+    TOK_GE,
     TOK_PLUS,
     TOK_MINUS,
     TOK_MULTIPLY,

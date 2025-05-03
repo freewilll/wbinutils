@@ -9,6 +9,9 @@
 #define EXECUTABLE_VIRTUAL_ADDRESS 0x400000
 #define ENTRYPOINT_SYMBOL          "_start"
 
+#define MAXPAGESIZE    0x1000
+#define COMMONPAGESIZE 0x1000
+
 #define EXECUTABLE_SECTION_TYPE(type) \
     ( \
         ((type) == SHT_NULL) || \

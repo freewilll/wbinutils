@@ -26,12 +26,12 @@ static void run(char *script) {
     parse();
 }
 
-static int test_comments(void) {
+static void test_comments(void) {
     run("/* foo */");
     assert_int(linker_script->length, 0, "Comments");
 }
 
-static int test_entry(void) {
+static void test_entry(void) {
     run("ENTRY(foo)");
     assert_int(linker_script->length, 1, "ENTRY(foo)");
     ScriptCommand *command = linker_script->elements[0];
@@ -39,7 +39,7 @@ static int test_entry(void) {
     assert_string(command->entry.symbol, "foo", "ENTRY(foo)");
 }
 
-static int test_double_entry(void) {
+static void test_double_entry(void) {
     run("ENTRY(foo);ENTRY(bar)");
     assert_int(linker_script->length, 2, "ENTRY(foo);ENTRY(bar)");
 
@@ -52,8 +52,21 @@ static int test_double_entry(void) {
     assert_string(command->entry.symbol, "bar", "ENTRY(foo);ENTRY(bar)");
 }
 
+void test_sections_assignment() {
+    char *script = "SECTIONS { a = 1 }";
+    run(script);
+    assert_int(linker_script->length, 1, script);
+    ScriptCommand *command = linker_script->elements[0];
+    assert_int(command->type, CMD_SECTIONS, script);
+    List *sections_commands = command->sections.commands;
+    assert_int(sections_commands->length, 1, script);
+    SectionsCommand *section_command = sections_commands->elements[0];
+    assert_int(section_command->type, SECTIONS_CMD_ASSIGNMENT, script);
+}
+
 int main() {
     test_comments();
     test_entry();
     test_double_entry();
+    test_sections_assignment();
 }
