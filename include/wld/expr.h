@@ -14,7 +14,8 @@ typedef enum operation {
     OP_GT        = 8,
     OP_LE        = 9,
     OP_GE        = 10,
-    OP_TERNARY   = 11
+    OP_TERNARY   = 11,
+    OP_ALIGN     = 12
 } Operation;
 
 typedef struct value {

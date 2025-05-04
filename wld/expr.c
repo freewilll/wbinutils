@@ -82,6 +82,31 @@ static Node *parse_ternary_expression(Node *left) {
     return node;
 }
 
+static Node *parse_align_expression() {
+    next();
+    consume(TOK_LPAREN, "(");
+
+    Node *node = calloc(1, sizeof(Node));
+    node->operation = OP_ALIGN;
+    Node *expr = parse(TOK_COMMA);
+
+    // Left is an optional expression. If NULL, . is used
+    // Right is the alignment
+
+    if (cur_token == TOK_COMMA) {
+        next();
+        node->left = expr; // An expression to align
+        node->right = parse(TOK_COMMA); // The alignment
+    }
+    else {
+        node->right = expr; // The alignment
+    }
+
+    consume(TOK_RPAREN, ")");
+
+    return node;
+}
+
 // Returns a malloc'd tree of nodes & values
 static Node *parse(int level) {
     Node *node;
@@ -127,6 +152,10 @@ static Node *parse(int level) {
             consume(TOK_RPAREN, ")");
             break;
 
+        case TOK_ALIGN:
+            node = parse_align_expression();
+            break;
+
         default:
             error_in_file("Unexpected token %d in expression", cur_token);
     }
@@ -162,8 +191,14 @@ static Value evaluate(Node *node) {
     if (node->value) return *node->value;
 
     Value result = {0};
-    Value left = evaluate(node->left);
-    Value right = evaluate(node->right);
+    Value left = {0};
+    Value right = {0};
+
+    if (node->left)
+        left = evaluate(node->left);
+
+    if (node->right)
+        right = evaluate(node->right);
 
     switch (node->operation) {
         case OP_ADD:      result.number = VALUE(left) +  VALUE(right); break;
@@ -179,6 +214,18 @@ static Value evaluate(Node *node) {
 
         case OP_TERNARY:  {
             result.number = VALUE(evaluate(node->condition)) ? VALUE(left) : VALUE(right);
+            break;
+        }
+
+        case OP_ALIGN:  {
+            if (!node->left)
+                left.number = must_get_global_defined_symbol(".")->dst_value;
+
+            uint64_t align = VALUE(right);
+            uint64_t value = VALUE(left);
+
+            result.number = ((value + align - 1) / align) * align;
+
             break;
         }
 

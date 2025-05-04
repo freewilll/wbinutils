@@ -101,6 +101,14 @@ static void test_expressions_with_symbol() {
     value = run(". <= 0x400000");          assert_int(1,        value.number,  ". <= 0x400000");
     value = run(". == 0x400000 ? 1 : 2");  assert_int(1,        value.number,  ". == 0x400000 ? 1 : 2");
     value = run(". >  0x500000 ? 1 : 2");  assert_int(2,        value.number,  ". > 0x500000 ? 1 : 2");
+
+    // ALIGN()
+    get_or_add_linker_script_symbol(".")->dst_value = 0x1800;
+    value = run("ALIGN(0x1000)");          assert_int(0x2000, value.number,  "ALIGN(0x1000)");
+    value = run("ALIGN(0x0fff, 0x1000)");  assert_int(0x1000, value.number,  "ALIGN(0x0fff, 0x1000)");
+    value = run("ALIGN(0x1000, 0x1000)");  assert_int(0x1000, value.number,  "ALIGN(0x1000, 0x1000)");
+    value = run("ALIGN(0x1001, 0x1000)");  assert_int(0x2000, value.number,  "ALIGN(0x1001, 0x1000)");
+    value = run("ALIGN(7, 6)");            assert_int(12,     value.number,  "ALIGN(7, 6)");
 }
 
 int main() {

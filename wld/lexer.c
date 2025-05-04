@@ -227,6 +227,7 @@ void next(void) {
             else if (!strcmp(cur_identifier, "CONSTANT"       )) { cur_token = TOK_CONSTANT; }
             else if (!strcmp(cur_identifier, "MAXPAGESIZE"    )) { cur_token = TOK_MAXPAGESIZE; }
             else if (!strcmp(cur_identifier, "COMMONPAGESIZE" )) { cur_token = TOK_COMMONPAGESIZE; }
+            else if (!strcmp(cur_identifier, "ALIGN"          )) { cur_token = TOK_ALIGN; }
         }
 
         else
