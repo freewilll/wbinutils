@@ -15,7 +15,8 @@ typedef enum operation {
     OP_LE        = 9,
     OP_GE        = 10,
     OP_TERNARY   = 11,
-    OP_ALIGN     = 12
+    OP_ALIGN     = 12,
+    OP_SIZEOF    = 13
 } Operation;
 
 typedef struct value {
@@ -30,10 +31,11 @@ typedef struct node {
     Operation operation; // Optional operation
     Node *left;          // Optional expression
     Node *right;         // Optional expression
-    Node *condition  ;   // Optional expression, used in ternary
+    Node *condition;     // Optional expression, used in ternary
+    char *identifier;    // Optional identifier
 } Node;
 
 Node *parse_expression(void);
-Value evaluate_node(Node *node);
+Value evaluate_node(Node *node, RwElfFile *elf_file);
 
 #endif

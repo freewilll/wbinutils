@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "rw-elf.h"
 #include "wld/lexer.h"
 #include "wld/expr.h"
 #include "wld/script.h"
@@ -24,7 +25,10 @@ static void assert_string(const char *expected, const char *actual, const char *
 static Value run(char *script) {
     linker_script = new_list(1);
     init_lexer_from_string(script);
-    return evaluate_node(parse_expression());
+
+    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
+
+    return evaluate_node(parse_expression(), rw_elf_file);
 }
 
 static void test_constant() {
@@ -109,10 +113,26 @@ static void test_expressions_with_symbol() {
     value = run("ALIGN(0x1000, 0x1000)");  assert_int(0x1000, value.number,  "ALIGN(0x1000, 0x1000)");
     value = run("ALIGN(0x1001, 0x1000)");  assert_int(0x2000, value.number,  "ALIGN(0x1001, 0x1000)");
     value = run("ALIGN(7, 6)");            assert_int(12,     value.number,  "ALIGN(7, 6)");
+
+}
+
+void test_sizeof() {
+    char *script = "SIZEOF(.text)";
+    linker_script = new_list(1);
+    init_lexer_from_string(script);
+
+    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
+    RwSection *section = add_rw_section(rw_elf_file, ".text" , SHT_PROGBITS, 0, 0x1000);
+    section->size = 0x100;
+
+    Value value = evaluate_node(parse_expression(), rw_elf_file);
+
+    assert_int(0x100, value.number, script);
 }
 
 int main() {
     test_constant();
     test_symbol();
     test_expressions_with_symbol();
+    test_sizeof();
 }

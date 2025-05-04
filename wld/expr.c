@@ -156,6 +156,19 @@ static Node *parse(int level) {
             node = parse_align_expression();
             break;
 
+        case TOK_SIZEOF:
+            next();
+            consume(TOK_LPAREN, "(");
+            expect(TOK_IDENTIFIER, "section name");
+
+            node = calloc(1, sizeof(Node));
+            node->operation = OP_SIZEOF;
+            node->identifier = strdup(cur_identifier);
+            next();
+            consume(TOK_RPAREN, ")");
+
+            break;
+
         default:
             error_in_file("Unexpected token %d in expression", cur_token);
     }
@@ -187,7 +200,7 @@ Node *parse_expression() {
     return parse(TOK_COMMA);
 }
 
-static Value evaluate(Node *node) {
+Value evaluate_node(Node *node, RwElfFile *elf_file) {
     if (node->value) return *node->value;
 
     Value result = {0};
@@ -195,10 +208,10 @@ static Value evaluate(Node *node) {
     Value right = {0};
 
     if (node->left)
-        left = evaluate(node->left);
+        left = evaluate_node(node->left, elf_file);
 
     if (node->right)
-        right = evaluate(node->right);
+        right = evaluate_node(node->right, elf_file);
 
     switch (node->operation) {
         case OP_ADD:      result.number = VALUE(left) +  VALUE(right); break;
@@ -213,7 +226,7 @@ static Value evaluate(Node *node) {
         case OP_GE:       result.number = VALUE(left) >= VALUE(right); break;
 
         case OP_TERNARY:  {
-            result.number = VALUE(evaluate(node->condition)) ? VALUE(left) : VALUE(right);
+            result.number = VALUE(evaluate_node(node->condition, elf_file)) ? VALUE(left) : VALUE(right);
             break;
         }
 
@@ -229,15 +242,18 @@ static Value evaluate(Node *node) {
             break;
         }
 
+        case OP_SIZEOF: {
+            RwSection *section = get_rw_section(elf_file, node->identifier);
+            if (!section) error_in_file("Unknown section %s", node->identifier);
+
+            result.number = section->size;
+
+            break;
+        }
+
         default:
             panic("Unknown operation in lazy evaluation %d", node->operation);
     }
 
     return result;
-}
-
-// Evaluate a tree of nodes. The only thing implemented right now is
-// node-node subtraction.
-Value evaluate_node(Node *node) {
-    return evaluate(node);
 }
