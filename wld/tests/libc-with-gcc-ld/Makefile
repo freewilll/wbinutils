@@ -26,6 +26,7 @@ main: main.o
 		/usr/lib/x86_64-linux-gnu/crtn.o
 
 run-main: main
+	@./main # Catch non-zero error
 	@MSG=$$(./main);\
 	if [ "$$MSG" != "Hello World!" ]; then \
 		echo "Message was not hello world."; \
