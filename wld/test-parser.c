@@ -94,10 +94,15 @@ void test_sections_output() {
     assert_string(".xtext.*", input_section->section_patterns->elements[1], script);
 }
 
+static void test_parse_default_linker_script() {
+    run(DEFAULT_LINKER_SCRIPT);
+}
+
 int main() {
     test_comments();
     test_entry();
     test_double_entry();
     test_sections_assignment();
     test_sections_output();
+    test_parse_default_linker_script();
 }

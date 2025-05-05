@@ -10,9 +10,10 @@
 #include "wld/relocations.h"
 #include "wld/script.h"
 #include "wld/symbols.h"
+#include "wld/utils.h"
 #include "wld/wld.h"
 
-static void add_bss_rw_section(RwElfFile *output);
+static char *entrypoint_symbol_name;
 
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files) {
@@ -38,6 +39,112 @@ static List *read_input_files(List *library_paths, List *input_files) {
     return input_elf_files;
 }
 
+// Process output sections commands in a SECTIONS command
+// This determines the placement and mapping between input sections and output sections.
+static void layout_sections(RwElfFile *output_elf_file, List *input_elf_files, List *section_commands) {
+    // Loop over all section commands of type sections
+    for (int j = 0; j < section_commands->length; j++) {
+        SectionsCommand *sections_command = section_commands->elements[j];
+        if (sections_command->type != SECTIONS_CMD_OUTPUT) continue;
+
+        char *output_section_name = sections_command->output.output_section_name;
+
+        if (DEBUG_LAYOUT)
+            printf("Output section %s\n", output_section_name);
+
+        RwSection *output_section = add_rw_section(output_elf_file, output_section_name , SHT_NULL, 0, 0);
+
+        // Loop over all script input sections
+        List *input_sections = sections_command->output.input_sections;
+        for (int j = 0; j < input_sections->length; j++) {
+            InputSection *input_section = input_sections->elements[j];
+
+            // Loop over all input files
+            for (int k = 0; k < input_elf_files->length; k++) {
+                ElfFile *elf_file = input_elf_files->elements[k];
+
+                // Check the input file matches the pattern
+                if (!match_pattern(elf_file->filename, input_section->file_pattern)) continue;
+
+                // Match script input section with file input section
+                List *section_patterns = input_section->section_patterns;
+                for (int k = 0; k < section_patterns->length; k++) {
+                    char *section_pattern = section_patterns->elements[k];
+
+                    if (!strcmp(section_pattern, LINKER_SCRIPT_COMMON_SECTION_NAME)) {
+                        // Make not of bss section that will get the common symbols in it.
+                        output_elf_file->section_bss = output_section;
+                        continue;
+                    }
+
+                    // Loop over all sections in the input tile
+                    for (int l = 0; l < elf_file->section_list->length; l++) {
+                        Section *file_input_section = (Section *) elf_file->section_list->elements[l];
+                        ElfSectionHeader *elf_section_header = file_input_section->elf_section_header;
+
+                        // Check the section name matches the pattern
+                        if (!match_pattern(file_input_section->name, section_pattern)) continue;
+
+                        if (file_input_section->dst_section) continue; // Already included
+
+                        // Associate the input and ouput sections
+                        file_input_section->dst_section = output_section;
+
+                        // Check type and flags
+                        int existing_flags = output_section->flags;
+                        int new_flags = elf_section_header->sh_flags;
+
+                        // Discard merge and strings flags, they are unimportant when it comes to merging sections.
+                        new_flags &= ~(SHF_MERGE | SHF_STRINGS);
+
+                        if (output_section->type != SHT_NULL) {
+                            // Check for mismatch in type
+                            if (output_section->type != elf_section_header->sh_type)
+                                error("Type mismatch in output section %s, file %s, section %s: %d v %d",
+                                    output_section->name, elf_file->filename, file_input_section->name, output_section->type, elf_section_header->sh_type);
+
+                            // Check for mismatch in flags
+                            if (existing_flags != new_flags)
+                                error("Flags mismatch in output section %s, file %s, section %s: %d v %d",
+                                    output_section->name, elf_file->filename, file_input_section->name, existing_flags, new_flags);
+                        }
+
+                        // Place the section in the input file in the output section
+                        int offset = ALIGN_UP(output_section->size, elf_section_header->sh_addralign);
+                        file_input_section->offset = offset;
+                        output_section->size = offset + elf_section_header->sh_size;
+
+                        output_section->type = elf_section_header->sh_type;
+                        output_section->flags = new_flags;
+                        output_section->align = MAX(output_section->align, elf_section_header->sh_addralign);
+
+                        if (DEBUG_LAYOUT || DEBUG_RELOCATIONS)
+                            printf("  File %-50s section %-20s size %#08lx is at offset %#08x in target section %s\n",
+                                elf_file->filename, file_input_section->name, elf_section_header->sh_size, offset, output_section->name);
+                    }
+                }
+            }
+        }
+    }
+}
+
+static void layout_sections_and_set_entrypoint(RwElfFile *output_elf_file, List *input_elf_files) {
+    for (int i = 0; i < linker_script->length; i++) {
+        ScriptCommand *script_command = linker_script->elements[i];
+
+        if (script_command->type == CMD_ENTRY) {
+            // Entrypoint
+            entrypoint_symbol_name = script_command->entry.symbol;
+        }
+
+        else if (script_command->type == CMD_SECTIONS) {
+            // Sections
+            List *section_commands = script_command->sections.commands;
+            layout_sections(output_elf_file, input_elf_files, section_commands);
+        }
+    }
+}
+
 // Add some sections that are always present in output ELF file
 static void create_default_sections(RwElfFile *output_elf_file) {
     add_rw_section(output_elf_file, "" , SHT_NULL, 0, 0);
@@ -54,107 +161,13 @@ static int string_begins_with(const char *str, const char *prefix) {
      return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
-static const char *get_output_section_name_from_input_section(const char *input_section_name) {
-    char *output_section_name = strdup(input_section_name);
-    if (string_begins_with(input_section_name, ".text")) output_section_name = ".text";
-    if (string_begins_with(input_section_name, ".data")) output_section_name = ".data";
-    if (string_begins_with(input_section_name, ".bss")) output_section_name = ".bss";
-    if (string_begins_with(input_section_name, ".rodata")) output_section_name = ".rodata";
-    return output_section_name;
-}
-
-// Loop over all sections in the input files and create the target sections in the output file.
-static void create_output_file_sections(List *input_elf_files, RwElfFile *output_elf_file) {
-    create_default_sections(output_elf_file);
-
-    // Loop over all files
-    for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *elf_file = input_elf_files->elements[i];
-
-        // Loop over all sections
-        for (int j = 0; j < elf_file->section_list->length; j++) {
-            Section *input_section  = (Section *) elf_file->section_list->elements[j];
-            ElfSectionHeader *elf_section_header = input_section->elf_section_header;
-            const char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
-
-            // Only include sections that have program data
-            int sh_type = input_section->elf_section_header->sh_type;
-            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
-
-            // Ignore .debug sections for now
-            if (string_begins_with(input_section->name, ".debug")) continue;
-
-            // Create a section, if it already exists, amend the alignment if necessary.
-            const char *output_section_name = get_output_section_name_from_input_section(name);
-            RwSection *rw_section = get_rw_section(output_elf_file, output_section_name);
-            if (!rw_section) {
-                if (!strcmp(name, ".bss")) {
-                    add_bss_rw_section(output_elf_file);
-                }
-                else {
-                    add_rw_section(output_elf_file, output_section_name, elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
-                }
-            }
-            else {
-                rw_section->align = MAX(rw_section->align, elf_section_header->sh_addralign);
-            }
-        }
-    }
-
-    create_global_offset_table(output_elf_file);
-}
-
-// Determine the layout of the input sections in the output sections, aligning
-// them as necessary
-static void layout_output_sections(List *input_elf_files, RwElfFile *output_elf_file) {
-    // Loop over all files
-    for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *elf_file = input_elf_files->elements[i];
-
-        // Loop over all sections
-        for (int j = 0; j < elf_file->section_list->length; j++) {
-            Section *input_section  = (Section *) elf_file->section_list->elements[j];
-            ElfSectionHeader *elf_section_header = input_section->elf_section_header;
-
-            // Only include sections that have program data
-            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
-
-            // Look up the RW section. It must already exist.
-            const char *input_section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
-            const char *output_section_name = get_output_section_name_from_input_section(input_section_name);
-            RwSection *rw_section = get_rw_section(output_elf_file, output_section_name);
-            if (!rw_section) continue; // The section is not included
-
-            // Align the section
-            int offset = ALIGN_UP(rw_section->size, rw_section->align);
-            input_section->offset = offset;
-            input_section->dst_section = rw_section;
-
-            if (DEBUG_RELOCATIONS) printf("File %s section %s is at offset %#08x in target section\n", elf_file->filename, input_section->name, offset);
-
-            rw_section->size = offset + elf_section_header->sh_size;
-        }
-    }
-}
-
-// Unconditionally create a .bss section
-static void add_bss_rw_section(RwElfFile *output) {
-    int starting_alignment = 1;
-    output->section_bss = add_rw_section(output, ".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, starting_alignment);
-}
-
 // If there are any common symbols, create a bss section and allocate values the symbols
 static void add_common_symbols_to_bss(RwElfFile *output) {
     if (!common_symbols_are_present()) return;
 
-    // A bss section is required. Check if it already exists, since e.g. symbols in glibc can also go directly to a .bss section.
-    RwSection *section_bss = get_rw_section(output, ".bss");
-
     // Create the .bss section
-    if (!section_bss) {
-        add_bss_rw_section(output);
-        section_bss = output->section_bss;
-    }
+    if (!output->section_bss)
+        output->section_bss = add_rw_section(output, ".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 0);
 
     layout_common_symbols_in_bss_section(output->section_bss);
 }
@@ -309,8 +322,9 @@ static void make_array_symbol_values(RwElfFile *output_elf_file) {
 
 // Set the executable entrypoint
 static void set_entrypoint(RwElfFile *output_elf_file) {
-    Symbol *symbol = get_defined_symbol(global_symbol_table, ENTRYPOINT_SYMBOL);
-    if (!symbol) error("Missing %s symbol", ENTRYPOINT_SYMBOL);
+    if (!entrypoint_symbol_name) entrypoint_symbol_name = DEFAULT_ENTRYPOINT_SYMBOL_NAME;
+    Symbol *symbol = get_defined_symbol(global_symbol_table, entrypoint_symbol_name);
+    if (!symbol) error("Missing %s symbol", entrypoint_symbol_name);
     output_elf_file->entrypoint = symbol->dst_value;
 }
 
@@ -349,7 +363,7 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
             ElfSectionHeader *input_elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
-            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
+            if (!input_section->dst_section) continue;
 
             const char *section_name = &input_elf_file->section_header_strings[input_elf_section_header->sh_name];
             RwSection *rw_section = input_section->dst_section;
@@ -366,6 +380,10 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
 }
 
 void run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename) {
+    // Create output file
+    RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
+    output_elf_file->executable_address = EXECUTABLE_VIRTUAL_ADDRESS;
+
     // Setup symbol tables
     init_symbols();
 
@@ -374,26 +392,25 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
     // Read input file
     List *input_elf_files = read_input_files(library_paths, input_files);
 
+    // Add some sections that are always present in output ELF file, e.g. .symtab.
+    create_default_sections(output_elf_file);
+
+    // Run through the first pass of the linker script
+    layout_sections_and_set_entrypoint(output_elf_file, input_elf_files);
+
     // At this point all symbols should be defined. Ensure this is the case.
     finalize_symbols();
 
     // Relax instructions where possible and determine which symbols need to be in the GOT
     apply_relocations(input_elf_files, NULL, RELOCATION_PHASE_SCAN);
 
-    // Create output file
-    RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
-    output_elf_file->executable_address = EXECUTABLE_VIRTUAL_ADDRESS;
-
-    // Create sections in the output file
-    create_output_file_sections(input_elf_files, output_elf_file);
-
-    // Determine layout of the input sections in the output sections
-    layout_output_sections(input_elf_files, output_elf_file);
+    // Create the .got section, if needed
+    create_global_offset_table(output_elf_file);
 
     // If there are any common symbols, create a bss section and allocate values the symbols
     add_common_symbols_to_bss(output_elf_file);
 
-    // Rearrange sections list
+    // Rearrange sections list, so that special sections such as .symtab are moved to the end.
     make_section_indexes(output_elf_file);
 
     // Add the symbols to the ELF symbol table

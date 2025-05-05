@@ -408,8 +408,6 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file, int ph
             int target_section_index = rela_input_elf_section_header->sh_info;
             Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
 
-            if (!EXECUTABLE_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
-
             // Loop over all relocations
             ElfRelocation *relocations = load_section_uncached(input_elf_file, j);
             ElfRelocation *relocation = relocations;

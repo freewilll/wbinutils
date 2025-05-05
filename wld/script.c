@@ -10,6 +10,12 @@ List *linker_script;
 void parse_linker_scripts(List *library_paths, List *linker_scripts) {
     linker_script = new_list(1);
 
+    if (linker_scripts->length == 0) {
+        init_lexer_from_string(DEFAULT_LINKER_SCRIPT);
+        parse();
+        return;
+    }
+
     for (int i = 0; i < linker_scripts->length; i++) {
         char *filename = linker_scripts->elements[i];
         char *path = find_file(library_paths, filename, "linker script");

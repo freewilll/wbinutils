@@ -61,11 +61,11 @@ char *find_file(List *library_paths, const char *path, const char *what) {
 }
 
 // Match a string to a pattern. The pattern may have * and ?. [] isn't implemented
-int match_pattern(char *string, char *pattern) {
-    char *s = string;
-    char *p = pattern;
-    char *star = NULL;  // The string at the point a star was found
-    char *ss = NULL;    // The string when a star was first encountered
+int match_pattern(const char *string, const char *pattern) {
+    const char *s = string;
+    const char *p = pattern;
+    const char *star = NULL;  // The string at the point a star was found
+    const char *ss = NULL;    // The string when a star was first encountered
 
     while (*s) {
         if (*p == '?' || *p == *s) {

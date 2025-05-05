@@ -634,6 +634,7 @@ void init_symbols(void) {
     add_hidden_symbol(FINI_ARRAY_END_SYMBOL_NAME);
 }
 
+// Create the .got section, if needed
 void create_global_offset_table(RwElfFile *output_elf_file) {
     // Scan the symbol table and count the amount of GOT entries
     int got_entries_count = 0;
@@ -645,7 +646,24 @@ void create_global_offset_table(RwElfFile *output_elf_file) {
 
     if (!got_entries_count) return;
 
-    output_elf_file->section_got = add_rw_section(output_elf_file, ".got", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+
+    // Use a pre-existing .got from the linker script if already present
+    output_elf_file->section_got = get_rw_section(output_elf_file, ".got");
+
+    if (output_elf_file->section_got) {
+        if (output_elf_file->section_got->size > 0)
+            // If an existing .got exists, then the entries need merging with the ones discovered here.
+            panic("Dealing with existing .got entries isn't implemented");
+
+        output_elf_file->section_got->type = SHT_PROGBITS;
+        output_elf_file->section_got->flags = SHF_ALLOC | SHF_WRITE;
+        output_elf_file->section_got->align = 8;
+    }
+    else  {
+        // Create an empty .got section
+        output_elf_file->section_got = add_rw_section(output_elf_file, ".got", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+    }
+
     output_elf_file->section_got->size = 8 * got_entries_count;
     output_elf_file->section_got->data = calloc(1, output_elf_file->section_got->size);
 }
