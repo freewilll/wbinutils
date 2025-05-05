@@ -199,16 +199,19 @@ void next(void) {
         else if (c1 >= '0' && c1 <= '9') {
             lex_integer();
         }
-
-        // Identifier
+        // Identifier or wildcard pattern
         else if (((c1 >= 'a' && c1 <= 'z') || (c1 >= 'A' && c1 <= 'Z') || c1 == '_' || c1 == '.')) {
             int j = 0;
-            while (
+            while (ip < input_end &&
                     (   (*ip >= 'a' && *ip <= 'z') ||
                         (*ip >= 'A' && *ip <= 'Z') ||
                         (*ip >= '0' && *ip <= '9') ||
-                        (*ip == '_' || *ip == '-' ||
-                        (*ip == '.'))) && ip < input_end) {
+                        *ip == '_' ||
+                        *ip == '-' ||
+                        *ip == '.' ||
+                        *ip == '*' ||
+                        *ip == '?'
+            )) {
 
                 if (j == MAX_IDENTIFIER_SIZE) panic("Exceeded maximum identifier size %d", MAX_IDENTIFIER_SIZE);
                 cur_identifier[j] = *ip;

@@ -19,3 +19,4 @@ test-symbol-resolution
 test-relocations
 test-parser
 test-expr
+test-utils

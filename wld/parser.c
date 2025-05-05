@@ -8,6 +8,66 @@
 #include "wld/lexer.h"
 #include "wld/script.h"
 
+static SectionsCommand *parse_sections_assignment(char *identifier) {
+    next();
+    Node *node = parse_expression();
+
+    SectionsCommand *command = malloc(sizeof(SectionsCommand));
+    command->type = SECTIONS_CMD_ASSIGNMENT;
+    command->assignment.symbol = identifier;
+    command->assignment.node = node;
+
+    return command;
+}
+
+static SectionsCommand *parse_sections_output(char *identifier) {
+    next(); // Colon
+
+    SectionsCommand *command = malloc(sizeof(SectionsCommand));
+    command->type = SECTIONS_CMD_OUTPUT;
+    command->output.output_section_name = identifier; // Output section name
+
+    List *input_sections = new_list(8);;
+    command->output.input_sections = input_sections;
+
+    consume(TOK_LCURLY, "{");
+
+    // Loop over input sections
+    while (1) {
+        InputSection *input_section = calloc(1, sizeof(InputSection));
+        append_to_list(command->output.input_sections, input_section);
+
+        if (cur_token == TOK_MULTIPLY) {
+            // Special case of a single *
+            input_section->file_pattern = "*";
+            next();
+        }
+        else {
+            expect(TOK_IDENTIFIER, "filename pattern");
+            input_section->file_pattern = strdup(cur_identifier);
+            next();
+        }
+
+        input_section->section_patterns = new_list(8);
+
+        consume(TOK_LPAREN, "(");
+        while (1) {
+            expect(TOK_IDENTIFIER, "input section pattern");
+            append_to_list(input_section->section_patterns, strdup(cur_identifier));
+            next();
+
+            if (cur_token == TOK_RPAREN) break;
+        }
+        consume(TOK_RPAREN, ")");
+
+        if (cur_token == TOK_RCURLY) break;
+    }
+
+    consume(TOK_RCURLY, "}");
+
+    return command;
+}
+
 static void parse_sections(void) {
     next();
     consume(TOK_LCURLY, "{");
@@ -22,18 +82,18 @@ static void parse_sections(void) {
         while (cur_token == TOK_SEMICOLON) next();
 
         if (cur_token == TOK_IDENTIFIER) {
-            char *symbol = strdup(cur_identifier);
+            char *identifier = strdup(cur_identifier);
             next();
 
             if (cur_token == TOK_EQ) {
-                next();
-                Node *node = parse_expression();
+                // Assignment
+                append_to_list(section_commands, parse_sections_assignment(identifier));
 
-                SectionsCommand *command = malloc(sizeof(SectionsCommand));
-                command->type = SECTIONS_CMD_ASSIGNMENT;
-                command->assignment.symbol = symbol;
-                command->assignment.node = node;
-                append_to_list(section_commands, command);
+            }
+            else if (cur_token == TOK_COLON) {
+                // Output
+
+                append_to_list(section_commands, parse_sections_output(identifier));
             }
             else
                 error_in_file("Expected an assignment expression");
