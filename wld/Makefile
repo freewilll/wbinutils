@@ -47,8 +47,11 @@ LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 %.o: %.c ${HEADERS_PATH}
 	gcc -g -Werror -I ../include -c $< -o $@
 
-${TARGET}: ${OBJECTS} main.o ${LIBS_PATH}
-	gcc -g -Werror -I ../include -L../lib ${OBJECTS} main.o ${LIBS_PREFIXED_L} -o ${TARGET}
+libwld.a: ${OBJECTS} ${LIBS_PATH}
+	ar rcsT libwld.a ${OBJECTS} ${LIBS_PATH}
+
+${TARGET}: libwld.a main.o ${LIBS_PATH}
+	gcc -g -Werror -I ../include main.o libwld.a -o ${TARGET}
 
 test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser run-test-expr run-test-utils
 	make -C tests
@@ -60,44 +63,32 @@ libtest-archive-loading-long.a: test-archive-loading.o
 	cp test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
 	ar rcs libtest-archive-loading-long.a test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
 
-test-archive-loading: ${OBJECTS} test-archive-loading.o
+test-archive-loading: libwld.a test-archive-loading.o
 	ar rcs libtest-archive-loading.a test-archive-loading.o
-	gcc -g -Werror -I ../include -L../lib ${OBJECTS} test-archive-loading.o ${LIBS_PREFIXED_L} -o test-archive-loading
+	gcc -g -Werror -I ../include test-archive-loading.o libwld.a  -o test-archive-loading
 
 .PHONY: run-test-archive-loading
 run-test-archive-loading: test-archive-loading libtest-archive-loading.a libtest-archive-loading-long.a
 	./test-archive-loading
 
-test-symbol-resolution: ${OBJECTS} test-symbol-resolution.o
-	gcc -g -Werror ${OBJECTS} test-symbol-resolution.o -L../lib ${LIBS_PREFIXED_L} -o test-symbol-resolution
+test-%: test-%.o libwld.a
+	gcc -g -Werror $< libwld.a -o $@
 
 .PHONY: run-test-symbol-resolution
 run-test-symbol-resolution: test-symbol-resolution
 	./test-symbol-resolution
 
-test-relocations: ${OBJECTS} test-relocations.o
-	gcc -g -Werror ${OBJECTS} test-relocations.o -L../lib ${LIBS_PREFIXED_L} -o test-relocations
-
 .PHONY: run-test-relocations
 run-test-relocations: test-relocations
 	./test-relocations
-
-test-parser: ${OBJECTS} test-parser.o
-	gcc -g -Werror ${OBJECTS} test-parser.o -L../lib ${LIBS_PREFIXED_L} -o test-parser
 
 .PHONY: run-test-parser
 run-test-parser: test-parser
 	./test-parser
 
-test-expr: ${OBJECTS} test-expr.o
-	gcc -g -Werror ${OBJECTS} test-expr.o -L../lib ${LIBS_PREFIXED_L} -o test-expr
-
 .PHONY: run-test-expr
 run-test-expr: test-expr
 	./test-expr
-
-test-utils: ${OBJECTS} test-utils.o
-	gcc -g -Werror ${OBJECTS} test-utils.o -L../lib ${LIBS_PREFIXED_L} -o test-utils
 
 .PHONY: run-test-utils
 run-test-utils: test-utils
@@ -105,6 +96,7 @@ run-test-utils: test-utils
 
 clean:
 	@rm -f *.o
+	@rm -f libwld.a
 	@rm -f ${TARGET}
 	@make -C tests clean
 	@rm -f test-archive-loading

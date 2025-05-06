@@ -1,5 +1,6 @@
 *.o
 /*.s
+libwld.a
 wld
 core
 a.out
