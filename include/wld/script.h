@@ -5,7 +5,8 @@
 
 #include "wld/expr.h"
 
-#define LINKER_SCRIPT_COMMON_SECTION_NAME "COMMON"
+#define LINKER_SCRIPT_COMMON_SECTION_NAME         "COMMON"
+#define LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME "/DISCARD/"
 
 // Section commands
 typedef enum sections_command_type {
@@ -66,20 +67,26 @@ extern List *linker_script;
 static char *DEFAULT_LINKER_SCRIPT =
     "ENTRY(_start)"
     "SECTIONS {"
-    "    .init :           { *(.init            .init.*)           }"
-    "    .text :           { *(.text            .text.*)           }"
-    "    .fini :           { *(.fini            .fini.*)           }"
-    "    .rodata :         { *(.rodata          .rodata.*)         }"
-    "    .eh_frame :       { *(.eh_frame        .eh_frame.*)       }"
-    "    .tdata :          { *(.tdata           .tdata.*)          }"
-    "    .tbss :           { *(.tbss            .tbss.*)           }"
-    "    .preinit_array :  { *(.preinit_array   .preinit_array.*)  }"
-    "    .init_array :     { *(.init_array      .init_array.*)     }"
-    "    .fini_array :     { *(.fini_array      .fini_array.*)     }"
-    "    .got :            { *(.got             .got.*)            }"
-    "    .data :           { *(.data            .data.*)           }"
-    "    .bss :            { *(.bss             .bss.*) *(COMMON)  }"
-    "    .tm_clone_table : { *(.tm_clone_table  .tm_clone_table.*) }"
+    "    .init :           { *(.init            .init.*)                        }"
+    "    .text :           { *(.text            .text.*)                        }"
+    "    .fini :           { *(.fini            .fini.*)                        }"
+    "    .rodata :         { *(.rodata          .rodata.*)                      }"
+    "    .eh_frame :       { *(.eh_frame        .eh_frame.*)                    }"
+    "    .tdata :          { *(.tdata           .tdata.*)                       }"
+    "    .tbss :           { *(.tbss            .tbss.*)                        }"
+    "    .preinit_array :  { *(.preinit_array   .preinit_array.*)               }"
+    "    .init_array :     { *(.init_array      .init_array.*)                  }"
+    "    .fini_array :     { *(.fini_array      .fini_array.*)                  }"
+    "    .got :            { *(.got             .got.*)                         }"
+    "    .data :           { *(.data            .data.*)                        }"
+    "    .bss :            { *(.bss             .bss.*) *(COMMON)               }"
+    "     /DISCARD/ : {"
+    "         *(.note.GNU-stack)"
+    "         *(.gnu_debuglink)"
+    "         *(.gnu.lto_*)"
+    "         *(.debug*)"
+    "         *(.comment)"
+    "     }"
     "}";
 
 void parse_linker_scripts(List *library_paths, List *linker_scripts);

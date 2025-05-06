@@ -18,6 +18,7 @@ test: \
 	relocation-got \
 	relocation-tls \
 	array-lifecycle \
+	oddball-sections \
 
 .PHONY: sanity1
 sanity1:
@@ -87,6 +88,10 @@ relocation-tls:
 array-lifecycle:
 	make -C array-lifecycle
 
+.PHONY: oddball-sections
+oddball-sections:
+	make -C oddball-sections
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -105,3 +110,4 @@ clean:
 	@make -C relocation-got clean
 	@make -C relocation-tls clean
 	@make -C array-lifecycle clean
+	@make -C oddball-sections clean

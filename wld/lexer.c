@@ -166,7 +166,12 @@ void next(void) {
         char c2 = ip[1];
         char c3 = left >= 3 ? ip[2] : 0;
 
-        if (                  c1 == '('                          )  { ip += 1;  cur_token = TOK_LPAREN;                     }
+        if (left >= 9 && !memcmp(ip, "/DISCARD/", 9)) {
+            ip += 9;
+            cur_token = TOK_DISCARD;
+        }
+
+        else if (             c1 == '('                          )  { ip += 1;  cur_token = TOK_LPAREN;                     }
         else if (             c1 == ')'                          )  { ip += 1;  cur_token = TOK_RPAREN;                     }
         else if (             c1 == '{'                          )  { ip += 1;  cur_token = TOK_LCURLY;                     }
         else if (             c1 == '}'                          )  { ip += 1;  cur_token = TOK_RCURLY;                     }
@@ -199,6 +204,7 @@ void next(void) {
         else if (c1 >= '0' && c1 <= '9') {
             lex_integer();
         }
+
         // Identifier or wildcard pattern
         else if (((c1 >= 'a' && c1 <= 'z') || (c1 >= 'A' && c1 <= 'Z') || c1 == '_' || c1 == '.')) {
             int j = 0;

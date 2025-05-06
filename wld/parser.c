@@ -98,6 +98,13 @@ static void parse_sections(void) {
             else
                 error_in_file("Expected an assignment expression");
         }
+        else if (cur_token == TOK_DISCARD) {
+            next();
+            expect(TOK_COLON, ":");
+            append_to_list(section_commands, parse_sections_output(LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME));
+        }
+        else
+            error_in_file("Expected identifier");
 
         if (cur_token == TOK_RCURLY) break;
     }

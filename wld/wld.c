@@ -14,6 +14,7 @@
 #include "wld/wld.h"
 
 static char *entrypoint_symbol_name;
+static SectionsCommandOutput *discard_sections_command_output;
 
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files) {
@@ -39,9 +40,48 @@ static List *read_input_files(List *library_paths, List *input_files) {
     return input_elf_files;
 }
 
+static void add_input_to_output_section(RwSection *output_section, ElfFile *elf_file, Section *file_input_section) {
+    ElfSectionHeader *elf_section_header = file_input_section->elf_section_header;
+
+    // Associate the input and output sections
+    file_input_section->dst_section = output_section;
+
+    // Check type and flags
+    int existing_flags = output_section->flags;
+    int new_flags = elf_section_header->sh_flags;
+
+    // Discard merge and strings flags, they are unimportant when it comes to merging sections.
+    new_flags &= ~(SHF_MERGE | SHF_STRINGS);
+
+    if (output_section->type != SHT_NULL) {
+        // Check for mismatch in type
+        if (output_section->type != elf_section_header->sh_type)
+            error("Type mismatch in output section %s, file %s, section %s: %d v %d",
+                output_section->name, elf_file->filename, file_input_section->name, output_section->type, elf_section_header->sh_type);
+
+        // Check for mismatch in flags
+        if (existing_flags != new_flags)
+            error("Flags mismatch in output section %s, file %s, section %s: %d v %d",
+                output_section->name, elf_file->filename, file_input_section->name, existing_flags, new_flags);
+    }
+
+    // Place the section in the input file in the output section
+    int offset = ALIGN_UP(output_section->size, elf_section_header->sh_addralign);
+    file_input_section->offset = offset;
+    output_section->size = offset + elf_section_header->sh_size;
+
+    output_section->type = elf_section_header->sh_type;
+    output_section->flags = new_flags;
+    output_section->align = MAX(output_section->align, elf_section_header->sh_addralign);
+
+    if (DEBUG_LAYOUT || DEBUG_RELOCATIONS)
+        printf("  File %-50s section %-20s size %#08lx is at offset %#08x in target section %s\n",
+            elf_file->filename, file_input_section->name, elf_section_header->sh_size, offset, output_section->name);
+}
+
 // Process output sections commands in a SECTIONS command
 // This determines the placement and mapping between input sections and output sections.
-static void layout_sections(RwElfFile *output_elf_file, List *input_elf_files, List *section_commands) {
+static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_elf_files, List *section_commands) {
     // Loop over all section commands of type sections
     for (int j = 0; j < section_commands->length; j++) {
         SectionsCommand *sections_command = section_commands->elements[j];
@@ -51,6 +91,12 @@ static void layout_sections(RwElfFile *output_elf_file, List *input_elf_files, L
 
         if (DEBUG_LAYOUT)
             printf("Output section %s\n", output_section_name);
+
+        // If a /DISCARD/ is present, save it, and don't treat it like an actual section.
+        if (!strcmp(output_section_name, LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME)) {
+            discard_sections_command_output = &sections_command->output;
+            continue;
+        }
 
         RwSection *output_section = add_rw_section(output_elf_file, output_section_name , SHT_NULL, 0, 0);
 
@@ -77,7 +123,7 @@ static void layout_sections(RwElfFile *output_elf_file, List *input_elf_files, L
                         continue;
                     }
 
-                    // Loop over all sections in the input tile
+                    // Loop over all sections in the input file
                     for (int l = 0; l < elf_file->section_list->length; l++) {
                         Section *file_input_section = (Section *) elf_file->section_list->elements[l];
                         ElfSectionHeader *elf_section_header = file_input_section->elf_section_header;
@@ -87,40 +133,7 @@ static void layout_sections(RwElfFile *output_elf_file, List *input_elf_files, L
 
                         if (file_input_section->dst_section) continue; // Already included
 
-                        // Associate the input and ouput sections
-                        file_input_section->dst_section = output_section;
-
-                        // Check type and flags
-                        int existing_flags = output_section->flags;
-                        int new_flags = elf_section_header->sh_flags;
-
-                        // Discard merge and strings flags, they are unimportant when it comes to merging sections.
-                        new_flags &= ~(SHF_MERGE | SHF_STRINGS);
-
-                        if (output_section->type != SHT_NULL) {
-                            // Check for mismatch in type
-                            if (output_section->type != elf_section_header->sh_type)
-                                error("Type mismatch in output section %s, file %s, section %s: %d v %d",
-                                    output_section->name, elf_file->filename, file_input_section->name, output_section->type, elf_section_header->sh_type);
-
-                            // Check for mismatch in flags
-                            if (existing_flags != new_flags)
-                                error("Flags mismatch in output section %s, file %s, section %s: %d v %d",
-                                    output_section->name, elf_file->filename, file_input_section->name, existing_flags, new_flags);
-                        }
-
-                        // Place the section in the input file in the output section
-                        int offset = ALIGN_UP(output_section->size, elf_section_header->sh_addralign);
-                        file_input_section->offset = offset;
-                        output_section->size = offset + elf_section_header->sh_size;
-
-                        output_section->type = elf_section_header->sh_type;
-                        output_section->flags = new_flags;
-                        output_section->align = MAX(output_section->align, elf_section_header->sh_addralign);
-
-                        if (DEBUG_LAYOUT || DEBUG_RELOCATIONS)
-                            printf("  File %-50s section %-20s size %#08lx is at offset %#08x in target section %s\n",
-                                elf_file->filename, file_input_section->name, elf_section_header->sh_size, offset, output_section->name);
+                        add_input_to_output_section(output_section, elf_file, file_input_section);
                     }
                 }
             }
@@ -140,7 +153,64 @@ static void layout_sections_and_set_entrypoint(RwElfFile *output_elf_file, List 
         else if (script_command->type == CMD_SECTIONS) {
             // Sections
             List *section_commands = script_command->sections.commands;
-            layout_sections(output_elf_file, input_elf_files, section_commands);
+            layout_sections_with_script(output_elf_file, input_elf_files, section_commands);
+        }
+    }
+}
+
+// Does an input filename and section match one of the /DISCARD/ patterns (if present)?
+static int is_discarded_section(const char *input_filename, const char *input_section_name) {
+    if (!discard_sections_command_output) return 0;
+
+    // Loop over all script input sections
+    List *input_sections = discard_sections_command_output->input_sections;
+    for (int i = 0; i < input_sections->length; i++) {
+        InputSection *input_section = input_sections->elements[i];
+
+        if (!match_pattern(input_filename, input_section->file_pattern)) continue;
+
+        // Match script input section with file input section
+        List *section_patterns = input_section->section_patterns;
+        for (int j = 0; j < section_patterns->length; j++) {
+            char *section_pattern = section_patterns->elements[j];
+            if (!match_pattern(input_section_name, section_pattern)) continue;
+
+            // The discard pattern matches
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+// Loop over all sections in the input files and create the target sections in the output file if not already there
+static void layout_leftover_sections(RwElfFile *output_elf_file, List *input_elf_files) {
+    // Loop over all files
+    for (int i = 0; i < input_elf_files->length; i++) {
+        ElfFile *elf_file = input_elf_files->elements[i];
+
+        // Loop over all sections
+        for (int j = 0; j < elf_file->section_list->length; j++) {
+            Section *input_section  = (Section *) elf_file->section_list->elements[j];
+            if (input_section->dst_section) continue; // Already placed
+
+            ElfSectionHeader *elf_section_header = input_section->elf_section_header;
+            const char *section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
+
+            // Whitelist certain sections for inclusion
+            if (!ORPHANED_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
+
+            // Discard sections in the /DISCARD/ section
+            if (is_discarded_section(elf_file->filename, section_name)) continue;
+
+            // Create the output section if it doesn't already exists
+            RwSection *output_section = get_rw_section(output_elf_file, section_name);
+            if (!output_section)
+            output_section = add_rw_section(output_elf_file, section_name,
+                elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
+
+            // Add the section to the output
+            add_input_to_output_section(output_section, elf_file, input_section);
         }
     }
 }
@@ -155,10 +225,6 @@ static void create_default_sections(RwElfFile *output_elf_file) {
 
     output_elf_file->section_symtab->entsize = sizeof(ElfSymbol);
     add_to_rw_section(output_elf_file->section_strtab, "", 1);
-}
-
-static int string_begins_with(const char *str, const char *prefix) {
-     return strncmp(str, prefix, strlen(prefix)) == 0;
 }
 
 // If there are any common symbols, create a bss section and allocate values the symbols
@@ -397,6 +463,9 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
 
     // Run through the first pass of the linker script
     layout_sections_and_set_entrypoint(output_elf_file, input_elf_files);
+
+    // Add any sections not present in the linker script
+    layout_leftover_sections(output_elf_file, input_elf_files);
 
     // At this point all symbols should be defined. Ensure this is the case.
     finalize_symbols();

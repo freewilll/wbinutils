@@ -23,6 +23,13 @@
         ((type) == SHT_PREINIT_ARRAY) \
     )
 
+// Section types that are included when not referenced in the linker script
+#define ORPHANED_SECTION_TYPE(type) \
+    ( \
+        ((type) == SHT_PROGBITS) || \
+        ((type) == SHT_NOBITS) \
+    )
+
 typedef struct input_file {
     char *filename;
     int is_library;       // On the command line with -l
