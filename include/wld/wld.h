@@ -7,21 +7,10 @@
 #define DEBUG_RELOCATIONS 0
 #define DEBUG_LAYOUT 0
 
-#define EXECUTABLE_VIRTUAL_ADDRESS      0x400000
 #define DEFAULT_ENTRYPOINT_SYMBOL_NAME  "_start"
 
 #define MAXPAGESIZE    0x1000
 #define COMMONPAGESIZE 0x1000
-
-#define EXECUTABLE_SECTION_TYPE(type) \
-    ( \
-        ((type) == SHT_NULL) || \
-        ((type) == SHT_PROGBITS) || \
-        ((type) == SHT_NOBITS) || \
-        ((type) == SHT_INIT_ARRAY) || \
-        ((type) == SHT_FINI_ARRAY) || \
-        ((type) == SHT_PREINIT_ARRAY) \
-    )
 
 // Section types that are included when not referenced in the linker script
 #define ORPHANED_SECTION_TYPE(type) \

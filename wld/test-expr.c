@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "elf.h"
 #include "rw-elf.h"
+
 #include "wld/lexer.h"
 #include "wld/expr.h"
 #include "wld/script.h"
@@ -126,8 +128,20 @@ void test_sizeof() {
     section->size = 0x100;
 
     Value value = evaluate_node(parse_expression(), rw_elf_file);
-
     assert_int(0x100, value.number, script);
+}
+
+void test_sizeof_headers() {
+    char *script = "SIZEOF_HEADERS";
+    linker_script = new_list(1);
+    init_lexer_from_string(script);
+
+    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
+    rw_elf_file->elf_program_segments_header_size = 0x100;
+    rw_elf_file->elf_section_headers_size = 0x200;
+
+    Value value = evaluate_node(parse_expression(), rw_elf_file);
+    assert_int(sizeof(ElfHeader) + 0x300, value.number, script);
 }
 
 int main() {
@@ -135,4 +149,5 @@ int main() {
     test_symbol();
     test_expressions_with_symbol();
     test_sizeof();
+    test_sizeof_headers();
 }

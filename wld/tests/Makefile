@@ -5,6 +5,7 @@ test: \
 	sanity2 \
 	libc-with-gcc-ld \
 	musl-libc-hello-world \
+	musl-libc-tls-hello-world \
 	lib-object-file-selection \
 	symbol-resolution-bindings \
 	symbol-resolution-double-strong-bindings \
@@ -35,6 +36,10 @@ libc-with-gcc-ld:
 .PHONY: musl-libc-hello-world
 musl-libc-hello-world:
 	make -C musl-libc-hello-world
+
+.PHONY: musl-libc-tls-hello-world
+musl-libc-tls-hello-world:
+	make -C musl-libc-tls-hello-world
 
 .PHONY: lib-object-file-selection
 lib-object-file-selection:
@@ -97,6 +102,7 @@ clean:
 	@make -C sanity2 clean
 	@make -C libc-with-gcc-ld clean
 	@make -C musl-libc-hello-world clean
+	@make -C musl-libc-tls-hello-world clean
 	@make -C lib-object-file-selection clean
 	@make -C symbol-resolution-bindings clean
 	@make -C symbol-resolution-double-strong-bindings clean

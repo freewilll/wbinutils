@@ -229,7 +229,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
         RwSection *symbol_rw_section = symbol_section->dst_section;
         if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
 
-        dst_value = output_elf_file->executable_address + symbol_rw_section->offset + symbol_section->offset + elf_symbol->st_value;
+        dst_value = symbol_rw_section->address + symbol_section->offset + elf_symbol->st_value;
     }
     else {
         // Handle a relocation to a non-section symbol

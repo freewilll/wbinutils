@@ -5,6 +5,7 @@
 #include "wld/lexer.h"
 #include "wld/parser.h"
 #include "wld/script.h"
+#include "wld/symbols.h"
 
 static void assert_int(int expected, int actual, char *message) {
     if (expected != actual) {
@@ -65,14 +66,22 @@ void test_sections_assignment() {
 }
 
 void test_sections_output() {
-    char *script = "SECTIONS { .text : { *(.text .text.*) x*(.xtext .xtext.*) } }";
+    char *script =
+        "SECTIONS {\n"
+        "   .text : { *(.text .text.*) x*(.xtext .xtext.*) }\n"
+        "   .keeper : { KEEP(y(.keeper)) }\n"
+        "}\n";
+
+
     run(script);
     assert_int(1, linker_script->length, script);
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_SECTIONS, command->type, script);
-    List *sections_commands = command->sections.commands;
-    assert_int(1, sections_commands->length, script);
 
+    List *sections_commands = command->sections.commands;
+    assert_int(2, sections_commands->length, script);
+
+    // .text
     SectionsCommand *section_command = sections_commands->elements[0];
     assert_int(SECTIONS_CMD_OUTPUT, section_command->type, script);
     assert_string(".text", section_command->output.output_section_name, script);
@@ -92,9 +101,21 @@ void test_sections_output() {
     assert_int(2, input_section->section_patterns->length, script);
     assert_string(".xtext", input_section->section_patterns->elements[0], script);
     assert_string(".xtext.*", input_section->section_patterns->elements[1], script);
+
+    // .keeper
+    section_command = sections_commands->elements[1];
+    assert_int(SECTIONS_CMD_OUTPUT, section_command->type, script);
+    input_sections = section_command->output.input_sections;
+    input_section = input_sections->elements[0];
+    assert_int(1, input_section->keep, script);
+    assert_string(".keeper", section_command->output.output_section_name, script);
+    assert_string("y", input_section->file_pattern, script);
+    assert_int(1, input_section->section_patterns->length, script);
+    assert_string(".keeper", input_section->section_patterns->elements[0], script);
 }
 
 static void test_parse_default_linker_script() {
+    init_symbols();
     run(DEFAULT_LINKER_SCRIPT);
 }
 

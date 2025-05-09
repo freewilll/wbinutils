@@ -146,10 +146,6 @@ void make_elf_headers(RwElfFile *output) {
     elf_header->e_shnum     = output->sections_list->length;       // Number of section header entries
     elf_header->e_shstrndx  = output->section_shstrtab->index;     // The section header string table index
 
-    // Copy program headers if it's an executable
-    if (output->type == ET_EXEC)
-        memcpy(output->data + output->elf_program_segments_offset, output->elf_program_segment_headers, output->elf_program_segments_header_size);
-
     // Copy section headers
     memcpy(output->data + output->elf_section_headers_offset, output->elf_section_headers, output->elf_section_headers_size);
 }
@@ -233,6 +229,13 @@ void make_section_indexes(RwElfFile *output_elf_file) {
     output_elf_file->sections_list = new_sections_list;
 }
 
+uint64_t headers_size(RwElfFile *elf_file) {
+    return
+        sizeof(ElfHeader) +                              // Elf header
+        elf_file->elf_program_segments_header_size +     // Program segments headers
+        elf_file->elf_section_headers_size;              // Section headers
+}
+
 // Make an ELF section header
 void make_rw_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, RwSection *section) {
     sh->sh_name      = add_to_rw_section(output_elf_file->section_shstrtab, (char *) section->name, strlen(section->name) + 1);
@@ -284,45 +287,19 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
         output_elf_file->elf_program_segments_header_size +     // Program segments headers
         output_elf_file->elf_section_headers_size;              // Section headers
 
-    int address = output_elf_file->executable_address + offset;
-
     // Loop over all output sections
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
-        // Align TLS .tdata section to page boundaries, but move the data to the end of the section
-        if (section->type == SHT_PROGBITS && (section->flags & SHF_TLS)) {
-            uint64_t offset_end = ALIGN_UP(offset + section->size, 0x1000);
-            offset = ALIGN_DOWN(offset_end - section->size, section->align);
-
-            uint64_t address_end = ALIGN_UP(address + section->size, 0x1000);
-            address = ALIGN_DOWN(address_end - section->size, section->align);
-
-            output_elf_file->tls_template_address = address;
-            output_elf_file->tls_template_offset = offset;
-            output_elf_file->tls_template_tdata_size = section->size;
-        }
-
         // Align program sections to page boundaries if it's an executable
-        else if (output_elf_file->type == ET_EXEC && section->type == SHT_PROGBITS) {
+        if (output_elf_file->type == ET_EXEC && section->type == SHT_PROGBITS)
             offset = ALIGN_UP(offset, 0x1000);
-            address = ALIGN_UP(address, 0x1000);
-        }
 
         section->offset = offset;
         elf_section_headers[i].sh_offset = offset;
 
-        if (output_elf_file->type == ET_EXEC) {
-            section->address = address;
-            elf_section_headers[i].sh_addr = address;
-        }
-
-        // For now, treat bss sections in the same way as data sections.
-        // i.e., the space is allocated in the file. This is to workaround
-        // the execvc in the kernel not being able to mmap the same part of a file to two memory addresses.
-        // This will go away when the linker script arrives.
-        offset = ALIGN_UP(offset + section->size, 16);
-        address = ALIGN_UP(address + section->size, 16);
+        if (section->type != SHT_NOBITS)
+            offset = ALIGN_UP(offset + section->size, 16);
 
         // Save the total size of the .tdata + .tbss sections
         if (section->type == SHT_NOBITS && (section->flags & SHF_TLS)) {
@@ -340,16 +317,11 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
 void copy_rw_sections_to_elf(RwElfFile *output_elf_file) {
     List *sections = output_elf_file->sections_list;
 
-    for (int i = 0; i < sections->length; i++) {
+    for (int i = 1; i < sections->length; i++) {
         RwSection *section = sections->elements[i];
 
-        // bss sections temporarily have zeroes in the executable.
-        if (section->type == SHT_NOBITS) {
-            memset(&output_elf_file->data[section->offset], 0, section->size);
-        }
-        else {
+        if (section->type != SHT_NOBITS)
             memcpy(&output_elf_file->data[section->offset], section->data, section->size);
-        }
     }
 }
 

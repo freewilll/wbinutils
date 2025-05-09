@@ -60,10 +60,9 @@ void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls
 
     ElfRelocation relocation = {.r_offset = output_offset, .r_info = type, .r_addend = addend};
 
-    output_elf_file->executable_address = 0x400000;
     output_elf_file->got_virt_address = 0x500000;
     uint64_t rw_section_address = output_virtual_address - output_offset;
-    uint64_t rw_section_offset = rw_section_address - output_elf_file->executable_address;
+    uint64_t rw_section_offset = rw_section_address - 0x400000;
 
     int result = scan_relocation(output_data, &relocation);
     if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);

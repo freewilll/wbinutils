@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include  "error.h"
+#include  "elf.h"
 
 #include "wld/expr.h"
 #include "wld/lexer.h"
@@ -166,8 +167,13 @@ static Node *parse(int level) {
             node->identifier = strdup(cur_identifier);
             next();
             consume(TOK_RPAREN, ")");
-
             break;
+
+            case TOK_SIZEOF_HEADERS:
+                next();
+                node = calloc(1, sizeof(Node));
+                node->operation = OP_SIZEOF_HEADERS;
+                    break;
 
         default:
             error_in_file("Unexpected token %d in expression", cur_token);
@@ -238,7 +244,6 @@ Value evaluate_node(Node *node, RwElfFile *elf_file) {
             uint64_t value = VALUE(left);
 
             result.number = ((value + align - 1) / align) * align;
-
             break;
         }
 
@@ -247,9 +252,13 @@ Value evaluate_node(Node *node, RwElfFile *elf_file) {
             if (!section) error_in_file("Unknown section %s", node->identifier);
 
             result.number = section->size;
-
             break;
         }
+
+        case OP_SIZEOF_HEADERS:
+            result.number = headers_size(elf_file);
+            break;
+
 
         default:
             panic("Unknown operation in lazy evaluation %d", node->operation);

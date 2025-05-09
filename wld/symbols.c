@@ -113,6 +113,8 @@ Symbol *get_or_add_linker_script_symbol(char *name) {
     Symbol *result = get_global_defined_symbol(name);
     if (result) return result;
     result = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
+    result->is_abs = 1;
+
     return result;
 }
 
@@ -580,8 +582,8 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
     }
 }
 
-// Add the symbols to the ELF symbol table
-// The values and section indexes will be updated later
+// Add the symbols to the ELF symbol table.
+// The values and section indexes will be updated later.
 void make_elf_symbols(RwElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_header = &output_elf_file->elf_section_headers[output_elf_file->section_symtab->index];
 
@@ -597,6 +599,7 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
 
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
+        if (!strcmp(name, ".")) continue;
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, 0);
     }
@@ -606,12 +609,13 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
 void update_elf_symbols(RwElfFile *output_elf_file) {
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
+        if (!strcmp(name, ".")) continue;
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->dst_section) continue; // Weak symbols may not be defined
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
         elf_symbol->st_value = symbol->dst_value;
-        elf_symbol->st_shndx = symbol->dst_section->index;
+        elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->dst_section->index;
     }
 }
 

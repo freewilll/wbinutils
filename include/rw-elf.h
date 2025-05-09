@@ -29,6 +29,8 @@ typedef struct rw_section  {
     struct rw_section *rela_section; // Optional related relocation section
     int program_segment_index;       // Used by wld
     List *chunks;                    // Used by was
+    int keep;                        // Include empty sections
+    int layout_complete;             // This section has been allocated an offset and address
 } RwSection;
 
 typedef struct rw_elf  {
@@ -45,7 +47,6 @@ typedef struct rw_elf  {
     RwSection *section_shstrtab;                            // Section header string table
     RwSection *section_got;                                 // Global Offset Table section
     int local_symbol_end;                                   // Index of last local symbol
-    uint64_t executable_address;                            // Virtual address of executable
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
     uint64_t tls_template_tdata_size;                       // Size of the data part of the TLS template
@@ -53,6 +54,7 @@ typedef struct rw_elf  {
     uint64_t tls_template_size;                             // Size of the TLS template
     uint64_t tls_template_address;                          // Virtual address of the TLS template
     uint64_t got_virt_address;                              // Virtual address of the GOT
+    List *program_segments_list;                            // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers
@@ -78,6 +80,7 @@ void add_elf_relocation(RwElfFile *output_elf_file, RwSection *section, int type
 RwElfFile *new_rw_elf_file(const char *filename, int type);
 void make_elf_headers(RwElfFile *output);
 void make_section_indexes(RwElfFile *output_elf_file);
+uint64_t headers_size(RwElfFile *elf_file);
 void make_rw_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, RwSection *section);
 void make_rw_section_headers(RwElfFile *output_elf_file);
 void make_program_segment_headers(RwElfFile *output);

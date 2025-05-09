@@ -4,19 +4,20 @@
 #include "wld/symbols.h"
 
 typedef enum operation {
-    OP_ADD       = 1,
-    OP_SUBTRACT  = 2,
-    OP_MULTIPLY  = 3,
-    OP_DIVIDE    = 4,
-    OP_EQ        = 5,
-    OP_NE        = 6,
-    OP_LT        = 7,
-    OP_GT        = 8,
-    OP_LE        = 9,
-    OP_GE        = 10,
-    OP_TERNARY   = 11,
-    OP_ALIGN     = 12,
-    OP_SIZEOF    = 13
+    OP_ADD            = 1,
+    OP_SUBTRACT       = 2,
+    OP_MULTIPLY       = 3,
+    OP_DIVIDE         = 4,
+    OP_EQ             = 5,
+    OP_NE             = 6,
+    OP_LT             = 7,
+    OP_GT             = 8,
+    OP_LE             = 9,
+    OP_GE             = 10,
+    OP_TERNARY        = 11,
+    OP_ALIGN          = 12,
+    OP_SIZEOF         = 13,
+    OP_SIZEOF_HEADERS = 14
 } Operation;
 
 typedef struct value {

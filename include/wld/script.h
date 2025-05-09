@@ -24,6 +24,7 @@ typedef struct sections_command_assignment  {
 typedef struct input_section  {
     char *file_pattern;
     List *section_patterns;      // A list of strings, e.g. ".text", "".text.*""
+    int keep;                    // Include empty sections
 } InputSection;
 
 typedef struct sections_command_output  {
@@ -67,27 +68,34 @@ extern List *linker_script;
 static char *DEFAULT_LINKER_SCRIPT =
     "ENTRY(_start)"
     "SECTIONS {"
-    "    .init :           { *(.init            .init.*)                        }"
-    "    .text :           { *(.text            .text.*)                        }"
-    "    .fini :           { *(.fini            .fini.*)                        }"
-    "    .rodata :         { *(.rodata          .rodata.*)                      }"
-    "    .eh_frame :       { *(.eh_frame        .eh_frame.*)                    }"
-    "    .tdata :          { *(.tdata           .tdata.*)                       }"
-    "    .tbss :           { *(.tbss            .tbss.*)                        }"
-    "    .preinit_array :  { *(.preinit_array   .preinit_array.*)               }"
-    "    .init_array :     { *(.init_array      .init_array.*)                  }"
-    "    .fini_array :     { *(.fini_array      .fini_array.*)                  }"
-    "    .got :            { *(.got             .got.*)                         }"
-    "    .data :           { *(.data            .data.*)                        }"
-    "    .bss :            { *(.bss             .bss.*) *(COMMON)               }"
-    "     /DISCARD/ : {"
-    "         *(.note.GNU-stack)"
-    "         *(.gnu_debuglink)"
-    "         *(.gnu.lto_*)"
-    "         *(.debug*)"
-    "         *(.comment)"
-    "     }"
-    "}";
+    "    . = 0x400000 + SIZEOF_HEADERS;\n"
+    "    . = ALIGN(CONSTANT (MAXPAGESIZE));\n"
+    "    .init :           { *(.init            .init.*)                        }\n"
+    "    .text :           { *(.text            .text.*)                        }\n"
+    "    .fini :           { *(.fini            .fini.*)                        }\n"
+    "\n"
+    "    . = ALIGN(CONSTANT (MAXPAGESIZE));\n"
+    "    .rodata :         { *(.rodata          .rodata.*)                      }\n"
+    "    .eh_frame :       { *(.eh_frame        .eh_frame.*)                    }\n"
+    "\n"
+    "    . = ALIGN(CONSTANT (MAXPAGESIZE));\n"
+    "    .tdata :          { *(.tdata           .tdata.*)                       }\n"
+    "    .tbss :           { *(.tbss            .tbss.*)                        }\n"
+    "    .preinit_array :  { KEEP( *(.preinit_array   .preinit_array.*))        }\n"
+    "    .init_array :     { KEEP( *(.init_array      .init_array.*))           }\n"
+    "    .fini_array :     { KEEP( *(.fini_array      .fini_array.*))           }\n"
+    "    .got :            { *(.got             .got.*)                         }\n"
+    "    .data :           { *(.data            .data.*)                        }\n"
+    "    .bss :            { *(.bss             .bss.*) *(COMMON)               }\n"
+    "\n"
+    "     /DISCARD/ : {\n"
+    "         *(.note.GNU-stack)\n"
+    "         *(.gnu_debuglink)\n"
+    "         *(.gnu.lto_*)\n"
+    "         *(.debug*)\n"
+    "         *(.comment)\n"
+    "     }\n"
+    "}\n";
 
 void parse_linker_scripts(List *library_paths, List *linker_scripts);
 
