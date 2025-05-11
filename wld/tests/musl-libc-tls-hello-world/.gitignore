@@ -1,2 +1,4 @@
 *.o
-main
+main-data
+main-bss
+main-data-and-bss
