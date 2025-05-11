@@ -27,6 +27,12 @@ static void run(char *script) {
     parse();
 }
 
+static uint64_t evaluate_test_node(Node *node) {
+    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
+    Value value = evaluate_node(node, rw_elf_file);
+    return value.number;
+}
+
 static void test_comments(void) {
     run("/* foo */");
     assert_int(linker_script->length, 0, "Comments");
@@ -54,15 +60,40 @@ static void test_double_entry(void) {
 }
 
 void test_sections_assignment() {
-    char *script = "SECTIONS { a = 1 }";
+    char *script =
+        "SECTIONS {\n"
+        "    a = 1\n"
+        "    PROVIDE(b = 2)\n"
+        "    PROVIDE_HIDDEN(c = 3)\n"
+        "}";
+
     run(script);
     assert_int(1, linker_script->length, script);
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_SECTIONS, command->type, script);
+
     List *sections_commands = command->sections.commands;
-    assert_int(1, sections_commands->length, script);
+    assert_int(3, sections_commands->length, script);
+
+    // a = 1
     SectionsCommand *section_command = sections_commands->elements[0];
     assert_int(SECTIONS_CMD_ASSIGNMENT, section_command->type, script);
+    assert_string("a", section_command->assignment.symbol, script);
+    assert_int(1, evaluate_test_node(section_command->assignment.node), script);
+
+    // PROVIDE(b = 2)
+    section_command = sections_commands->elements[1];
+    assert_int(SECTIONS_CMD_ASSIGNMENT, section_command->type, script);
+    assert_string("b", section_command->assignment.symbol, script);
+    assert_int(1, section_command->assignment.provide, script);
+    assert_int(2, evaluate_test_node(section_command->assignment.node), script);
+
+    // PROVIDE_HIDDEN(c = 3)
+    section_command = sections_commands->elements[2];
+    assert_int(SECTIONS_CMD_ASSIGNMENT, section_command->type, script);
+    assert_string("c", section_command->assignment.symbol, script);
+    assert_int(1, section_command->assignment.provide_hidden, script);
+    assert_int(3, evaluate_test_node(section_command->assignment.node), script);
 }
 
 void test_sections_output() {
@@ -70,8 +101,12 @@ void test_sections_output() {
         "SECTIONS {\n"
         "   .text : { *(.text .text.*) x*(.xtext .xtext.*) }\n"
         "   .keeper : { KEEP(y(.keeper)) }\n"
+        "   .assignment_in_section : { \n"
+        "       a = 1;\n"
+        "       PROVIDE(b = 2);\n"
+        "       PROVIDE_HIDDEN(c = 3);\n"
+        "    }\n"
         "}\n";
-
 
     run(script);
     assert_int(1, linker_script->length, script);
@@ -79,24 +114,27 @@ void test_sections_output() {
     assert_int(CMD_SECTIONS, command->type, script);
 
     List *sections_commands = command->sections.commands;
-    assert_int(2, sections_commands->length, script);
+    assert_int(3, sections_commands->length, script);
 
     // .text
     SectionsCommand *section_command = sections_commands->elements[0];
     assert_int(SECTIONS_CMD_OUTPUT, section_command->type, script);
     assert_string(".text", section_command->output.output_section_name, script);
 
-    List *input_sections = section_command->output.input_sections;
-    assert_int(2, input_sections->length, script);
+    List *output_items = section_command->output.output_items;
+    assert_int(2, output_items->length, script);
 
-    InputSection *input_section;
-    input_section = input_sections->elements[0];
+    SectionsCommandOutputItem *output_item = output_items->elements[0];
+    assert_int(SECTIONS_CMD_INPUT_SECTION, output_item->type, script);
+    InputSection *input_section = &output_item->input_section;
     assert_string("*", input_section->file_pattern, script);
     assert_int(2, input_section->section_patterns->length, script);
     assert_string(".text", input_section->section_patterns->elements[0], script);
     assert_string(".text.*", input_section->section_patterns->elements[1], script);
 
-    input_section = input_sections->elements[1];
+    output_item = output_items->elements[1];
+    assert_int(SECTIONS_CMD_INPUT_SECTION, output_item->type, script );
+    input_section = &output_item->input_section;
     assert_string("x*", input_section->file_pattern, script);
     assert_int(2, input_section->section_patterns->length, script);
     assert_string(".xtext", input_section->section_patterns->elements[0], script);
@@ -105,13 +143,49 @@ void test_sections_output() {
     // .keeper
     section_command = sections_commands->elements[1];
     assert_int(SECTIONS_CMD_OUTPUT, section_command->type, script);
-    input_sections = section_command->output.input_sections;
-    input_section = input_sections->elements[0];
-    assert_int(1, input_section->keep, script);
     assert_string(".keeper", section_command->output.output_section_name, script);
+
+    output_items = section_command->output.output_items;
+    assert_int(1, output_items->length, script);
+
+    output_item = output_items->elements[0];
+    assert_int(SECTIONS_CMD_INPUT_SECTION, output_item->type, script);
+    input_section = &output_item->input_section;
+    assert_int(1, input_section->keep, script);
     assert_string("y", input_section->file_pattern, script);
     assert_int(1, input_section->section_patterns->length, script);
     assert_string(".keeper", input_section->section_patterns->elements[0], script);
+
+    // .assignment_in_section
+    section_command = sections_commands->elements[2];
+    assert_int(SECTIONS_CMD_OUTPUT, section_command->type, script);
+    assert_string(".assignment_in_section", section_command->output.output_section_name, script);
+
+    output_items = section_command->output.output_items;
+    assert_int(3, output_items->length, script);
+
+    // .assignment_in_section a = 1
+    output_item = output_items->elements[0];
+    assert_int(SECTIONS_CMD_INPUT_ASSIGNMENT, output_item->type, script);
+    CommandAssignment assignment = output_item->assignment;
+    assert_string("a", assignment.symbol, script);
+    assert_int(1, evaluate_test_node(assignment.node), script);
+
+    // .assignment_in_section PROVIDE(b = 2)
+    output_item = output_items->elements[1];
+    assert_int(SECTIONS_CMD_INPUT_ASSIGNMENT, output_item->type, script);
+    assignment = output_item->assignment;
+    assert_string("b", assignment.symbol, script);
+    assert_int(1, assignment.provide, script);
+    assert_int(2, evaluate_test_node(assignment.node), script);
+
+    // .assignment_in_section PROVIDE_HIDDEN(c = 3)
+    output_item = output_items->elements[2];
+    assert_int(SECTIONS_CMD_INPUT_ASSIGNMENT, output_item->type, script);
+    assignment = output_item->assignment;
+    assert_string("c", assignment.symbol, script);
+    assert_int(1, assignment.provide_hidden, script);
+    assert_int(3, evaluate_test_node(assignment.node), script);
 }
 
 static void test_parse_default_linker_script() {

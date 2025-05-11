@@ -127,13 +127,17 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
             continue;
         }
 
-        // Creat the initial output section
+        // Create the initial output section
         RwSection *output_section = add_rw_section(output_elf_file, output_section_name, SHT_NULL, 0, 0);
 
         // Loop over all script input sections
-        List *script_input_sections = sections_command->output.input_sections;
-        for (int j = 0; j < script_input_sections->length; j++) {
-            InputSection *script_input_section = script_input_sections->elements[j];
+        List *script_output_items = sections_command->output.output_items;
+        for (int j = 0; j < script_output_items->length; j++) {
+            SectionsCommandOutputItem *output_item = script_output_items->elements[j];
+
+            if (output_item->type != SECTIONS_CMD_INPUT_SECTION) continue;
+
+            InputSection *script_input_section = &output_item->input_section;
 
             // Loop over all input files
             for (int k = 0; k < input_elf_files->length; k++) {
@@ -206,9 +210,11 @@ static int is_discarded_section(const char *input_filename, const char *input_se
     if (!discard_sections_command_output) return 0;
 
     // Loop over all script input sections
-    List *input_sections = discard_sections_command_output->input_sections;
-    for (int i = 0; i < input_sections->length; i++) {
-        InputSection *input_section = input_sections->elements[i];
+    List *output_items = discard_sections_command_output->output_items;
+    for (int i = 0; i < output_items->length; i++) {
+        SectionsCommandOutputItem *output_item = output_items->elements[i];
+        if (output_item->type != SECTIONS_CMD_INPUT_SECTION) continue;
+        InputSection *input_section = &output_item->input_section;
 
         if (!match_pattern(input_filename, input_section->file_pattern)) continue;
 
@@ -496,7 +502,7 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file,
 }
 
 // Process an assignment command in a section.
-uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, SectionsCommandAssignment *assignment, uint64_t offset) {
+uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, CommandAssignment *assignment, uint64_t offset) {
     Value value = evaluate_node(assignment->node, output_elf_file);
     Symbol *symbol = get_or_add_linker_script_symbol(strdup(assignment->symbol));
 
@@ -546,7 +552,7 @@ static uint64_t layout_output_segments_and_sections(RwElfFile *output_elf_file) 
         for (int j = 0; j < section_commands->length; j++) {
             SectionsCommand *sections_command = section_commands->elements[j];
             if (sections_command->type == SECTIONS_CMD_ASSIGNMENT) {
-                SectionsCommandAssignment *assignment = &sections_command->assignment;
+                CommandAssignment *assignment = &sections_command->assignment;
                 offset = process_assignment(output_elf_file, dot_symbol, assignment, offset);
             }
 

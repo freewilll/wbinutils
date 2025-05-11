@@ -8,72 +8,149 @@
 #include "wld/lexer.h"
 #include "wld/script.h"
 
-static SectionsCommand *parse_sections_assignment(char *identifier) {
+static SectionsCommand *parse_sections_command();
+static SectionsCommandOutputItem *parse_sections_command_output_item();
+
+// Parse functions used in a sections assignment statement like PROVIDE()
+SectionsCommand *parse_sections_command_flag_function() {
     next();
+
+    consume(TOK_LPAREN, "(");
+    SectionsCommand *command = parse_sections_command();
+    consume(TOK_RPAREN, ")");
+    return command;
+}
+
+// Parse the right hand side of an assigment where the cur_token is the eq sign after the identifier
+static CommandAssignment parse_assignment_rhs(char *identifier) {
+    consume(TOK_EQ, "=");
+
     Node *node = parse_expression();
 
+    CommandAssignment assignment = {0};
+    assignment.symbol = identifier;
+    assignment.node = node;
+
+    return assignment;
+}
+
+static SectionsCommand *parse_sections_assignment(char *identifier) {
+    CommandAssignment assignment = parse_assignment_rhs(identifier);
     SectionsCommand *command = malloc(sizeof(SectionsCommand));
     command->type = SECTIONS_CMD_ASSIGNMENT;
-    command->assignment.symbol = identifier;
-    command->assignment.node = node;
+    command->assignment = assignment;
 
     return command;
 }
 
-static InputSection *parse_input_section() {
+// Parse functions used in a sections output statement like KEEP()
+SectionsCommandOutputItem *parse_flag_output_function(void) {
+    next();
+    consume(TOK_LPAREN, "(");
+    SectionsCommandOutputItem *sections_command_output_item = parse_sections_command_output_item();
+    consume(TOK_RPAREN, ")");
+    return sections_command_output_item;
+}
+
+static SectionsCommandOutputItem *parse_sections_command_output_item_flag_function() {
+    next();
+
+    consume(TOK_LPAREN, "(");
+    SectionsCommandOutputItem *output_item = parse_sections_command_output_item();
+    consume(TOK_RPAREN, ")");
+    return output_item;
+}
+
+static SectionsCommandOutputItem *parse_sections_command_output_item() {
     if (cur_token == TOK_KEEP) {
-        next();
-        consume(TOK_LPAREN, "(");
-        InputSection *input_section = parse_input_section();
-        input_section->keep = 1;
-        consume(TOK_RPAREN, ")");
-        return input_section;
+        SectionsCommandOutputItem *sections_command_output_item = parse_flag_output_function();
+        sections_command_output_item->input_section.keep = 1;
+        return sections_command_output_item;
+    }
+    else if (cur_token == TOK_PROVIDE) {
+        // PROVIDE(assignment)
+
+        SectionsCommandOutputItem *output_item = parse_sections_command_output_item_flag_function();
+        output_item->assignment.provide = 1;
+        return output_item;
+    }
+    else if (cur_token == TOK_PROVIDE_HIDDEN) {
+        // PROVIDE(assignment)
+
+        SectionsCommandOutputItem *output_item = parse_sections_command_output_item_flag_function();
+        output_item->assignment.provide_hidden = 1;
+        return output_item;
     }
 
-    InputSection *input_section = calloc(1, sizeof(InputSection));
+    char *identifier;
 
     if (cur_token == TOK_MULTIPLY) {
         // Special case of a single *
-        input_section->file_pattern = "*";
+        identifier = "*";
         next();
     }
     else {
-        expect(TOK_IDENTIFIER, "filename pattern");
-        input_section->file_pattern = strdup(cur_identifier);
+        expect(TOK_IDENTIFIER, "identifier or filename pattern");
+        identifier = strdup(cur_identifier);
         next();
     }
 
-    input_section->section_patterns = new_list(8);
+    if (cur_token == TOK_LPAREN) {
+        // Input section
 
-    consume(TOK_LPAREN, "(");
-    while (1) {
-        expect(TOK_IDENTIFIER, "input section pattern");
-        append_to_list(input_section->section_patterns, strdup(cur_identifier));
-        next();
+        InputSection input_section = {0};
+        input_section.file_pattern = identifier;
 
-        if (cur_token == TOK_RPAREN) break;
+        // Input section pattern
+        input_section.section_patterns = new_list(8);
+
+        consume(TOK_LPAREN, "(");
+        while (1) {
+            expect(TOK_IDENTIFIER, "input section pattern");
+            append_to_list(input_section.section_patterns, strdup(cur_identifier));
+            next();
+
+            if (cur_token == TOK_RPAREN) break;
+        }
+        consume(TOK_RPAREN, ")");
+
+        SectionsCommandOutputItem *output_item = malloc(sizeof(SectionsCommandOutputItem));
+        output_item->type = SECTIONS_CMD_INPUT_SECTION;
+        output_item->input_section = input_section;
+
+        return output_item;
+
     }
-    consume(TOK_RPAREN, ")");
+    else if (cur_token == TOK_EQ) {
+        // Assignment
 
-    return input_section;
+        SectionsCommandOutputItem *output_item = malloc(sizeof(SectionsCommandOutputItem));
+        output_item->type = SECTIONS_CMD_ASSIGNMENT;
+        output_item->assignment = parse_assignment_rhs(identifier);
+        return output_item;
+    }
+    else
+        error_in_file("Unable to parse section");
 }
 
-static SectionsCommand *parse_sections_output(List *section_commands, char *identifier) {
+static SectionsCommand *parse_sections_output(char *identifier) {
     next(); // Colon
 
     SectionsCommand *command = malloc(sizeof(SectionsCommand));
     command->type = SECTIONS_CMD_OUTPUT;
     command->output.output_section_name = identifier; // Output section name
 
-    List *input_sections = new_list(8);;
-    command->output.input_sections = input_sections;
+    List *output_items = new_list(8);
+    command->output.output_items = output_items;
 
     consume(TOK_LCURLY, "{");
 
-    // Loop over input sections
+    // Loop over output items
     while (1) {
-        InputSection *input_section = parse_input_section(command);
-        append_to_list(command->output.input_sections, input_section);
+        SectionsCommandOutputItem *output_item = parse_sections_command_output_item(command);
+        append_to_list(output_items, output_item);
+
+        while (cur_token == TOK_SEMICOLON) next();
 
         if (cur_token == TOK_RCURLY) break;
     }
@@ -83,19 +160,32 @@ static SectionsCommand *parse_sections_output(List *section_commands, char *iden
     return command;
 }
 
-static void parse_sections_command(List *section_commands) {
+static SectionsCommand *parse_sections_command() {
+    if (cur_token == TOK_PROVIDE) {
+        SectionsCommand *command = parse_sections_command_flag_function();
+        command->assignment.provide = 1;
+        return command;
+    }
+
+    if (cur_token == TOK_PROVIDE_HIDDEN) {
+        SectionsCommand *command = parse_sections_command_flag_function();
+        command->assignment.provide_hidden = 1;
+        return command;
+    }
+
     if (cur_token == TOK_IDENTIFIER) {
         char *identifier = strdup(cur_identifier);
         next();
 
         if (cur_token == TOK_EQ) {
             // Assignment
-            append_to_list(section_commands, parse_sections_assignment(identifier));
-
+            SectionsCommand *command = parse_sections_assignment(identifier);
+            return command;
         }
         else if (cur_token == TOK_COLON) {
             // Output
-            append_to_list(section_commands, parse_sections_output(section_commands, identifier));
+            SectionsCommand *command = parse_sections_output(identifier);
+            return command;
         }
         else
             error_in_file("Expected an assignment expression");
@@ -104,7 +194,8 @@ static void parse_sections_command(List *section_commands) {
     else if (cur_token == TOK_DISCARD) {
         next();
         expect(TOK_COLON, ":");
-        append_to_list(section_commands, parse_sections_output(section_commands, LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME));
+        SectionsCommand *command = parse_sections_output(LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME);
+        return command;
     }
     else
         error_in_file("Expected identifier");
@@ -123,7 +214,8 @@ static void parse_sections(void) {
     while (1) {
         while (cur_token == TOK_SEMICOLON) next();
         if (cur_token == TOK_RCURLY) break;
-        parse_sections_command(section_commands);
+        SectionsCommand *command = parse_sections_command(section_commands);
+        append_to_list(section_commands, command);
     }
 
     consume(TOK_RCURLY, "}");

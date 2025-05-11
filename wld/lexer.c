@@ -232,7 +232,6 @@ void next(void) {
 
                  if (!strcmp(cur_identifier, "ENTRY"          )) { cur_token = TOK_ENTRY; }
             else if (!strcmp(cur_identifier, "SECTIONS"       )) { cur_token = TOK_SECTIONS; }
-            else if (!strcmp(cur_identifier, "PROVIDE"        )) { cur_token = TOK_PROVIDE; }
             else if (!strcmp(cur_identifier, "CONSTANT"       )) { cur_token = TOK_CONSTANT; }
             else if (!strcmp(cur_identifier, "MAXPAGESIZE"    )) { cur_token = TOK_MAXPAGESIZE; }
             else if (!strcmp(cur_identifier, "COMMONPAGESIZE" )) { cur_token = TOK_COMMONPAGESIZE; }
@@ -240,6 +239,8 @@ void next(void) {
             else if (!strcmp(cur_identifier, "SIZEOF"         )) { cur_token = TOK_SIZEOF; }
             else if (!strcmp(cur_identifier, "SIZEOF_HEADERS" )) { cur_token = TOK_SIZEOF_HEADERS; }
             else if (!strcmp(cur_identifier, "KEEP"           )) { cur_token = TOK_KEEP; }
+            else if (!strcmp(cur_identifier, "PROVIDE"        )) { cur_token = TOK_PROVIDE; }
+            else if (!strcmp(cur_identifier, "PROVIDE_HIDDEN" )) { cur_token = TOK_PROVIDE_HIDDEN; }
         }
 
         else
