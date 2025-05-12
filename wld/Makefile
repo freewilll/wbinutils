@@ -12,6 +12,7 @@ HEADERS = \
 	rw-elf.h \
 	error.h \
 	wld/expr.h \
+	wld/layout.h \
 	wld/lexer.h \
 	wld/libs.h \
 	wld/parser.h \
@@ -23,6 +24,7 @@ HEADERS = \
 
 OBJECTS = \
 	expr.o \
+	layout.o \
 	lexer.o \
 	libs.o \
 	parser.o \
