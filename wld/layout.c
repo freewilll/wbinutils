@@ -41,7 +41,7 @@ static void add_input_to_output_section(RwSection *output_section, ElfFile *elf_
                 output_section->name, elf_file->filename, file_input_section->name, existing_flags, new_flags);
     }
 
-    // Align the offset accotding to the input section alignment
+    // Align the offset according to the input section alignment
     int offset = ALIGN_UP(output_section->size, elf_section_header->sh_addralign);
     file_input_section->offset = offset;
 
@@ -106,7 +106,12 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
         for (int j = 0; j < script_output_items->length; j++) {
             SectionsCommandOutputItem *output_item = script_output_items->elements[j];
 
-            if (output_item->type != SECTIONS_CMD_INPUT_SECTION) continue;
+            if (output_item->type == SECTIONS_CMD_ASSIGNMENT) {
+                printf("TODO assignment in sections command\n");
+                continue;
+            }
+
+            // Implicit else, it's an SECTIONS_CMD_INPUT_SECTION
 
             InputSection *script_input_section = &output_item->input_section;
 
@@ -295,10 +300,7 @@ static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSe
 // Given an input section and an output section, align the input section, update the sizes and process TLS.
 // If the current output program segment is suitable to include the input section, update it,
 // otherwise, create a new one.
-static void layout_one_section_in_executable(RwElfFile *output_elf_file,
-        ElfProgramSegmentHeader **pcurrent_segment, RwSection *section, int *pcurrent_segment_type, int *pcurrent_segment_flags,
-        Symbol *dot_symbol, uint64_t *poffset) {
-
+static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSection *section,  Symbol *dot_symbol, uint64_t *poffset) {
     if (!section) panic("Got NULL output section in layout_one_section_in_executable()");
 
     if (!section->keep && section->size == 0) return;
@@ -326,29 +328,6 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file,
             *poffset = ALIGN_UP(*poffset, section->align);
     }
 
-    // Setup the segment
-    if (!*pcurrent_segment || section->flags != *pcurrent_segment_flags) {
-        // Either the segment is new, or the flags mismatch.
-        // Create a new segment.
-
-        *pcurrent_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
-        make_program_segment_header(output_elf_file, *pcurrent_segment, section);
-        append_to_list(output_elf_file->program_segments_list, *pcurrent_segment);
-
-        if (DEBUG_LAYOUT)
-            printf("\nCreating new segment using type %#04x and flags %#04x at   %#x  offset %#lx\n",
-                section->type, section->flags, dot_symbol->dst_value, *poffset);
-
-        // Set the program segment offset and address
-        (*pcurrent_segment)->p_offset = *poffset;
-        (*pcurrent_segment)->p_vaddr = dot_symbol->dst_value;
-        (*pcurrent_segment)->p_paddr = dot_symbol->dst_value;
-        (*pcurrent_segment)->p_align = 0x1000;
-
-        *pcurrent_segment_type = section->type;
-        *pcurrent_segment_flags = section->flags;
-    }
-
     if (DEBUG_LAYOUT)
         printf("Adding %-20s of size %#08x at          %#x  offset %#lx\n",
             section->name, section->size, dot_symbol->dst_value, *poffset);
@@ -366,11 +345,7 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file,
     // Increase the file size unless it's a BSS section
     if (section->type != SHT_NOBITS) {
         *poffset += section->size;
-        (*pcurrent_segment)->p_filesz += segment_size_diff;
     }
-
-    // Increase the memory size
-    (*pcurrent_segment)->p_memsz += segment_size_diff;
 
     // Save the total size of the .tdata + .tbss sections
     if (section->type == SHT_NOBITS && (section->flags & SHF_TLS)) {
@@ -410,14 +385,9 @@ uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, Comm
 // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script.
 // This function is run twice. The first time to collect the symbols in assignments. The offsets and addresses may be incorrect.
 // The second time when the final layout is done.
-uint64_t layout_output_segments_and_sections(RwElfFile *output_elf_file) {
+uint64_t layout_output_sections(RwElfFile *output_elf_file) {
     if (DEBUG_LAYOUT) printf("------------------------------------\nLaying out executable\n");
 
-    output_elf_file->program_segments_list = new_list(16);
-
-    ElfProgramSegmentHeader *current_segment = NULL;
-    int current_segment_type = -1;
-    int current_segment_flags = -1;
     uint64_t offset = 0;
 
     Symbol *dot_symbol = get_or_add_linker_script_symbol(strdup("."));
@@ -441,13 +411,11 @@ uint64_t layout_output_segments_and_sections(RwElfFile *output_elf_file) {
 
                 if (!strcmp(section_name, LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME)) continue;
                 RwSection *section = get_rw_section(output_elf_file, section_name);
-                if (!section) panic("Got NULL output section in layout_output_segments_and_sections()");
+                if (!section) panic("Got NULL output section in layout_output_sections()");
 
                 if (!section->keep && section->size == 0) continue;
 
-                layout_one_section_in_executable(output_elf_file,
-                    &current_segment, section, &current_segment_type, &current_segment_flags,
-                    dot_symbol, &offset);
+                layout_one_section_in_executable(output_elf_file, section, dot_symbol, &offset);
             }
         }
     }
@@ -455,12 +423,8 @@ uint64_t layout_output_segments_and_sections(RwElfFile *output_elf_file) {
     return offset;
 }
 
-// Similar to layout_output_segments_and_sections, do the layout of sections not in the linker script.
-void layout_leftover_output_segments_and_sections(RwElfFile *output_elf_file, List *input_elf_files, uint64_t offset) {
-    ElfProgramSegmentHeader *current_segment = NULL;
-    int current_segment_type = -1;
-    int current_segment_flags = -1;
-
+// Similar to layout_output_sections, do the layout of sections not in the linker script.
+void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files, uint64_t offset) {
     Symbol *dot_symbol = get_or_add_linker_script_symbol(strdup("."));
 
     // Loop over all files
@@ -476,9 +440,64 @@ void layout_leftover_output_segments_and_sections(RwElfFile *output_elf_file, Li
 
             if (!output_section->keep && output_section->size == 0) continue;
 
-            layout_one_section_in_executable(output_elf_file,
-                &current_segment, output_section, &current_segment_type, &current_segment_flags,
-                dot_symbol, &offset);
+            layout_one_section_in_executable(output_elf_file, output_section, dot_symbol, &offset);
         }
+    }
+}
+
+// Given a list of sections, group them by type and make the list of program segment headers.
+void layout_program_segments(RwElfFile *output_elf_file) {
+    output_elf_file->program_segments_list = new_list(16);
+
+    ElfProgramSegmentHeader *current_segment = NULL;
+    int current_segment_type = -1;
+    int current_segment_flags = -1;
+    uint64_t previous_section_offset = 0;
+
+    // Loop over all headers
+    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
+        if (section->type == SHT_NULL) continue;
+        if (!(section->flags & SHF_ALLOC)) continue;
+
+        // Setup the segment
+        if (!current_segment || section->flags != current_segment_flags) {
+            // Either the segment is new, or the flags mismatch.
+            // Create a new segment.
+
+            current_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
+            make_program_segment_header(output_elf_file, current_segment, section);
+            append_to_list(output_elf_file->program_segments_list, current_segment);
+
+            if (DEBUG_LAYOUT)
+                printf("\nCreating new segment using type %#04x and flags %#04x at   %#x  offset %#x\n",
+                    section->type, section->flags, section->address, section->offset);
+
+            // Set the program segment offset and address
+            current_segment->p_offset = section->offset;
+            current_segment->p_vaddr = section->address;
+            current_segment->p_paddr = section->address;
+            current_segment->p_align = 0x1000;
+
+            current_segment_type = section->type;
+            current_segment_flags = section->flags;
+            previous_section_offset = section->offset;
+        }
+
+        if (DEBUG_LAYOUT)
+            printf("Adding %-20s of size %#08x at          %#x  offset %#x\n",
+                section->name, section->size, section->address, section->offset);
+
+        // The increase in segment size consists of the difference in alignment + the section size
+        uint64_t segment_size_diff = section->offset - previous_section_offset + section->size;
+
+        // Increase the file size unless it's a BSS section
+        if (section->type != SHT_NOBITS)
+            current_segment->p_filesz += segment_size_diff;
+
+        // Increase the memory size
+        current_segment->p_memsz += segment_size_diff;
+
+        previous_section_offset = section->offset + section->size;
     }
 }

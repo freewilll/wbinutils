@@ -76,6 +76,18 @@ static void make_first_program_segment_header(RwElfFile *output) {
     h->p_align  = 0x1000;   // Align on page boundaries
 }
 
+void print_program_segments(RwElfFile *output_elf_file) {
+    printf("\nSegments:\n");
+
+    for (int i = 0; i < output_elf_file->program_segments_list->length; i++) {
+        ElfProgramSegmentHeader *program_segment = output_elf_file->program_segments_list->elements[i];
+
+        printf("%3d %-11s  flags %02x  offset %#08lx   address %#08lx  filesz %#08lx  memsz %#08lx align %#08lx\n",
+            i, PROGRAM_SEGMENT_TYPE_NAMES[program_segment->p_type], program_segment->p_flags, program_segment->p_offset, program_segment->p_vaddr,
+            program_segment->p_filesz, program_segment->p_memsz, program_segment->p_align);
+    }
+}
+
 // Make the ELF program segment headers. Include the special TLS section if required.
 static void make_elf_program_segment_headers(RwElfFile *output_elf_file) {
     int needs_tls = 0;
@@ -111,19 +123,12 @@ static void make_elf_program_segment_headers(RwElfFile *output_elf_file) {
     // Populate the null program segment header
     make_first_program_segment_header(output_elf_file);
 
-    if (DEBUG_LAYOUT)
-        printf("\nSegments:\n");
-
     for (int i = 0; i < output_elf_file->program_segments_list->length; i++) {
         ElfProgramSegmentHeader *program_segment = output_elf_file->program_segments_list->elements[i];
-
         memcpy(&output_elf_file->elf_program_segment_headers[i + 1], program_segment, sizeof(ElfProgramSegmentHeader));
-
-        if (DEBUG_LAYOUT)
-            printf("%3d %-11s  flags %02x  offset %#08lx   address %#08lx  filesz %#08lx  memsz %#08lx align %#08lx\n",
-                i, PROGRAM_SEGMENT_TYPE_NAMES[program_segment->p_type], program_segment->p_flags, program_segment->p_offset, program_segment->p_vaddr,
-                program_segment->p_filesz, program_segment->p_memsz, program_segment->p_align);
     }
+
+    if (DEBUG_LAYOUT) print_program_segments(output_elf_file);
 
     // Copy program headers
     memcpy(
@@ -285,7 +290,7 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
     layout_leftover_sections(output_elf_file, input_elf_files);
 
     // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script
-    layout_output_segments_and_sections(output_elf_file);
+    layout_output_sections(output_elf_file);
 
     // At this point all symbols should be defined. Ensure this is the case.
     finalize_symbols();
@@ -300,10 +305,10 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
     add_common_symbols_to_bss(output_elf_file);
 
     // Run through linker script again, determine section offsets and assign addresses to symbols in the script
-    uint64_t offset = layout_output_segments_and_sections(output_elf_file);
+    uint64_t offset = layout_output_sections(output_elf_file);
 
-    // Similar to layout_output_segments_and_sections, do the layout of sections not in the linker script.
-    layout_leftover_output_segments_and_sections(output_elf_file, input_elf_files, offset);
+    // Similar to layout_output_sections, do the layout of sections not in the linker script.
+    layout_leftover_output_sections(output_elf_file, input_elf_files, offset);
 
     // Remove sections from the section list that did not get included in the final file
     remove_empty_sections(output_elf_file);
@@ -319,6 +324,9 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
 
     // Now that the size of the ELF file is known, allocate memory for it.
     allocate_elf_output_memory(output_elf_file);
+
+    // Given a list of sections, group them by type and make the list of program segment headers.
+    layout_program_segments(output_elf_file);
 
     // Make the ELF program segment headers. Include the special TLS section if required.
     make_elf_program_segment_headers(output_elf_file);

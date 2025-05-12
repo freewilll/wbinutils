@@ -2,6 +2,7 @@
 #define _WLD_H
 
 #include "list.h"
+#include "rw-elf.h"
 
 #define DEBUG_SYMBOL_RESOLUTION 0
 #define DEBUG_RELOCATIONS 0
@@ -24,6 +25,7 @@ typedef struct input_file {
     int is_library;       // On the command line with -l
 } InputFile;
 
+void print_program_segments(RwElfFile *output_elf_file);
 void run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename);
 
 #endif
