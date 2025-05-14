@@ -109,19 +109,40 @@ static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int bin
     return symbol;
 }
 
+// Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
+// Returns 1 if an undefined symbol has been resolved.
+static int resolve_undefined_symbol(char *name, char binding, int is_library, int read_only) {
+    Symbol *undefined_symbol = get_undefined_symbol(name);
+    if (!undefined_symbol) return 0;
+
+    // Resolve the undefined symbol.
+    if (!read_only) remove_undefined_symbol(name);
+
+    // Weak undefined symbols don't get resolved if also found in a library.
+    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
+
+    return 1;
+}
+
+static Symbol *add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
+    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
+    strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
+    return symbol;
+}
+
+// Return a defined symbol if it already exists.
+// Otherwise, create one.
+// Resolve an undefined symbol if there is one.
 Symbol *get_or_add_linker_script_symbol(char *name) {
     Symbol *result = get_global_defined_symbol(name);
     if (result) return result;
     result = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
     result->is_abs = 1;
 
-    return result;
-}
+    resolve_undefined_symbol(name, STT_NOTYPE, 0, 0);
 
-static void add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
-    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
-    strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
+    return result;
 }
 
 // Report an error, or in case we are being tested, write to last_error_message
@@ -143,22 +164,6 @@ static void fail(ElfFile *elf_file, char *format, ...) {
     set_error_line(0);
     verror_in_file(format, ap);
 }
-
-// Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
-// Returns 1 if an undefined symbol has been resolved.
-static int resolve_undefined_symbol(char *name, char binding, int is_library, int read_only) {
-    Symbol *undefined_symbol = get_undefined_symbol(name);
-    if (!undefined_symbol) return 0;
-
-    // Resolve the undefined symbol.
-    if (!read_only) remove_undefined_symbol(name);
-
-    // Weak undefined symbols don't get resolved if also found in a library.
-    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
-
-    return 1;
-}
-
 
 static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
@@ -583,7 +588,8 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
 }
 
 // Add the symbols to the ELF symbol table.
-// The values and section indexes will be updated later.
+// The values and will be updated later.
+// section indexes are also updated later unless it's an ABS section.
 void make_elf_symbols(RwElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_header = &output_elf_file->elf_section_headers[output_elf_file->section_symtab->index];
 
@@ -601,7 +607,8 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
         const char *name = strmap_ordered_iterator_key(&it);
         if (!strcmp(name, ".")) continue;
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
-        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, 0);
+        int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
     }
 }
 
@@ -611,7 +618,7 @@ void update_elf_symbols(RwElfFile *output_elf_file) {
         const char *name = strmap_ordered_iterator_key(&it);
         if (!strcmp(name, ".")) continue;
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
-        if (!symbol->dst_section) continue; // Weak symbols may not be defined
+        if (!symbol->is_abs && !symbol->dst_section) continue; // Weak symbols may not be defined
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
         elf_symbol->st_value = symbol->dst_value;

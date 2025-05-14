@@ -32,7 +32,7 @@ run-main: main
 		echo "Message was not hello world."; \
 		exit 1; \
 	fi ;\
-	echo "Sanity 3 test passed"
+	echo "Libc with gcc ld test passed"
 
 clean:
 	@rm -f *.o

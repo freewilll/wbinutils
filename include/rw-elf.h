@@ -31,6 +31,7 @@ typedef struct rw_section  {
     List *chunks;                    // Used by was
     int keep;                        // Include empty sections
     int layout_complete;             // This section has been allocated an offset and address
+    List *command_assignments;       // Used by wld, list of OutputSectionAssignment
 } RwSection;
 
 typedef struct rw_elf  {

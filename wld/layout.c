@@ -78,6 +78,17 @@ void remove_empty_sections(RwElfFile *output_elf_file) {
     output_elf_file->sections_list = new_section_list;
 }
 
+// Add an assignment that happens in the middle of an output section. The offset relative to the section is
+// noted. A loop later on assigns the final address, once all addresses are known.
+static void add_output_section_assignment(RwSection *output_section, CommandAssignment *assignment) {
+    Symbol *symbol = get_or_add_linker_script_symbol(strdup(assignment->symbol));
+    OutputSectionAssignment *output_section_assignment = calloc(1, sizeof(OutputSectionAssignment));
+    output_section_assignment->assignment = assignment;
+    output_section_assignment->offset = output_section->size;
+    if (!strcmp(assignment->symbol, ".")) error_in_file("Assigning to . in a section input isn't implemented");
+    append_to_list(output_section->command_assignments, output_section_assignment);
+}
+
 // Process output sections commands in a SECTIONS command
 // This determines the placement and mapping between input sections and output sections.
 // It also creates the output sections.
@@ -85,7 +96,14 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
     // Loop over all section commands of typeoutput
     for (int i = 0; i < section_commands->length; i++) {
         SectionsCommand *sections_command = section_commands->elements[i];
-        if (sections_command->type != SECTIONS_CMD_OUTPUT) continue;
+        if (sections_command->type == SECTIONS_CMD_ASSIGNMENT) {
+            // Create the symbol, but do nothing with it
+            CommandAssignment *assignment = &sections_command->assignment;
+            get_or_add_linker_script_symbol(strdup(assignment->symbol));
+            continue;
+        }
+
+        // Implicit else, sections_command->type == SECTIONS_CMD_OUTPUT
 
         char *output_section_name = sections_command->output.output_section_name;
 
@@ -100,14 +118,15 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
 
         // Create the initial output section
         RwSection *output_section = add_rw_section(output_elf_file, output_section_name, SHT_NULL, 0, 0);
+        output_section->command_assignments = new_list(8);
 
         // Loop over all script input sections
         List *script_output_items = sections_command->output.output_items;
         for (int j = 0; j < script_output_items->length; j++) {
             SectionsCommandOutputItem *output_item = script_output_items->elements[j];
 
-            if (output_item->type == SECTIONS_CMD_ASSIGNMENT) {
-                printf("TODO assignment in sections command\n");
+            if (output_item->type == SECTIONS_CMD_INPUT_ASSIGNMENT) {
+                add_output_section_assignment(output_section, &output_item->assignment);
                 continue;
             }
 
@@ -257,10 +276,6 @@ void make_elf_section_headers(RwElfFile *output_elf_file) {
             section->offset = offset;
             output_elf_file->elf_section_headers[i].sh_offset = offset;
             offset += section->size;
-
-            if (DEBUG_LAYOUT)
-                printf("Setting offset for %s to %#x size=%x name=%d\n",
-                    section->name, section->offset, section->size, output_elf_file->elf_section_headers[i].sh_name);
         }
     }
 
@@ -357,7 +372,7 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
 }
 
 // Process an assignment command in a section.
-uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, CommandAssignment *assignment, uint64_t offset) {
+static uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, CommandAssignment *assignment, uint64_t offset) {
     Value value = evaluate_node(assignment->node, output_elf_file);
     Symbol *symbol = get_or_add_linker_script_symbol(strdup(assignment->symbol));
 
@@ -377,7 +392,8 @@ uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, Comm
         }
     }
 
-    symbol->dst_value = value.number;
+    uint64_t number_value = value.symbol ? value.symbol->dst_value : value.number;
+    symbol->dst_value = number_value;
 
     return offset;
 }
@@ -424,8 +440,9 @@ uint64_t layout_output_sections(RwElfFile *output_elf_file) {
 }
 
 // Similar to layout_output_sections, do the layout of sections not in the linker script.
-void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files, uint64_t offset) {
+void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     Symbol *dot_symbol = get_or_add_linker_script_symbol(strdup("."));
+    uint64_t offset = dot_symbol->dst_value;
 
     // Loop over all files
     for (int i = 0; i < input_elf_files->length; i++) {
@@ -441,6 +458,21 @@ void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf
             if (!output_section->keep && output_section->size == 0) continue;
 
             layout_one_section_in_executable(output_elf_file, output_section, dot_symbol, &offset);
+        }
+    }
+}
+
+// Assign values to symbols in the linker script
+void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf_file) {
+    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
+        List *command_assignments = section->command_assignments;
+        if (!section->command_assignments) continue;
+        for (int j = 0; j < command_assignments->length; j++) {
+            OutputSectionAssignment *command_assignment = (OutputSectionAssignment *) command_assignments->elements[j];
+            Symbol *symbol = must_get_global_defined_symbol(command_assignment->assignment->symbol);
+            uint64_t address = section->address + command_assignment->offset;
+            symbol->dst_value = address;
         }
     }
 }

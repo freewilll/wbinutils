@@ -14,7 +14,6 @@
 #define FINI_ARRAY_START_SYMBOL_NAME        "__fini_array_start"
 #define FINI_ARRAY_END_SYMBOL_NAME          "__fini_array_end"
 
-
 typedef struct symbol {
     char *name;             // Name
     int binding;            // Binding, e.g. local or global

@@ -19,7 +19,7 @@ test: \
 	relocation-got \
 	relocation-tls \
 	array-lifecycle \
-	oddball-sections \
+	oddball-sections
 
 .PHONY: sanity1
 sanity1:

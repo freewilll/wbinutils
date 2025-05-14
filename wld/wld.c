@@ -176,36 +176,6 @@ static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file
     }
 }
 
-static void make_array_symbol_values(RwElfFile *output_elf_file) {
-    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
-
-        #define SET_START_END(start_symbol_name, end_symbol_name) { \
-            Symbol *start_symbol = must_get_global_defined_symbol(start_symbol_name); \
-            Symbol *end_symbol = must_get_global_defined_symbol(end_symbol_name); \
-            start_symbol->dst_value = section->address; \
-            end_symbol->dst_value = section->address + section->size; \
-            start_symbol->dst_section = section; \
-            end_symbol->dst_section = section; \
-        }
-
-        // Fragile: if the section is empty, it won't have a value, and the start/end symbols will both be zero.
-        // This problem will go away when linker scripts are implemented since the start/end will end up somewhere
-        // in the data segment.
-        if (!strcmp(section->name, ".preinit_array")) {
-            SET_START_END(PREINIT_ARRAY_START_SYMBOL_NAME, PREINIT_ARRAY_END_SYMBOL_NAME);
-        }
-
-        if (!strcmp(section->name, ".init_array")) {
-            SET_START_END(INIT_ARRAY_START_SYMBOL_NAME, INIT_ARRAY_END_SYMBOL_NAME);
-        }
-
-        if (!strcmp(section->name, ".fini_array")) {
-            SET_START_END(FINI_ARRAY_START_SYMBOL_NAME, FINI_ARRAY_END_SYMBOL_NAME);
-        }
-    }
-}
-
 // Set the executable entrypoint
 static void set_entrypoint(RwElfFile *output_elf_file) {
     if (!entrypoint_symbol_name) entrypoint_symbol_name = DEFAULT_ENTRYPOINT_SYMBOL_NAME;
@@ -305,10 +275,10 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
     add_common_symbols_to_bss(output_elf_file);
 
     // Run through linker script again, determine section offsets and assign addresses to symbols in the script
-    uint64_t offset = layout_output_sections(output_elf_file);
+    layout_output_sections(output_elf_file);
 
     // Similar to layout_output_sections, do the layout of sections not in the linker script.
-    layout_leftover_output_sections(output_elf_file, input_elf_files, offset);
+    layout_leftover_output_sections(output_elf_file, input_elf_files);
 
     // Remove sections from the section list that did not get included in the final file
     remove_empty_sections(output_elf_file);
@@ -334,8 +304,8 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
     // Assign final values to all symbols
     make_symbol_values(input_elf_files, output_elf_file);
 
-    // Assign values to array start/end section built-in symbols
-    make_array_symbol_values(output_elf_file);
+    // Assign values to symbols in the linker script
+    make_output_section_command_assignments_symbol_values(output_elf_file);
 
     // Update the GOT (if there is one)
     update_got_symbol_values(output_elf_file);
