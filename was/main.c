@@ -50,10 +50,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    if (verbose) {
-        printf("Was assembler\n");
-        exit(1);
-    }
+    if (verbose) printf("Was assembler\n");
 
     if (!output_filename) output_filename = "a.out";
 
