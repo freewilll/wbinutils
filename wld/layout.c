@@ -27,7 +27,9 @@ static void add_input_to_output_section(RwSection *output_section, ElfFile *elf_
     int new_flags = elf_section_header->sh_flags;
 
     // Discard merge and strings flags, they are unimportant when it comes to merging sections.
-    new_flags &= ~(SHF_MERGE | SHF_STRINGS);
+    // Also ignore SHF_GROUP aka COMDAT groups.
+    int ignore_flags_mask = ~(SHF_MERGE | SHF_STRINGS | SHF_GROUP);
+    new_flags &= ignore_flags_mask;
 
     if (output_section->type != SHT_NULL) {
         // Check for mismatch in type
@@ -36,7 +38,7 @@ static void add_input_to_output_section(RwSection *output_section, ElfFile *elf_
                 output_section->name, elf_file->filename, file_input_section->name, output_section->type, elf_section_header->sh_type);
 
         // Check for mismatch in flags
-        if (existing_flags != new_flags)
+        if ((existing_flags & ignore_flags_mask) != new_flags)
             error("Flags mismatch in output section %s, file %s, section %s: %d v %d",
                 output_section->name, elf_file->filename, file_input_section->name, existing_flags, new_flags);
     }

@@ -39,7 +39,8 @@
 #define SHF_EXECINSTR     (1 << 2)  // Executable
 #define SHF_MERGE         (1 << 4)  // Could be merged
 #define SHF_STRINGS       (1 << 5)  // Contains strings
-#define SHF_TLS		      (1 << 10)	// TLS
+#define SHF_GROUP         (1 << 9)	// Section is member of a group
+#define SHF_TLS           (1 << 10)	// TLS
 
 // Section header types
 #define SHT_NULL           0    // Unused
