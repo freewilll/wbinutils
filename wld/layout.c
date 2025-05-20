@@ -442,9 +442,8 @@ uint64_t layout_output_sections(RwElfFile *output_elf_file) {
 }
 
 // Similar to layout_output_sections, do the layout of sections not in the linker script.
-void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
+void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files, uint64_t offset) {
     Symbol *dot_symbol = get_or_add_linker_script_symbol(strdup("."));
-    uint64_t offset = dot_symbol->dst_value;
 
     // Loop over all files
     for (int i = 0; i < input_elf_files->length; i++) {

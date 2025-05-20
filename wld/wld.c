@@ -275,10 +275,10 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
     add_common_symbols_to_bss(output_elf_file);
 
     // Run through linker script again, determine section offsets and assign addresses to symbols in the script
-    layout_output_sections(output_elf_file);
+    uint64_t offset = layout_output_sections(output_elf_file);
 
     // Similar to layout_output_sections, do the layout of sections not in the linker script.
-    layout_leftover_output_sections(output_elf_file, input_elf_files);
+    layout_leftover_output_sections(output_elf_file, input_elf_files, offset);
 
     // Remove sections from the section list that did not get included in the final file
     remove_empty_sections(output_elf_file);
