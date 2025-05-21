@@ -310,8 +310,6 @@ static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSe
     if (section->flags & SHF_EXECINSTR) psh->p_flags |= PF_X;
 
     psh->p_type = PT_LOAD;          // Segment type
-    psh->p_filesz = section->size;  // Segment size in file
-    psh->p_memsz = section->size;   // Segment size in memory
 }
 
 // Given an input section and an output section, align the input section, update the sizes and process TLS.
@@ -497,6 +495,9 @@ void layout_program_segments(RwElfFile *output_elf_file) {
         if (!current_segment || section->flags != current_segment_flags) {
             // Either the segment is new, or the flags mismatch.
             // Create a new segment.
+
+            if (current_segment && current_segment->p_offset + current_segment->p_filesz > section->offset)
+                panic("Overlap in segments: %#lx > %#x", current_segment->p_offset + current_segment->p_filesz, section->offset);
 
             current_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
             make_program_segment_header(output_elf_file, current_segment, section);
