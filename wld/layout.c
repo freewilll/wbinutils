@@ -343,6 +343,11 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
             *poffset = ALIGN_UP(*poffset, section->align);
     }
 
+    // Page align all section offsets to ensure all segment offsets are also page-aligned.
+    // This is required to satisfy the ELF alignment rule:
+    // p_vaddr % p_align == p_offset % p_align
+    *poffset += (dot_symbol->dst_value - *poffset + 0x1000) % 0x1000;
+
     if (DEBUG_LAYOUT)
         printf("Adding %-20s of size %#08x at          %#x  offset %#lx\n",
             section->name, section->size, dot_symbol->dst_value, *poffset);
