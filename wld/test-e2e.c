@@ -210,7 +210,8 @@ static void test_sanity() {
         "    mov (%rdi), %ebx;"
         "    int $0x80;"
         ".section .data;"
-        "    code: .long 0");
+        "    code: .long 0"
+    );
 
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
@@ -233,6 +234,49 @@ static void test_sanity() {
     );
 }
 
+// Test an oddball section with different flags after a data section.
+// They must end up in their own pages, otherwise the kernel will drop
+// flags in a common page mapping and cause mayham.
+void test_segments_are_page_aligned() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movl $1, %eax;"
+        "    lea code(%rip), %rdi;"
+        "    mov (%rdi), %ebx;"
+        "    int $0x80;"
+        ".section .data;"
+        "    code: .long 0;"
+        // A new section with different flags gets its own segment, which must be page aligned
+        ".section .oddball, \"a\", @progbits;"
+        "    .long 0;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x10,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
+        ".oddball",       SHT_PROGBITS,   0x403000, 0x3000, 0x04,  SHF_ALLOC,                 1,
+        NULL
+    );
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x04,    0x04,   PF_R | PF_W,  0x1000,
+        PT_LOAD,          0x3000,  0x403000,  0x04,    0x04,   PF_R,         0x1000,
+        PT_END
+    );
+}
+
 int main() {
     test_sanity();
+    test_segments_are_page_aligned();
 }

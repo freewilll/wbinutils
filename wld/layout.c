@@ -316,6 +316,13 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
     // Align the section
     uint64_t old_offset = *poffset;
 
+    // Always page align the start of a section to ensure kernel memory mappings
+    // never overlap. This is a bit brutal, since it's  the program segment
+    // that needs to be page aligned, not the section.
+    // Because of the structure of the code it's much simpler to do it here though.
+    dot_symbol->dst_value = ALIGN_UP(dot_symbol->dst_value, 0x1000);
+    *poffset = ALIGN_UP(*poffset, 0x1000);
+
     // Align TLS .tdata section to page boundaries, but move the data to the end of the section
     if (section->type == SHT_PROGBITS && (section->flags & SHF_TLS)) {
         uint64_t offset_end = ALIGN_UP(*poffset + section->size, 0x1000);
@@ -327,13 +334,6 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
         output_elf_file->tls_template_address = dot_symbol->dst_value;
         output_elf_file->tls_template_offset = *poffset;
         output_elf_file->tls_template_tdata_size = section->size;
-    }
-
-    else if (section->align != 0) {
-        dot_symbol->dst_value = ALIGN_UP(dot_symbol->dst_value, section->align);
-
-        if (section->type != SHT_NOBITS)
-            *poffset = ALIGN_UP(*poffset, section->align);
     }
 
     // Page align all section offsets to ensure all segment offsets are also page-aligned.
