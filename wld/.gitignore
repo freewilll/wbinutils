@@ -21,3 +21,4 @@ test-relocations
 test-parser
 test-expr
 test-utils
+test-e2e

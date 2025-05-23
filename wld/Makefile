@@ -55,7 +55,7 @@ libwld.a: ${OBJECTS} ${LIBS_PATH}
 ${TARGET}: libwld.a main.o ${LIBS_PATH}
 	gcc -g -Werror -I ../include main.o libwld.a -o ${TARGET}
 
-test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser run-test-expr run-test-utils
+test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser run-test-expr run-test-utils run-test-e2e
 	make -C tests
 
 libtest-archive-loading.a: test-archive-loading.o
@@ -96,6 +96,10 @@ run-test-expr: test-expr
 run-test-utils: test-utils
 	./test-utils
 
+.PHONY: run-test-e2e
+run-test-e2e: test-e2e
+	./test-e2e
+
 clean:
 	@rm -f *.o
 	@rm -f libwld.a
@@ -109,3 +113,4 @@ clean:
 	@rm -f test-parser
 	@rm -f test-expr
 	@rm -f test-utils
+	@rm -f test-e2e

@@ -287,14 +287,7 @@ void make_elf_section_headers(RwElfFile *output_elf_file) {
         if (!section->offset) panic("Unexpected section offset zero for %s", section->name);
     }
 
-    if (DEBUG_LAYOUT) {
-        printf("Section headers:\n");
-
-        for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-            RwSection *section = output_elf_file->sections_list->elements[i];
-            printf("%3d %-40s type %02x  flags %02x  offset %#08x   address %#08x   size %#08x\n", i, section->name, section->type, section->flags, section->offset, section->address, section->size);
-        }
-    }
+    if (DEBUG_LAYOUT) dump_sections(output_elf_file);
 
     output_elf_file->size = offset;
 

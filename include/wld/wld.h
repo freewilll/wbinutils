@@ -25,7 +25,8 @@ typedef struct input_file {
     int is_library;       // On the command line with -l
 } InputFile;
 
-void print_program_segments(RwElfFile *output_elf_file);
-void run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename);
+void dump_sections(RwElfFile *output_elf_file);
+void dump_program_segments(RwElfFile *output_elf_file);
+RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename);
 
 #endif

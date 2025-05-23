@@ -34,11 +34,13 @@
 #define SHN_UNDEF         0         // This section table index means the symbol is undefined. When the link editor combines this object file with another that defines the indicated symbol, this file's references to the symbol will be linked to the actual definition.
 #define SHN_ABS           65521     // The symbol has an absolute value that will not change because of relocation.#define
 #define SHN_COMMON        65522     // This symbol labels a common block that has not yet been allocate
+
 #define SHF_WRITE         (1 << 0)  // Writeable
 #define SHF_ALLOC         (1 << 1)  // Occupies memory
 #define SHF_EXECINSTR     (1 << 2)  // Executable
 #define SHF_MERGE         (1 << 4)  // Could be merged
 #define SHF_STRINGS       (1 << 5)  // Contains strings
+#define SHF_INFO_LINK     (1 << 6)  // sh_info contains SHT index
 #define SHF_GROUP         (1 << 9)	// Section is member of a group
 #define SHF_TLS           (1 << 10)	// TLS
 
@@ -48,12 +50,19 @@
 #define SHT_SYMTAB         2    // Symbol table
 #define SHT_STRTAB         3    // String table
 #define SHT_RELA           4    // Relocation entries with addends
+#define SHT_HASH           5    // Symbol hash table
+#define SHT_DYNAMIC        6    // Dynamic linking information
 #define SHT_NOTE	       7    // Notes
 #define SHT_NOBITS         8    // Program space with no data (bss)
-#define SHT_INIT_ARRAY	  14    // Array of constructors
-#define SHT_FINI_ARRAY	  15    // Array of destructors
+#define SHT_REL            9    // Relocation entries, no addends
+#define SHT_SHLIB         10    // Reserved
+#define SHT_DYNSYM        11    // Dynamic linker symbol table
+#define SHT_INIT_ARRAY    14    // Array of constructors
+#define SHT_FINI_ARRAY    15    // Array of destructors
 #define SHT_PREINIT_ARRAY 16    // Array of pre-constructors
-#define SHF_INFO_LINK     64    // sh_info contains SHT index
+#define SHT_GROUP         17    // Section group
+#define SHT_SYMTAB_SHNDX  18    // Extended section indeces
+#define	SHT_NUM           19    // Number of defined types.
 
 // Program segment types
 #define	PT_NULL           0     // Program header table entry unused

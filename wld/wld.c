@@ -16,7 +16,30 @@
 
 static char *entrypoint_symbol_name;
 
-static const char *PROGRAM_SEGMENT_TYPE_NAMES[] = { "PT_NULL", "PT_LOAD", "PT_DYNAMIC", "PT_INTERP", "PT_NOTE", "PT_SHLIB", "PT_PHDR", "PT_TLS", "PT_NUM" };
+static const char *SECTION_TYPE_NAMES[] = {
+    "NULL",
+    "PROGBITS",
+    "SYMTAB",
+    "STRTAB",
+    "RELA",
+    "HASH",
+    "DYNAMIC",
+    "NOTE",
+    "NOBITS",
+    "REL",
+    "SHLIB",
+    "DYNSYM",
+    "UNKNOWN",
+    "UNKNOWN",
+    "INIT_ARRAY",
+    "FINI_ARRAY",
+    "PREINIT_ARRAY",
+    "GROUP",
+    "SYMTAB_SHNDX",
+    "NUM",
+};
+
+static const char *PROGRAM_SEGMENT_TYPE_NAMES[] = { "NULL", "LOAD", "DYNAMIC", "INTERP", "NOTE", "SHLIB", "PHDR", "TLS", "NUM" };
 
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files) {
@@ -76,15 +99,49 @@ static void make_first_program_segment_header(RwElfFile *output) {
     h->p_align  = 0x1000;   // Align on page boundaries
 }
 
-void print_program_segments(RwElfFile *output_elf_file) {
-    printf("\nSegments:\n");
+// Print sections in a format similar to readelf's output
+void dump_sections(RwElfFile *output_elf_file) {
+    printf("Sections:\n");
+    printf("[Nr] Name              Type            Address          Off      Size     ES Flg Lk Inf Al\n");
+
+    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
+
+        char flags[10] = {0};
+        char *p = flags;
+        if (section->flags & SHF_WRITE)     *p++ = 'W';
+        if (section->flags & SHF_ALLOC)     *p++ = 'A';
+        if (section->flags & SHF_EXECINSTR) *p++ = 'X';
+        if (section->flags & SHF_MERGE)     *p++ = 'M';
+        if (section->flags & SHF_STRINGS)   *p++ = 'S';
+        if (section->flags & SHF_INFO_LINK) *p++ = 'I';
+        if (section->flags & SHF_GROUP)     *p++ = 'G';
+        if (section->flags & SHF_TLS)       *p++ = 'T';
+        *p = '\0';
+
+        printf("%4d %-17s %-14s  %016x %08x %08x %02lx %-3s %2d %2d %3d\n",
+            i, section->name, SECTION_TYPE_NAMES[section->type], section->address, section->offset,
+            section->size, section->entsize, flags, section->link, section->info, section->align);
+    }
+}
+
+// Print sections in a format similar to readelf's output
+void dump_program_segments(RwElfFile *output_elf_file) {
+    printf("Program Segments:\n");
+    printf("[Nr] Type           Offset   VirtAddr         PhysAddr         FileSiz  MemSiz   Flg Align\n");
 
     for (int i = 0; i < output_elf_file->program_segments_list->length; i++) {
         ElfProgramSegmentHeader *program_segment = output_elf_file->program_segments_list->elements[i];
 
-        printf("%3d %-11s  flags %02x  offset %#08lx   address %#08lx  filesz %#08lx  memsz %#08lx align %#08lx\n",
-            i, PROGRAM_SEGMENT_TYPE_NAMES[program_segment->p_type], program_segment->p_flags, program_segment->p_offset, program_segment->p_vaddr,
-            program_segment->p_filesz, program_segment->p_memsz, program_segment->p_align);
+        printf("%4d %-14s %08lx %016lx %016lx %08lx %08lx %c%c%c %06lx\n",
+            i, PROGRAM_SEGMENT_TYPE_NAMES[program_segment->p_type],
+            program_segment->p_offset, program_segment->p_vaddr, program_segment->p_vaddr,
+            program_segment->p_filesz, program_segment->p_memsz,
+            (program_segment->p_flags & PF_R) ? 'R' : ' ',
+            (program_segment->p_flags & PF_W) ? 'W' : ' ',
+            (program_segment->p_flags & PF_X) ? 'E' : ' ',
+            program_segment->p_align
+        );
     }
 }
 
@@ -128,7 +185,7 @@ static void make_elf_program_segment_headers(RwElfFile *output_elf_file) {
         memcpy(&output_elf_file->elf_program_segment_headers[i + 1], program_segment, sizeof(ElfProgramSegmentHeader));
     }
 
-    if (DEBUG_LAYOUT) print_program_segments(output_elf_file);
+    if (DEBUG_LAYOUT) dump_program_segments(output_elf_file);
 
     // Copy program headers
     memcpy(
@@ -235,7 +292,7 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
     }
 }
 
-void run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename) {
+RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename) {
     // Create output file
     RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
 
@@ -330,4 +387,6 @@ void run(List *library_paths, List *linker_scripts, List *input_files, const cha
 
     // Write the ELF file
     write_elf_file(output_elf_file);
+
+    return output_elf_file;
 }
