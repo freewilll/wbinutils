@@ -88,3 +88,12 @@ int match_pattern(const char *string, const char *pattern) {
 
     return *p == '\0';
 }
+
+// Match a path to a pattern. A potential path is stripped off first.
+int match_path_pattern(const char *path, const char *pattern) {
+    char *p = strrchr(path, '/');
+    if (p)
+        match_pattern(p + 1, pattern);
+    else
+        return match_pattern(path, pattern);
+}

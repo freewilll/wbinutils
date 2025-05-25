@@ -141,7 +141,7 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
                 ElfFile *elf_file = input_elf_files->elements[k];
 
                 // Check the input file matches the pattern
-                if (!match_pattern(elf_file->filename, script_input_section->file_pattern)) continue;
+                if (!match_path_pattern(elf_file->filename, script_input_section->file_pattern)) continue;
 
                 // Match script input section with file input section
                 List *section_patterns = script_input_section->section_patterns;
@@ -162,9 +162,6 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
 
                         // Check the section name matches the pattern
                         if (!match_pattern(file_input_section->name, section_pattern)) continue;
-
-                        // Discard empty sections not to be kept straight away
-                        if (!script_input_section->keep && !elf_section_header->sh_size) continue;
 
                         // Ensure the output section isn't thrown away later on if keep=1
                         if (script_input_section->keep) output_section->keep = 1;
@@ -203,7 +200,7 @@ static int is_discarded_section(const char *input_filename, const char *input_se
         if (output_item->type != SECTIONS_CMD_INPUT_SECTION) continue;
         InputSection *input_section = &output_item->input_section;
 
-        if (!match_pattern(input_filename, input_section->file_pattern)) continue;
+        if (!match_path_pattern(input_filename, input_section->file_pattern)) continue;
 
         // Match script input section with file input section
         List *section_patterns = input_section->section_patterns;
@@ -238,6 +235,9 @@ void layout_leftover_sections(RwElfFile *output_elf_file, List *input_elf_files)
 
             // Discard sections in the /DISCARD/ section
             if (is_discarded_section(elf_file->filename, section_name)) continue;
+
+            if (DEBUG_LAYOUT)
+                printf("Leftover output section %s\n", section_name);
 
             // Create the output section if it doesn't already exist
             RwSection *output_section = get_rw_section(output_elf_file, section_name);

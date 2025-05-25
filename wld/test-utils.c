@@ -18,13 +18,25 @@ static void assert_pattern_match(char *string, char *pattern, int expected_match
     }
 }
 
-static void assert_match(char *string, char *pattern) {
-    assert_pattern_match(string, pattern, 1);
+#define assert_match(string, pattern) assert_pattern_match(string, pattern, 1)
+#define assert_not_match(string, pattern) assert_pattern_match(string, pattern, 0)
+
+static void assert_path_pattern_match(char *string, char *pattern, int expected_matches) {
+    int matches = match_path_pattern(string, pattern);
+
+    if (matches && !expected_matches) {
+        printf("Got unexpected match for %s to %s\n", string, pattern);
+        exit(1);
+    }
+
+    if (!matches && expected_matches) {
+        printf("Did not match %s to %s\n", string, pattern);
+        exit(1);
+    }
 }
 
-static void assert_not_match(char *string, char *pattern) {
-    assert_pattern_match(string, pattern, 0);
-}
+#define assert_path_match(string, pattern) assert_path_pattern_match(string, pattern, 1)
+#define assert_path_not_match(string, pattern) assert_path_pattern_match(string, pattern, 0)
 
 int main() {
     assert_not_match("foo", "bar");
@@ -45,4 +57,8 @@ int main() {
     assert_not_match("foo", "f?b");
     assert_match("foo", "f?o");
     assert_match("fxo", "f?o");
+
+    assert_path_match("/foo", "foo");
+    assert_path_match("/bar/foo", "foo");
+    assert_path_not_match("/bar/foo/x", "foo");
 }
