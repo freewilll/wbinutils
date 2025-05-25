@@ -324,7 +324,7 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     apply_relocations(input_elf_files, NULL, RELOCATION_PHASE_SCAN);
 
     // Create the .got section, if needed
-    create_global_offset_table(output_elf_file);
+    create_got_section(output_elf_file);
 
     // If there are any common symbols, create a bss section and allocate values the symbols
     add_common_symbols_to_bss(output_elf_file);

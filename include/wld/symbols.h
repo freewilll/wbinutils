@@ -63,7 +63,7 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section);
 void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTable *symbol_table);
 void make_elf_symbols(RwElfFile *output_elf_file);
 void update_elf_symbols(RwElfFile *output_elf_file);
-void create_global_offset_table(RwElfFile *output_elf_file);
+void create_got_section(RwElfFile *output_elf_file);
 void update_got_symbol_values(RwElfFile *output_elf_file);
 
 #endif
