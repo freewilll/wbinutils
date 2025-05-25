@@ -321,7 +321,10 @@ void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     // Reset section sizes
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
-        section->size = 0;
+
+        // If it's not a symbol table or string table, set size to zero
+        if (section->type != SHT_SYMTAB && section->type != SHT_STRTAB)
+            section->size = 0;
     }
 
     // Reset dst sections

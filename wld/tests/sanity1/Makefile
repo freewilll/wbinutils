@@ -1,6 +1,6 @@
 WLD = ../../../bin/wld
 
-all:
+all: test
 
 test: run-sanity1 test-sanity1-symbol-table
 
@@ -29,14 +29,17 @@ test-sanity1-symbol-table: sanity1
 	echo $$SYMTAB | grep " 2: 0000000000000000 0 SECTION LOCAL DEFAULT 2"                         > /dev/null && \
 	echo $$SYMTAB | grep " 3: 0000000000000000 0 SECTION LOCAL DEFAULT 3"                         > /dev/null && \
 	echo $$SYMTAB | grep " 4: 0000000000000000 0 SECTION LOCAL DEFAULT 4"                         > /dev/null && \
-	echo $$SYMTAB | grep " 5: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND _GLOBAL_OFFSET_TABLE_"  > /dev/null && \
-	echo $$SYMTAB | grep " 6: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND __preinit_array_start"  > /dev/null && \
-	echo $$SYMTAB | grep " 7: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND __preinit_array_end"    > /dev/null && \
-	echo $$SYMTAB | grep " 8: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND __init_array_start"     > /dev/null && \
-	echo $$SYMTAB | grep " 9: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND __init_array_end"       > /dev/null && \
-	echo $$SYMTAB | grep "10: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND __fini_array_start"     > /dev/null && \
-	echo $$SYMTAB | grep "11: 0000000000000000 0 NOTYPE GLOBAL HIDDEN UND __fini_array_end"       > /dev/null && \
-	echo $$SYMTAB | grep "12: 0000000000401000 0 NOTYPE GLOBAL DEFAULT 1 _start"                  > /dev/null
+	echo $$SYMTAB | grep " 5: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS _GLOBAL_OFFSET_TABLE_"  > /dev/null && \
+	echo $$SYMTAB | grep " 6: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __preinit_array_start"  > /dev/null && \
+	echo $$SYMTAB | grep " 7: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __preinit_array_end"    > /dev/null && \
+	echo $$SYMTAB | grep " 8: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __init_array_start"     > /dev/null && \
+	echo $$SYMTAB | grep " 9: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __init_array_end"       > /dev/null && \
+	echo $$SYMTAB | grep "10: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __fini_array_start"     > /dev/null && \
+	echo $$SYMTAB | grep "11: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __fini_array_end"       > /dev/null && \
+	echo $$SYMTAB | grep "12: 0000000000401000 0 NOTYPE GLOBAL DEFAULT 1 _start"                  > /dev/null && \
+	echo $$SYMTAB | grep "13: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS __etext"               > /dev/null && \
+	echo $$SYMTAB | grep "14: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS _etext"                > /dev/null && \
+	echo $$SYMTAB | grep "15: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS etext"                 > /dev/null
 
 clean:
 	@rm -f *.o
