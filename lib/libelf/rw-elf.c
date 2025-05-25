@@ -352,4 +352,3 @@ void write_elf_file(RwElfFile *output_elf_file) {
     if (written < 0) { perror("Unable to write to output file"); exit(1); }
     fclose(f);
 }
-

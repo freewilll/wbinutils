@@ -50,9 +50,8 @@ void *load_section_uncached(ElfFile *elf_file, int section_index) {
 // Unless already done, allocate memory for a section, read it, and return it
 void *load_section(ElfFile *elf_file, Section *section) {
     if (section->data) return section->data;
-    ElfSectionHeader *section_header = section->elf_section_header;
-    section->data = malloc(section_header->sh_size);
-    read_from_file(elf_file, section->data, section_header->sh_offset, section_header->sh_size);
+    section->data = malloc(section->size);
+    read_from_file(elf_file, section->data, section->src_offset, section->size);
 
     return section->data;
 }
@@ -123,7 +122,13 @@ static void load_sections(ElfFile *elf_file) {
         Section *section = calloc(1, sizeof(Section));
         section->name = name;
         section->index = i;
-        section->elf_section_header = elf_section_header;
+        section->size = elf_section_header->sh_size;
+        section->type = elf_section_header->sh_type;
+        section->flags = elf_section_header->sh_flags;
+        section->info = elf_section_header->sh_info;
+        section->align = elf_section_header->sh_addralign;
+        section->src_offset = elf_section_header->sh_offset;
+
         append_to_list(elf_file->section_list, section);
         strmap_put(elf_file->section_map, strdup(name), section);
     }
@@ -143,7 +148,7 @@ static void load_sections(ElfFile *elf_file) {
     }
     else {
         elf_file->symbol_table = load_section_uncached(elf_file, symtab_section->index);
-        elf_file->symbol_count = symtab_section->elf_section_header->sh_size / sizeof(ElfSymbol);
+        elf_file->symbol_count = symtab_section->size / sizeof(ElfSymbol);
     }
 }
 

@@ -5,6 +5,7 @@
 #include "list.h"
 #include "ro-elf.h"
 #include "rw-elf.h"
+#include "strmap-ordered.h"
 
 #include "wld/layout.h"
 #include "wld/libs.h"
@@ -40,6 +41,34 @@ static const char *SECTION_TYPE_NAMES[] = {
 };
 
 static const char *PROGRAM_SEGMENT_TYPE_NAMES[] = { "NULL", "LOAD", "DYNAMIC", "INTERP", "NOTE", "SHLIB", "PHDR", "TLS", "NUM" };
+
+static RwElfFile *init_output_elf_file(const char *output_filename) {
+    RwElfFile *result = new_rw_elf_file(output_filename, ET_EXEC);
+    result->extra_sections = new_strmap_ordered();
+
+    return result;
+}
+
+// Get an extra section. Returns null if it doesn't exist
+Section *get_extra_section(RwElfFile *output_elf_file, char *name) {
+    Section *section = strmap_ordered_get(output_elf_file->extra_sections, name);
+    return section;
+}
+
+// Create an extra section. It must not already exist.
+Section *create_extra_section(RwElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align) {
+    if (strmap_ordered_get(output_elf_file->extra_sections, name))
+        panic("Extra section %s already exists", name);
+
+    Section *extra_section = calloc(1, sizeof(Section));
+    extra_section->name = strdup(name);
+    extra_section->type = type;
+    extra_section->flags = flags;
+    extra_section->align = align;
+    strmap_ordered_put(output_elf_file->extra_sections, strdup(name), extra_section);
+
+    return extra_section;
+}
 
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files) {
@@ -273,12 +302,11 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
         // Loop over all sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
             Section *input_section  = (Section *) input_elf_file->section_list->elements[j];
-            ElfSectionHeader *input_elf_section_header = input_section->elf_section_header;
 
             // Only include sections that have program data
             if (!input_section->dst_section) continue;
 
-            const char *section_name = &input_elf_file->section_header_strings[input_elf_section_header->sh_name];
+            const char *section_name = input_section->name;
             RwSection *rw_section = input_section->dst_section;
             if (!rw_section) continue; // The section is not included
 
@@ -287,14 +315,32 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, RwElfFile *
 
             // Load the section data. It may already have been loaded and modified by relocations.
             load_section(input_elf_file, input_section);
-            memcpy(rw_section->data + input_section->offset, input_section->data, input_section->elf_section_header->sh_size);
+            memcpy(rw_section->data + input_section->dst_offset, input_section->data, input_section->size);
         }
+    }
+}
+
+// Copy the memory for all program sections in the input files to the output file
+static void copy_extra_sections_to_output(RwElfFile *output_elf_file) {
+    strmap_ordered_foreach(output_elf_file->extra_sections, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Section *input_section = strmap_ordered_get(output_elf_file->extra_sections, name);
+
+        const char *section_name = input_section->name;
+        RwSection *rw_section = input_section->dst_section;
+        if (!rw_section) panic("Extra section %s did not get included in the output", section_name);
+
+        // Allocate memory if not already done
+        if (!rw_section->data) rw_section->data = calloc(1, rw_section->size);
+
+        // Copy the data
+        memcpy(rw_section->data + input_section->dst_offset, input_section->data, input_section->size);
     }
 }
 
 RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename) {
     // Create output file
-    RwElfFile *output_elf_file = new_rw_elf_file(output_filename, ET_EXEC);
+    RwElfFile *output_elf_file = init_output_elf_file(output_filename);
 
     // Setup symbol tables
     init_symbols();
@@ -325,6 +371,9 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
 
     // Create the .got section, if needed
     create_got_section(output_elf_file);
+
+    // Run through the linker script again to include extra sections
+    layout_input_sections(output_elf_file, input_elf_files);
 
     // If there are any common symbols, create a bss section and allocate values the symbols
     add_common_symbols_to_bss(output_elf_file);
@@ -376,6 +425,9 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
 
     // Copy the memory for all program sections in the input files to the output file
     copy_input_elf_sections_to_output(input_elf_files, output_elf_file);
+
+    // Copy in the extra sections to the output
+    copy_extra_sections_to_output(output_elf_file);
 
     // Write relocated symbol values to the output ELF file
     apply_relocations(input_elf_files, output_elf_file, RELOCATION_PHASE_APPLY);

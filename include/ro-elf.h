@@ -9,10 +9,15 @@
 #include "rw-elf.h"
 
 typedef struct section {
-    ElfSectionHeader *elf_section_header; // Pointer to the ELF header
     char *name;                           // Section name
     int index;                            // Index in the ELF section headers table
-    int offset;                           // Offset in output section
+    uint64_t size;                        // Size in bytes of the section in the file image. May be 0.
+    uint32_t type;                        // Identifies the type of this header.
+    uint64_t flags;                       // Identifies the attributes of the section
+    uint64_t src_offset;                  // Offset of the section in the file image
+    uint32_t info;                        // Contains extra information about the section, from ELF
+    uint64_t align;                       // Alignment
+    int dst_offset;                       // Offset in output section
     RwSection *dst_section;               // Target Section (for WLD)
     void *data;                           // Potentially loaded section
 } Section;

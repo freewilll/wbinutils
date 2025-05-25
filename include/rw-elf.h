@@ -6,6 +6,7 @@
 #include "elf.h"
 #include "list.h"
 #include "strmap.h"
+#include "strmap-ordered.h"
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #define ALIGN_UP(offset, alignment) ((((offset) + alignment - 1) & ~(alignment - 1)))
@@ -46,7 +47,6 @@ typedef struct rw_elf  {
     RwSection *section_symtab;
     RwSection *section_strtab;
     RwSection *section_shstrtab;                            // Section header string table
-    RwSection *section_got;                                 // Global Offset Table section
     int local_symbol_end;                                   // Index of last local symbol
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
@@ -56,6 +56,7 @@ typedef struct rw_elf  {
     uint64_t tls_template_address;                          // Virtual address of the TLS template
     uint64_t got_virt_address;                              // Virtual address of the GOT
     List *program_segments_list;                            // Used by wld
+    StrMapOrdered *extra_sections;                          // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

@@ -15,16 +15,17 @@ static SectionsCommandOutput *discard_sections_command_output;
 
 #define IGNORE_FLAGS_MASK (~(SHF_MERGE | SHF_STRINGS | SHF_GROUP))
 
-static int input_and_output_sections_match(ElfFile *elf_file, RwSection *output_section, Section *input_section, int fail_on_mismatch) {
+static int input_and_output_sections_match(RwSection *output_section, Section *input_section, int fail_on_mismatch, ElfFile *maybe_elf_file) {
     int existing_flags = output_section->flags;
-    ElfSectionHeader *elf_section_header = input_section->elf_section_header;
-    int new_flags = elf_section_header->sh_flags;
+    int new_flags = input_section->flags;
 
     // Check for mismatch in type
-    if (output_section->type != elf_section_header->sh_type) {
+    if (output_section->type != input_section->type) {
         if (fail_on_mismatch)
             error("Type mismatch in output section %s, file %s, section %s: %d v %d",
-                output_section->name, elf_file->filename, input_section->name, output_section->type, elf_section_header->sh_type);
+                output_section->name,
+                maybe_elf_file ? maybe_elf_file->filename : "-",
+                input_section->name, output_section->type, input_section->type);
         else
             return 0;
     }
@@ -33,7 +34,9 @@ static int input_and_output_sections_match(ElfFile *elf_file, RwSection *output_
     if ((existing_flags & IGNORE_FLAGS_MASK) != (new_flags & IGNORE_FLAGS_MASK)) {
         if (fail_on_mismatch)
             error("Flags mismatch in output section %s, file %s, section %s: %d v %d",
-                output_section->name, elf_file->filename, input_section->name, existing_flags, new_flags);
+                output_section->name,
+                maybe_elf_file ? maybe_elf_file->filename : "-",
+                input_section->name, existing_flags, new_flags);
         else
             return 0;
     }
@@ -44,36 +47,36 @@ static int input_and_output_sections_match(ElfFile *elf_file, RwSection *output_
 // Given an input section, add it to an output section. The output section may be empty, in that case itis of type SHT_NULL.
 // If not empty, it checks if the input section is compatible.
 // If all is well, the offset, size and alignment is determined.
-static void add_input_to_output_section(ElfFile *elf_file, RwSection *output_section, Section *input_section) {
-    ElfSectionHeader *elf_section_header = input_section->elf_section_header;
-
+// elf_file may be null
+static void add_input_to_output_section(RwSection *output_section, Section *input_section, ElfFile *maybe_elf_file) {
     // Associate the input and output sections
     input_section->dst_section = output_section;
 
     // Check type and flags
     int existing_flags = output_section->flags;
-    int new_flags = elf_section_header->sh_flags;
+    int new_flags = input_section->flags;
 
     // Discard merge and strings flags, they are unimportant when it comes to merging sections.
     // Also ignore SHF_GROUP aka COMDAT groups.
     new_flags &= IGNORE_FLAGS_MASK;
 
     if (output_section->type != SHT_NULL)
-        input_and_output_sections_match(elf_file, output_section, input_section, 1);
+        input_and_output_sections_match(output_section, input_section, 1, maybe_elf_file);
 
     // Align the offset according to the input section alignment
-    int offset = ALIGN_UP(output_section->size, elf_section_header->sh_addralign);
-    input_section->offset = offset;
+    int offset = ALIGN_UP(output_section->size, input_section->align);
+    input_section->dst_offset = offset;
 
     // Configure the output section
-    output_section->size = offset + elf_section_header->sh_size;
-    output_section->type = elf_section_header->sh_type;
+    output_section->size = offset + input_section->size;
+    output_section->type = input_section->type;
     output_section->flags = new_flags;
-    output_section->align = MAX(output_section->align, elf_section_header->sh_addralign);
+    output_section->align = MAX(output_section->align, input_section->align);
 
     if (DEBUG_LAYOUT || DEBUG_RELOCATIONS)
         printf("  File %-50s section %-20s size %#08lx is at offset %#08x new size=%#08x in target section %s\n",
-            elf_file->filename, input_section->name, elf_section_header->sh_size, offset, output_section->size, output_section->name);
+            maybe_elf_file ? maybe_elf_file->filename :  "-",
+            input_section->name, input_section->size, offset, output_section->size, output_section->name);
 }
 
 // Remove sections from the section list that did not get included in the final file.
@@ -164,11 +167,10 @@ static void merge_leftover_sections_with_matching_type_and_flags(RwElfFile *outp
             Section *input_section  = (Section *) elf_file->section_list->elements[j];
             if (input_section->dst_section) continue; // Already placed
 
-            ElfSectionHeader *elf_section_header = input_section->elf_section_header;
-            const char *section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
+            const char *section_name = input_section->name;
 
             // Only include certain sections
-            if (!ORPHANED_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
+            if (!ORPHANED_SECTION_TYPE(input_section->type)) continue;
 
             // Discard sections in the /DISCARD/ section
             if (is_discarded_section(elf_file->filename, section_name)) continue;
@@ -176,8 +178,8 @@ static void merge_leftover_sections_with_matching_type_and_flags(RwElfFile *outp
             // This could be optimized by caching section flag/types up front and doing a lookup.
             for (int i = 0; i < output_elf_file->sections_list->length; i++) {
                 RwSection *output_section = output_elf_file->sections_list->elements[i];
-                if (input_and_output_sections_match(elf_file, output_section, input_section, 0)) {
-                    add_input_to_output_section(elf_file, output_section, input_section);
+                if (input_and_output_sections_match(output_section, input_section, 0, elf_file)) {
+                    add_input_to_output_section(output_section, input_section, elf_file);
                 }
             }
         }
@@ -261,8 +263,16 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
                         // Ensure the output section isn't thrown away later on if keep=1
                         if (script_input_section->keep) output_section->keep = 1;
 
-                        add_input_to_output_section(elf_file, output_section, file_input_section);
+                        add_input_to_output_section(output_section, file_input_section, elf_file);
                     }
+                }
+
+                // See if anything in extra_sections matches the pattern
+                strmap_ordered_foreach(output_elf_file->extra_sections, it) {
+                    const char *name = strmap_ordered_iterator_key(&it);
+                    Section *section = strmap_ordered_get(output_elf_file->extra_sections, name);
+                    if (!match_pattern(section->name, section_pattern)) continue;
+                    add_input_to_output_section(output_section, section, NULL);
                 }
             } // Output items loop
         } // Input sections loop
@@ -282,11 +292,10 @@ static void layout_leftover_sections(RwElfFile *output_elf_file, List *input_elf
             Section *input_section  = (Section *) elf_file->section_list->elements[j];
             if (input_section->dst_section) continue; // Already placed
 
-            ElfSectionHeader *elf_section_header = input_section->elf_section_header;
-            const char *section_name = &elf_file->section_header_strings[elf_section_header->sh_name];
+            const char *section_name = input_section->name;
 
             // Only include certain sections
-            if (!ORPHANED_SECTION_TYPE(input_section->elf_section_header->sh_type)) continue;
+            if (!ORPHANED_SECTION_TYPE(input_section->type)) continue;
 
             // Discard sections in the /DISCARD/ section
             if (is_discarded_section(elf_file->filename, section_name)) continue;
@@ -298,10 +307,10 @@ static void layout_leftover_sections(RwElfFile *output_elf_file, List *input_elf
             RwSection *output_section = get_rw_section(output_elf_file, section_name);
             if (!output_section)
                 output_section = add_rw_section(output_elf_file, section_name,
-                    elf_section_header->sh_type, elf_section_header->sh_flags, elf_section_header->sh_addralign);
+                    input_section->type, input_section->flags, input_section->align);
 
             // Add the section to the output
-            add_input_to_output_section(elf_file, output_section, input_section);
+            add_input_to_output_section(output_section, input_section, elf_file);
         }
     }
 }

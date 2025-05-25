@@ -229,7 +229,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
         RwSection *symbol_rw_section = symbol_section->dst_section;
         if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
 
-        dst_value = symbol_rw_section->address + symbol_section->offset + elf_symbol->st_value;
+        dst_value = symbol_rw_section->address + symbol_section->dst_offset + elf_symbol->st_value;
     }
     else {
         // Handle a relocation to a non-section symbol
@@ -253,7 +253,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
             input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
     }
 
-    uint64_t output_offset = input_section->offset + relocation->r_offset;
+    uint64_t output_offset = input_section->dst_offset + relocation->r_offset;
 
     return apply_relocation(output_elf_file, rw_section->data, rw_section->offset, rw_section->address, output_offset, relocation, dst_value, is_tls_value, got_offset);
 }
@@ -402,16 +402,15 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file, int ph
         // Loop over all relocation sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
             Section *rela_input_section  = (Section *) input_elf_file->section_list->elements[j];
-            ElfSectionHeader *rela_input_elf_section_header = rela_input_section->elf_section_header;
-            if (rela_input_elf_section_header->sh_type != SHT_RELA) continue;
+            if (rela_input_section->type != SHT_RELA) continue;
 
-            int target_section_index = rela_input_elf_section_header->sh_info;
+            int target_section_index = rela_input_section->info;
             Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
 
             // Loop over all relocations
             ElfRelocation *relocations = load_section_uncached(input_elf_file, j);
             ElfRelocation *relocation = relocations;
-            ElfRelocation *end = ((void *) relocations) + rela_input_elf_section_header->sh_size;
+            ElfRelocation *end = ((void *) relocations) + rela_input_section->size;
 
             while (relocation < end) {
                 if (phase == RELOCATION_PHASE_SCAN)

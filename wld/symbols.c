@@ -570,16 +570,16 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
                     panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
 
                 if (symbol->type == STT_TLS)
-                    symbol->dst_value = symbol->src_section->dst_section->offset + symbol->src_section->offset + symbol->src_value - output_elf_file->tls_template_offset;
+                    symbol->dst_value = symbol->src_section->dst_section->offset + symbol->src_section->dst_offset + symbol->src_value - output_elf_file->tls_template_offset;
                 else
-                    symbol->dst_value = symbol->src_section->dst_section->address + symbol->src_section->offset + symbol->src_value;
+                    symbol->dst_value = symbol->src_section->dst_section->address + symbol->src_section->dst_offset + symbol->src_value;
             }
 
             if (DEBUG_RELOCATIONS) {
                 printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK)
-                    printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->offset);
+                    printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->dst_offset);
                 else
                     printf("\n");
             }
@@ -669,24 +669,25 @@ void create_got_section(RwElfFile *output_elf_file) {
 
     if (!got_entries_count) return;
 
-    output_elf_file->section_got = get_or_create_progbits_section(output_elf_file, ".got");
-    output_elf_file->section_got->size = 8 * got_entries_count;
-    output_elf_file->section_got->data = calloc(1, output_elf_file->section_got->size);
+    Section *extra_section = create_extra_section(output_elf_file, GOT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+    extra_section->size = 8 * got_entries_count;;
+    extra_section->data = malloc(extra_section->size);
 }
 
 // Set the symbol values in the GOT (if present)
 void update_got_symbol_values(RwElfFile *output_elf_file) {
-    if (!output_elf_file->section_got) return; // No GOT, do nothing
+    Section *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
+    if (!section_got) return; // No GOT, do nothing
 
     // Set the special GOT symbol to the virtual address of the GOT
     Symbol *got_symbol = must_get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
-    got_symbol->dst_value = output_elf_file->section_got->address;
+    got_symbol->dst_value = section_got->dst_section->address + section_got->dst_offset;
 
     // Set the address of the GOT
     output_elf_file->got_virt_address = got_symbol->dst_value;
 
     // Add the GOT entries
-    uint64_t *got_entries = (uint64_t *) output_elf_file->section_got->data;
+    uint64_t *got_entries = (uint64_t *) section_got->data;
 
     int i = 0;
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
@@ -694,7 +695,7 @@ void update_got_symbol_values(RwElfFile *output_elf_file) {
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->needs_got) continue;
 
-        if (i * 8 >= output_elf_file->section_got ->size) panic("Trying to write beyond the allocated space in the GOT");
+        if (i * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in the GOT");
         got_entries[i] = symbol->dst_value;
         symbol->got_offset = i * 8;
 
