@@ -14,7 +14,10 @@
 #define MAXPAGESIZE    0x1000
 #define COMMONPAGESIZE 0x1000
 
-#define GOT_SECTION_NAME ".got.wld"
+#define GOT_SECTION_NAME        ".got"
+#define GOT_PLT_SECTION_NAME    ".got.plt"
+#define IPLT_SECTION_NAME       ".iplt"
+#define RELA_IPLT_SECTION_NAME  ".rela.iplt"
 
 // Section types that are included when not referenced in the linker script
 #define ORPHANED_SECTION_TYPE(type) \

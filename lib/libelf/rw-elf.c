@@ -132,7 +132,7 @@ void make_elf_headers(RwElfFile *output) {
     elf_header->ei_class    = ELF_CLASS_64;                        // 64-bit
     elf_header->ei_data     = ELF_DATA_2_LSB;                      // LSB
     elf_header->ei_version  = 1;                                   // Original ELF version
-    elf_header->ei_osabi    = ELF_OSABI_NONE;                      // Unix System V
+    elf_header->ei_osabi    = ELF_OSABI_GNU;                       // GNU ELF extensions are supported, like IFUNCs.
     elf_header->e_type      = output->type;                        // Object type
     elf_header->e_machine   = E_MACHINE_TYPE_X86_64;               // x86-64
     elf_header->e_version   = EV_CURRENT;                          // EV_CURRENT Current version of ELF

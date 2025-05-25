@@ -94,6 +94,7 @@
 #define STT_COMMON      5
 #define STT_TLS         6
 #define STT_LOOS        10
+#define STT_GNU_IFUNC   10      // Symbol is an indirect code object
 #define STT_HIOS        12
 #define STT_LOPROC      13
 #define STT_HIPROC      15
@@ -118,6 +119,7 @@
 #define R_X86_64_8              14   // Direct 8 bit                  S + A
 #define R_X86_64_GOTTPOFF       22	 // 32 bit signed PC relative offset to GOT entry for IE symbol
 #define R_X86_64_TPOFF32        23   // Offset in initial TLS block   S + A - T
+#define R_X86_64_IRELATIVE      37   // Adjust indirectly by program base
 #define R_X86_64_GOTPCRELX      41   // Introduced in GNU binutils 2.26
 #define R_X86_64_REX_GOTPCRELX  42   // Introduced in GNU binutils 2.26
 #define E_MACHINE_TYPE_X86_64   0x3e

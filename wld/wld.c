@@ -45,6 +45,7 @@ static const char *PROGRAM_SEGMENT_TYPE_NAMES[] = { "NULL", "LOAD", "DYNAMIC", "
 static RwElfFile *init_output_elf_file(const char *output_filename) {
     RwElfFile *result = new_rw_elf_file(output_filename, ET_EXEC);
     result->extra_sections = new_strmap_ordered();
+    result->ifunc_symbols = new_list(0);
 
     return result;
 }
@@ -235,6 +236,20 @@ static void create_default_sections(RwElfFile *output_elf_file) {
     add_to_rw_section(output_elf_file->section_strtab, "", 1);
 }
 
+// Process IFUNCs and create .got.plt, .iplt and .rela.iplt if required
+static void process_ifuncs(RwElfFile *output_elf_file, List *input_elf_files) {
+    // Global symbols
+    process_ifuncs_from_symbol_table(output_elf_file, global_symbol_table);
+
+    // Local symbols
+    for (int i = 0; i < input_elf_files->length; i++) {
+        ElfFile *elf_file = input_elf_files->elements[i];
+        if (DEBUG_RELOCATIONS) printf("\nLocal symbols for %s:\n", elf_file->filename);
+        SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
+        process_ifuncs_from_symbol_table(output_elf_file, local_symbol_table);
+    }
+}
+
 // If there are any common symbols, create a bss section and allocate values the symbols
 static void add_common_symbols_to_bss(RwElfFile *output) {
     if (!common_symbols_are_present()) return;
@@ -247,7 +262,7 @@ static void add_common_symbols_to_bss(RwElfFile *output) {
 }
 
 // Assign final values to all symbols
-static void make_symbol_values(List *input_elf_files, RwElfFile *output_elf_file) {
+static void make_symbol_values(RwElfFile *output_elf_file, List *input_elf_files) {
     if (DEBUG_RELOCATIONS) printf("\nGlobal symbols:\n");
 
     // Global symbols
@@ -359,8 +374,7 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     // Run through the first pass of the linker script
     layout_input_sections(output_elf_file, input_elf_files);
 
-    // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script.
-    // This is a first pass.
+    // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script
     layout_output_sections(output_elf_file, input_elf_files);
 
     // At this point all symbols should be defined. Ensure this is the case.
@@ -371,6 +385,12 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
 
     // Create the .got section, if needed
     create_got_section(output_elf_file);
+
+    // Process IFUNCs and create .got.plt, .iplt and .rela.iplt if required
+    process_ifuncs(output_elf_file, input_elf_files);
+
+    // Allocate memory for extra sections like .got.plt, .iplt and .rela.iplt
+    allocate_extra_sections(output_elf_file);
 
     // Run through the linker script again to include extra sections
     layout_input_sections(output_elf_file, input_elf_files);
@@ -403,13 +423,16 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     make_elf_program_segment_headers(output_elf_file);
 
     // Assign final values to all symbols
-    make_symbol_values(input_elf_files, output_elf_file);
+    make_symbol_values(output_elf_file, input_elf_files);
 
     // Assign values to symbols in the linker script
     make_output_section_command_assignments_symbol_values(output_elf_file);
 
     // Update the GOT (if there is one)
     update_got_symbol_values(output_elf_file);
+
+    // Make .iplt jmp instructions that refer to the entries in .got.iplt, also finish off .rela.iplt
+    update_iplt(output_elf_file);
 
     // Set the symbol's value and section indexes
     update_elf_symbols(output_elf_file);

@@ -37,9 +37,11 @@ test-sanity1-symbol-table: sanity1
 	echo $$SYMTAB | grep "10: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __fini_array_start"     > /dev/null && \
 	echo $$SYMTAB | grep "11: 0000000000000000 0 NOTYPE GLOBAL HIDDEN ABS __fini_array_end"       > /dev/null && \
 	echo $$SYMTAB | grep "12: 0000000000401000 0 NOTYPE GLOBAL DEFAULT 1 _start"                  > /dev/null && \
-	echo $$SYMTAB | grep "13: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS __etext"               > /dev/null && \
-	echo $$SYMTAB | grep "14: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS _etext"                > /dev/null && \
-	echo $$SYMTAB | grep "15: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS etext"                 > /dev/null
+    echo $$SYMTAB | grep "13: 0000000000000000 0 NOTYPE GLOBAL DEFAULT ABS __rela_iplt_start"     > /dev/null && \
+    echo $$SYMTAB | grep "14: 0000000000000000 0 NOTYPE GLOBAL DEFAULT ABS __rela_iplt_end"       > /dev/null && \
+	echo $$SYMTAB | grep "15: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS __etext"               > /dev/null && \
+	echo $$SYMTAB | grep "16: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS _etext"                > /dev/null && \
+	echo $$SYMTAB | grep "17: 000000000040100c 0 NOTYPE GLOBAL DEFAULT ABS etext"                 > /dev/null
 
 clean:
 	@rm -f *.o

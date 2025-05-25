@@ -55,8 +55,11 @@ typedef struct rw_elf  {
     uint64_t tls_template_size;                             // Size of the TLS template
     uint64_t tls_template_address;                          // Virtual address of the TLS template
     uint64_t got_virt_address;                              // Virtual address of the GOT
+    uint64_t got_iplt_virt_address;                         // Virtual address of .got.iplt
+    uint64_t iplt_virt_address;                             // Virtual address of the .iplt section
     List *program_segments_list;                            // Used by wld
     StrMapOrdered *extra_sections;                          // Used by wld
+    List *ifunc_symbols;                                    // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

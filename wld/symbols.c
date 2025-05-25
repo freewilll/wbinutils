@@ -645,18 +645,6 @@ void init_symbols(void) {
     add_hidden_symbol(FINI_ARRAY_END_SYMBOL_NAME);
 }
 
-// Create a section of type SHT_PROGBITS unless it already exists.
-static RwSection *get_or_create_progbits_section(RwElfFile *output_elf_file, char *name) {
-    RwSection *section = get_rw_section(output_elf_file, name);
-    if (!section) panic("No %s section was created in the linker script", name);
-
-    section->type = SHT_PROGBITS;
-    section->flags = SHF_ALLOC | SHF_WRITE;
-    section->align = 8;
-
-    return section;
-}
-
 // Create the .got section, if needed
 void create_got_section(RwElfFile *output_elf_file) {
     // Scan the symbol table and count the amount of GOT entries
@@ -701,4 +689,125 @@ void update_got_symbol_values(RwElfFile *output_elf_file) {
 
         i++;
     }
+}
+
+// If there are any ifuncs,
+// - Create .got.plt
+// - Create .iplt
+// - Create .rela.iplt
+void process_ifuncs_from_symbol_table(RwElfFile *output_elf_file, SymbolTable *symbol_table) {
+    Section *section_got_iplt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    Section *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
+    Section *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
+
+     strmap_ordered_foreach(symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
+
+        if (symbol->type == STT_GNU_IFUNC) {
+            // The index in the list corresponds to the index in the sections below.
+            append_to_list(output_elf_file->ifunc_symbols, symbol);
+
+            // Reserve .got.iplt entry
+            symbol->needs_got_iplt = 1;
+
+            if (!section_got_iplt) {
+                section_got_iplt = create_extra_section(output_elf_file, GOT_PLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+                section_got_iplt->size = 8;
+            }
+
+            symbol->got_iplt_offset = section_got_iplt->size;
+            section_got_iplt->size += 8;
+
+            // Reserve .iplt entry
+            if (!section_iplt)
+                section_iplt = create_extra_section(output_elf_file, IPLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8);
+            symbol->iplt_offset = section_iplt->size;
+            section_iplt->size += 8; // Enough space for a jmpq *0x...(%rip), padded to 8 bytes
+
+            // Reserve .rela.iplt entry
+            if (!section_rela_iplt)
+                section_rela_iplt = create_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME, SHT_RELA, SHF_ALLOC | SHF_INFO_LINK, 8);
+            symbol->rela_iplt_offset = section_rela_iplt->size;
+            section_rela_iplt->size += sizeof(ElfRelocation);
+        }
+    }
+}
+
+// Allocate memory for extra sections like .got.plt and .iplt, .rela.iplt
+void allocate_extra_sections(RwElfFile *output_elf_file) {
+    Section *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    if (section_got_plt && section_got_plt->size)
+        section_got_plt->data = calloc(1, section_got_plt->size);
+
+    Section *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
+    if (section_iplt && section_iplt->size)
+        section_iplt->data = calloc(1, section_iplt->size);
+
+    Section *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
+    if (section_rela_iplt && section_rela_iplt->size)
+        section_rela_iplt->data = calloc(1, section_rela_iplt->size);
+}
+
+// Update addresses and add relocations for ifuncs
+// Make .iplt jmp instructions that refer to the entries in .got.iplt
+// Note: the calls to the ifunc code aren't rewritten, the loader does that, using the relocations
+// added in .rela.iplt.
+void update_iplt(RwElfFile *output_elf_file) {
+    Section *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    Section *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
+    Section *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
+
+    if (!section_got_plt && !section_iplt && !section_rela_iplt) return; // No ifuncs are present
+
+    // Check all sections exist
+    if (!section_iplt || !section_got_plt)
+        panic("Got a %s section without a matching %s section", IPLT_SECTION_NAME, GOT_PLT_SECTION_NAME);
+
+    if (!section_rela_iplt)
+        panic("Got a %s section without a matching %s section", GOT_PLT_SECTION_NAME, RELA_IPLT_SECTION_NAME);
+
+    // The entries in .plt and .got.plt correspond 1:1. .got.plt has a NULL header and .iplt doesn't.
+
+    if (!section_got_plt->dst_section) panic("No address for %s", GOT_PLT_SECTION_NAME);
+    if (!section_iplt->dst_section) panic("No address for %s", IPLT_SECTION_NAME);
+
+    uint64_t got_iplt_address = section_got_plt->dst_section->address + section_got_plt->dst_offset;
+    uint64_t iplt_address = section_iplt->dst_section->address + section_iplt->dst_offset;
+
+    char *iplt_data = section_iplt->data;
+    char *rela_iplt_data = section_rela_iplt->data;
+
+    // Loop over all ifuncs
+    int count = section_iplt->size / 8;
+    for (int i = 0; i < count; i++) {
+        if (i >= output_elf_file->ifunc_symbols->length) panic("Out of bounds accessing ifunc_symbols");
+
+        Symbol *symbol = (Symbol *) output_elf_file->ifunc_symbols->elements[i];
+
+        // Add an instruction in .iplt
+        iplt_data[i * 8 + 0] = 0xff; // jmpq   *0x...(%rip)
+        iplt_data[i * 8 + 1] = 0x25;
+
+        // 6 is the size of the instruction, 8 is the offset in the .got.plt table.
+        uint64_t value = got_iplt_address - iplt_address + 8 - 6;
+        *((uint64_t *) &iplt_data[i * 8 + 2]) = value;
+
+        // Add a relocation in .rela.iplt
+        ElfRelocation *r = &((ElfRelocation *) rela_iplt_data)[i];
+        r->r_info = R_X86_64_IRELATIVE;
+        r->r_offset = got_iplt_address + i * 8 + 8; // .got.plt has one NULL entry
+        r->r_addend = symbol->dst_value;
+    }
+
+    // Set info in .rela.iplt section to .got.plt section
+    // This has to be done in the ELF headers, which have already been made from the output sections.
+    section_rela_iplt->dst_section->link = section_got_plt->index;
+    ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_iplt->dst_section->index];
+    h->sh_info = section_got_plt->dst_section->index;
+    h->sh_entsize = sizeof(ElfRelocation);
+
+    // Store the addresses, for use in the relocations code
+    output_elf_file->iplt_virt_address = iplt_address;
+    output_elf_file->got_iplt_virt_address = got_iplt_address;
 }

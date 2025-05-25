@@ -89,7 +89,11 @@ static void convert_Gvqp_to_Evqp(void *data, uint8_t opcode, uint8_t binary_oper
 // This function updates the values in the output ELF file. The code may already have been relaxed by
 // scan_relocation().
 // All ELF file details are abstracted away, so that function can be easily tested.
-int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t rw_section_offset, uint64_t rw_section_address, uint64_t output_offset, ElfRelocation *relocation, uint64_t value, int is_tls_value, int value_got_offset) {
+int apply_relocation(RwElfFile *output_elf_file, void *output_pointer,
+        uint64_t rw_section_offset, uint64_t rw_section_address, uint64_t output_offset,
+        ElfRelocation *relocation, uint64_t value,
+        int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset) {
+
     uint32_t output_virtual_address = rw_section_address + output_offset;
 
     output_pointer += output_offset;
@@ -99,8 +103,9 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
     uint32_t P = output_virtual_address;
     uint32_t S = value;
 
-    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
-    if (type == R_X86_64_PLT32) type = R_X86_64_PC32;
+    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
+    // unless the symbol is in the .iplt section for ifuncs.
+    if (type == R_X86_64_PLT32 && value_iplt_offset == -1) type = R_X86_64_PC32;
 
     if (type == R_X86_64_GOTTPOFF) {
         // Convert a foo@GOTTPOFF(%rip) to foo@GOTPCREL(%rip)
@@ -170,8 +175,12 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
             uint8_t opcode = *popcode;
 
             if (opcode != 0xc7 && opcode != 0x81) {
-                if (value_got_offset == -1) panic("Expected a value in the GOT, but no entry is present");
-                S = output_elf_file->got_virt_address + value_got_offset + A - P;
+                if (value_got_offset == -1 && value_got_iplt_offset == -1) panic("Expected a value in the GOT, but no entry is present");
+
+                if (value_got_offset != -1)
+                    S = output_elf_file->got_virt_address + value_got_offset + A - P;
+                else
+                    S = output_elf_file->got_iplt_virt_address + value_got_iplt_offset + A - P;
             }
 
             if (DEBUG_RELOCATIONS) printf("    value=%#x\n", S);
@@ -187,6 +196,16 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t 
             uint32_t value = S + A - output_elf_file->tls_template_size;
             if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             *output = value;
+            break;
+        }
+
+        case R_X86_64_PLT32: {
+            if (value_iplt_offset == -1) panic("Expected a value in the iplt, but no entry is present");
+            S = output_elf_file->iplt_virt_address + value_iplt_offset + A - P;
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", S);
+            uint32_t *output = (uint32_t *) output_pointer;
+            *output = S;
             break;
         }
 
@@ -213,7 +232,9 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
     int dst_value;
     char *symbol_name = NULL;
     int is_tls_value = 0;
-    int got_offset = -1;
+    uint64_t got_offset = -1;
+    uint64_t iplt_offset = -1;
+    uint64_t got_iplt_offset = -1;
 
     // Get the output section
     RwSection *rw_section = input_section->dst_section;
@@ -244,6 +265,8 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
             dst_value = symbol->dst_value;
             is_tls_value = symbol->type == STT_TLS;
             got_offset = symbol->needs_got ? symbol->got_offset : -1;
+            iplt_offset = symbol->needs_got_iplt ? symbol->iplt_offset : -1;
+            got_iplt_offset = symbol->needs_got_iplt ? symbol->got_iplt_offset : -1;
         }
     }
 
@@ -255,7 +278,7 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
 
     uint64_t output_offset = input_section->dst_offset + relocation->r_offset;
 
-    return apply_relocation(output_elf_file, rw_section->data, rw_section->offset, rw_section->address, output_offset, relocation, dst_value, is_tls_value, got_offset);
+    return apply_relocation(output_elf_file, rw_section->data, rw_section->offset, rw_section->address, output_offset, relocation, dst_value, is_tls_value, got_offset, iplt_offset, got_iplt_offset);
 }
 
 // Given an input file and a relocation, relax any instructions where possible and determine if the symbol needs to be in the GOT.
@@ -365,6 +388,8 @@ static int scan_relocation_in_input_elf_file(ElfFile *input_elf_file, Section *i
     int result = scan_relocation(input_section->data, relocation);
     if (result != SCAN_RELOCATION_NEEDS_GOT) return result; // Return the number of errors, 0 or 1
 
+    // Implicit else: A GOT entry is needed
+
     // Add an entry to the GOT
     int type = relocation->r_info & 0xffffffff;
     int symbol_index = relocation->r_info >> 32;
@@ -375,6 +400,11 @@ static int scan_relocation_in_input_elf_file(ElfFile *input_elf_file, Section *i
 
     if (elf_symbol_type == STT_SECTION)
         panic("Handling of GOT entries that refer to a section symbol not handled");
+
+    if (elf_symbol_type == STT_GNU_IFUNC) {
+        // This symbol will get an entry in .got.plt. There is no need to create one in the .got.
+        return SCAN_RELOCATION_OK;
+    }
 
     // Lookup the symbol in the symbol table
     char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
