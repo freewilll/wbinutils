@@ -320,8 +320,10 @@ void copy_rw_sections_to_elf(RwElfFile *output_elf_file) {
     for (int i = 1; i < sections->length; i++) {
         RwSection *section = sections->elements[i];
 
-        if (section->type != SHT_NOBITS)
+        if (section->type != SHT_NOBITS) {
+            if (section->size && !section->data) panic("Output section data is NULL for non-zero sized section %s %p", section->name, section);
             memcpy(&output_elf_file->data[section->offset], section->data, section->size);
+        }
     }
 }
 

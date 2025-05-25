@@ -73,7 +73,7 @@ static void add_input_to_output_section(RwSection *output_section, Section *inpu
     output_section->flags = new_flags;
     output_section->align = MAX(output_section->align, input_section->align);
 
-    if (DEBUG_LAYOUT || DEBUG_RELOCATIONS)
+    if ((DEBUG_LAYOUT || DEBUG_RELOCATIONS) && input_section->size)
         printf("  File %-50s section %-20s size %#08lx is at offset %#08x new size=%#08x in target section %s\n",
             maybe_elf_file ? maybe_elf_file->filename :  "-",
             input_section->name, input_section->size, offset, output_section->size, output_section->name);
@@ -179,7 +179,9 @@ static void merge_leftover_sections_with_matching_type_and_flags(RwElfFile *outp
             for (int i = 0; i < output_elf_file->sections_list->length; i++) {
                 RwSection *output_section = output_elf_file->sections_list->elements[i];
                 if (input_and_output_sections_match(output_section, input_section, 0, elf_file)) {
+                    if (DEBUG_LAYOUT && input_section->size) printf("Output section %s\n", output_section->name);
                     add_input_to_output_section(output_section, input_section, elf_file);
+                    break;
                 }
             }
         }

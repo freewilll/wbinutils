@@ -158,7 +158,10 @@ static char *run_was(char *assembly) {
     char command[512];
     snprintf(command, sizeof(command), "../bin/was -o %s %s", object_path, source_path);
     int result = system(command);
-    if (result) { perror("was failed"); exit(1); }
+    if (result) {
+        printf("Was failed with exit code %d\n", result >> 8);
+        exit(1);
+    }
 
     return strdup(object_path);
 }
