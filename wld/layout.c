@@ -535,11 +535,29 @@ static void layout_leftover_output_sections(RwElfFile *output_elf_file, List *in
     }
 }
 
+// Reset layout_complete on all sections
+static void reset_layout_complete(List *input_elf_files) {
+    for (int i = 0; i < input_elf_files->length; i++) {
+        ElfFile *elf_file = input_elf_files->elements[i];
+
+        // Loop over all sections
+        for (int j = 0; j < elf_file->section_list->length; j++) {
+            Section *input_section  = (Section *) elf_file->section_list->elements[j];
+            RwSection *output_section = input_section->dst_section;
+            if (!output_section) continue; // Not included
+            output_section->layout_complete = 0;
+        }
+    }
+
+}
+
 // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script.
 // This function is run twice. The first time to collect the symbols in assignments. The offsets and addresses may be incorrect.
 // The second time when the final layout is done.
 void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     if (DEBUG_LAYOUT) printf("------------------------------------\nLaying out executable\n");
+
+    reset_layout_complete(input_elf_files);
 
     uint64_t offset = 0;
 
@@ -577,6 +595,39 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     }
 
     layout_leftover_output_sections(output_elf_file, input_elf_files, offset, last_section);
+}
+
+// Check that sections have an increasing offset and don't overlap.
+void check_output_sections(RwElfFile *output_elf_file) {
+    // Loop over all pairs of sections
+    for (int i = 1; i < output_elf_file->sections_list->length; i++) {
+        for (int j = i + 1; j < output_elf_file->sections_list->length; j++) {
+            RwSection *s1 = output_elf_file->sections_list->elements[i];
+            RwSection *s2 = output_elf_file->sections_list->elements[j];
+
+            if (s1->type == SHT_NOBITS) continue; // BSS sections are allowed to overlap
+
+            uint64_t s1_end = s1->offset + s1->size;
+
+            if (s1->offset > s2->offset) {
+                dump_sections(output_elf_file);
+
+                panic("Offsets are out of order: %s %#x and %s %#x",
+                    s1->name, s1->offset,
+                    s2->name, s2->offset
+                );
+            }
+
+            if (s1_end > s2->offset) {
+                dump_sections(output_elf_file);
+
+                panic("Sections overlap: %s %#x - %#lx and %s %#x - %#x",
+                    s1->name, s1->offset, s1_end,
+                    s2->name, s2->offset, s2->offset + s2->size
+                );
+            }
+        }
+    }
 }
 
 // Assign values to symbols in the linker script

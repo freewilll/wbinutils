@@ -11,6 +11,7 @@ typedef struct output_section_assignment  {
 
 void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files);
 void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files);
+void check_output_sections(RwElfFile *output_elf_file);
 void remove_empty_sections(RwElfFile *output_elf_file);
 void make_elf_section_headers(RwElfFile *output_elf_file);
 void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf_file);

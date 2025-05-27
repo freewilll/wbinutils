@@ -440,6 +440,9 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     // Set the executable entrypoint
     set_entrypoint(output_elf_file);
 
+    // Check that sections have an increasing offset and don't overlap.
+    check_output_sections(output_elf_file);
+
     // Make the ELF headers and copy the program segment and section headers
     make_elf_headers(output_elf_file);
 
