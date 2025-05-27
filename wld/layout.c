@@ -411,7 +411,7 @@ static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSe
 // Given an input section and an output section, align the input section, update the sizes and process TLS.
 // If the current output program segment is suitable to include the input section, update it,
 // otherwise, create a new one.
-static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSection *section,  Symbol *dot_symbol, uint64_t *poffset) {
+static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSection *section, RwSection *last_section, Symbol *dot_symbol, uint64_t *poffset) {
     if (!section) panic("Got NULL output section in layout_one_section_in_executable()");
 
     if (!section->keep && section->size == 0) return;
@@ -419,12 +419,18 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
     // Align the section
     uint64_t old_offset = *poffset;
 
-    // Always page align the start of a section to ensure kernel memory mappings
-    // never overlap. This is a bit brutal, since it's  the program segment
+    // if the section cannot be merged with the last one, then
+    // page align the start of a section to ensure kernel memory mappings
+    // never overlap. This is a bit hack to do here, since it's the program segment
     // that needs to be page aligned, not the section.
-    // Because of the structure of the code it's much simpler to do it here though.
-    dot_symbol->dst_value = ALIGN_UP(dot_symbol->dst_value, 0x1000);
-    *poffset = ALIGN_UP(*poffset, 0x1000);
+    int need_page_alignment = 0;
+    if (last_section && section->type != last_section->type) need_page_alignment = 1;
+    if (last_section && (section->flags & IGNORE_FLAGS_MASK) != (last_section->flags & IGNORE_FLAGS_MASK)) need_page_alignment = 1;
+
+    if (need_page_alignment) {
+        dot_symbol->dst_value = ALIGN_UP(dot_symbol->dst_value, 0x1000);
+        *poffset = ALIGN_UP(*poffset, 0x1000);
+    }
 
     // Align TLS .tdata section to page boundaries, but move the data to the end of the section
     if (section->type == SHT_PROGBITS && (section->flags & SHF_TLS)) {
@@ -437,6 +443,13 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
         output_elf_file->tls_template_address = dot_symbol->dst_value;
         output_elf_file->tls_template_offset = *poffset;
         output_elf_file->tls_template_tdata_size = section->size;
+    }
+
+    else if (section->align != 0) {
+        dot_symbol->dst_value = ALIGN_UP(dot_symbol->dst_value, section->align);
+
+        if (section->type != SHT_NOBITS)
+            *poffset = ALIGN_UP(*poffset, section->align);
     }
 
     // Page align all section offsets to ensure all segment offsets are also page-aligned.
@@ -500,7 +513,7 @@ static uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbo
 }
 
 // Similar to layout_output_sections, do the layout of sections not in the linker script.
-static void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files, uint64_t offset) {
+static void layout_leftover_output_sections(RwElfFile *output_elf_file, List *input_elf_files, uint64_t offset, RwSection *last_output_section) {
     Symbol *dot_symbol = get_or_add_linker_script_symbol(strdup("."));
 
     // Loop over all files
@@ -516,7 +529,8 @@ static void layout_leftover_output_sections(RwElfFile *output_elf_file, List *in
 
             if (!output_section->keep && output_section->size == 0) continue;
 
-            layout_one_section_in_executable(output_elf_file, output_section, dot_symbol, &offset);
+            layout_one_section_in_executable(output_elf_file, output_section, last_output_section, dot_symbol, &offset);
+            last_output_section = output_section;
         }
     }
 }
@@ -531,6 +545,8 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
 
     Symbol *dot_symbol = get_or_add_linker_script_symbol(strdup("."));
     dot_symbol->dst_value = 0; // Zero indicates no offset has been set yet.
+
+    RwSection* last_section = NULL;
 
     for (int i = 0; i < linker_script->length; i++) {
         ScriptCommand *script_command = linker_script->elements[i];
@@ -554,12 +570,13 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
 
                 if (!section->keep && section->size == 0) continue;
 
-                layout_one_section_in_executable(output_elf_file, section, dot_symbol, &offset);
+                layout_one_section_in_executable(output_elf_file, section, last_section, dot_symbol, &offset);
+                last_section = section;
             }
         }
     }
 
-    layout_leftover_output_sections(output_elf_file, input_elf_files, offset);
+    layout_leftover_output_sections(output_elf_file, input_elf_files, offset, last_section);
 }
 
 // Assign values to symbols in the linker script
