@@ -1404,6 +1404,12 @@ static void test_section_creation(void) {
 
     test_full_assembly(".section .foo, \"MS\", @progbits, 1", ".section .foo, \"MS\", @progbits, 1", END);
     assert_section(".foo", SHT_PROGBITS, SHF_MERGE | SHF_STRINGS);
+
+    test_full_assembly(".section .tdata, \"awT\", @progbits", ".section .tdata, \"awT\", @progbits", END);
+    assert_section(".tdata", SHT_PROGBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS);
+
+    test_full_assembly(".section .tbss, \"awT\", @nobits", ".section .tbss, \"awT\", @nobits", END);
+    assert_section(".tbss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS);
 }
 
 static void test_align(void) {

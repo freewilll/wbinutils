@@ -382,9 +382,48 @@ static void test_oddball_sections_with_merge(void) {
     );
 }
 
+// A simple test with two sections
+static void test_tls() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+        ".section .tdata,\"awT\",@progbits;"
+        "    .long 0;"
+        ".section .tbss,\"awT\",@nobits;"
+        "    .long 0;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "tls");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                            Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR,       16,
+        ".tdata",         SHT_PROGBITS,   0x402ffc, 0x2ffc, 0x04,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 1,
+        ".tbss",          SHT_NOBITS,     0x403000, 0x3000, 0x04,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 1,
+        NULL
+    );
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x0c,    0x0c,   PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R | PF_W,  0x1000,
+        PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R       ,  8,
+        PT_END
+    );
+}
+
 int main() {
     test_sanity();
     test_segments_are_page_aligned();
     test_oddball_sections_no_merge();
     test_oddball_sections_with_merge();
+    test_tls();
 }

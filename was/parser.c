@@ -240,6 +240,8 @@ Chunk *parse_directive_statement(void) {
             //.- section .debug_str,"MS"
             //.- section .debug_str,"MS",@progbits,1
             //.- section .debug_strx,"S",@progbits
+            //.- section .tdata,\"awT\",@progbits
+            //.- section .tbss,\"awT\",@nobits
 
             expect(TOK_IDENTIFIER, "section name");
             char *name = strdup(cur_identifier);
@@ -259,6 +261,7 @@ Chunk *parse_directive_statement(void) {
                         case 'x': flags |= SHF_EXECINSTR; break;
                         case 'M': flags |= SHF_MERGE;     break;
                         case 'S': flags |= SHF_STRINGS;   break;
+                        case 'T': flags |= SHF_TLS;       break;
                         default: error("Invalid flag %c", c);
 
                     }
@@ -271,7 +274,12 @@ Chunk *parse_directive_statement(void) {
             if (cur_token == TOK_COMMA) {
                 next();
                 expect(TOK_IDENTIFIER, "Expected @progbits"); // Other types aren't implemented
-                if (strcmp(cur_identifier, "@progbits")) error("Expected @progbits; others aren't implemented");
+                if (!strcmp(cur_identifier, "@progbits"))
+                    type = SHT_PROGBITS;
+                else if (!strcmp(cur_identifier, "@nobits"))
+                    type = SHT_NOBITS;
+                else
+                    error("Unhandledsection type %s", cur_identifier);
                 next();
             }
 

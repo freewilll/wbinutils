@@ -194,7 +194,7 @@ static void make_elf_program_segment_headers(RwElfFile *output_elf_file) {
         tls_program_segment->p_memsz = output_elf_file->tls_template_tdata_size + output_elf_file->tls_template_tbss_size;
         tls_program_segment->p_vaddr = output_elf_file->tls_template_address;
         tls_program_segment->p_paddr = output_elf_file->tls_template_address;
-        tls_program_segment->p_align = 0x1000;
+        tls_program_segment->p_align = 8;
 
         append_to_list(output_elf_file->program_segments_list, tls_program_segment);
     }
