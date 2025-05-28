@@ -4,6 +4,9 @@
 
 #include "wld/utils.h"
 
+#define assert_path_match(string, pattern) assert_path_pattern_match(string, pattern, 1)
+#define assert_path_not_match(string, pattern) assert_path_pattern_match(string, pattern, 0)
+
 static void assert_pattern_match(char *string, char *pattern, int expected_matches) {
     int matches = match_pattern(string, pattern);
 
@@ -35,8 +38,13 @@ static void assert_path_pattern_match(char *string, char *pattern, int expected_
     }
 }
 
-#define assert_path_match(string, pattern) assert_path_pattern_match(string, pattern, 1)
-#define assert_path_not_match(string, pattern) assert_path_pattern_match(string, pattern, 0)
+static void assert_is_c_identifier(const char *identifier, int expected_value) {
+    int got_value = is_c_identifier(identifier);
+    if (got_value != expected_value) {
+        printf("is_c_identifier for %s was expected to be %d\n", identifier, expected_value);
+        exit(1);
+    }
+}
 
 int main() {
     assert_not_match("foo", "bar");
@@ -61,4 +69,18 @@ int main() {
     assert_path_match("/foo", "foo");
     assert_path_match("/bar/foo", "foo");
     assert_path_not_match("/bar/foo/x", "foo");
+
+    assert_is_c_identifier("a", 1);
+    assert_is_c_identifier("z", 1);
+    assert_is_c_identifier("A", 1);
+    assert_is_c_identifier("Z", 1);
+    assert_is_c_identifier("_", 1);
+    assert_is_c_identifier("0", 0);
+    assert_is_c_identifier("0x", 0);
+    assert_is_c_identifier("foo", 1);
+    assert_is_c_identifier("foo1", 1);
+    assert_is_c_identifier("FOO1", 1);
+    assert_is_c_identifier("FOO_1", 1);
+    assert_is_c_identifier("FOO_1&", 0);
+    assert_is_c_identifier("FOO_1&x", 0);
 }

@@ -217,14 +217,17 @@ static void assert_symbols(RwElfFile *elf_file, ...) {
                 expected_section_index != got_index ||
                 !name_matches) {
             debug_summarize_symbols();
-            panic("Symbols mismatch at position %d: expected %#lx, %#lx, %d, %d, %d, %s, got %#lx, %#lx, %d, %d, %d, %d, %s",
-                (pos - 1) / sizeof(ElfSymbol),
+            panic("Symbols mismatch\n"
+                "expected value=%#08lx  size=%#08lx type=%d binding=%d visiblility=%d index=%5d name=%s\n"
+                "got      value=%#08lx  size=%#08lx type=%d binding=%d visiblility=%d index=%5d name=%s",
                 expected_value,
                 expected_size,
                 expected_type,
                 expected_binding,
+                expected_visibility,
                 expected_section_index,
                 expected_name ? expected_name : "null",
+
                 got_value,
                 got_size,
                 got_type,
@@ -742,6 +745,51 @@ static void test_unused_etext() {
         END);
 }
 
+// Test adding of __start_ and __stop_ symbols for sections with C names
+static void test_automatic_start_stop_symbols() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    lea __start_foo(%rip), %rdi;" // Use the symbols, so they make it to the symbol table
+        "    lea __stop_foo(%rip), %rdi;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+        ".section foo, \"aw\", @progbits;"
+        "   .long 1"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "__start_ and __end_ symbols");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size     Flags                      Align
+        ".text",           SHT_PROGBITS,   0x401000, 0x1000, 0x001a,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        "foo",             SHT_PROGBITS,   0x402000, 0x2000, 0x0004,  SHF_ALLOC | SHF_WRITE,     1,
+        NULL
+    );
+
+    assert_program_segments(elf_file, //
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x001a,  0x001a, PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x0004,  0x0004, PF_R | PF_W,  0x1000,
+        END
+    );
+
+    assert_symbols(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section  Name
+        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__start_foo",
+        0x402004,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__stop_foo",
+        END);
+}
+
+
 int main() {
     test_sanity();
     test_segments_are_page_aligned();
@@ -753,4 +801,5 @@ int main() {
     test_etext_undefined();
     test_defined_etext();
     test_unused_etext();
+    test_automatic_start_stop_symbols();
 }

@@ -149,13 +149,15 @@ static int is_discarded_section(const char *input_filename, const char *input_se
 
 // Add an assignment that happens in the middle of an output section. The offset relative to the section is
 // noted. A loop later on assigns the final address, once all addresses are known.
-static void add_output_section_assignment(RwSection *output_section, CommandAssignment *assignment) {
+static OutputSectionAssignment *add_output_section_assignment(RwSection *output_section, CommandAssignment *assignment) {
     Symbol *symbol = get_or_add_linker_script_symbol(assignment);
     OutputSectionAssignment *output_section_assignment = calloc(1, sizeof(OutputSectionAssignment));
     output_section_assignment->assignment = assignment;
     output_section_assignment->offset = output_section->size;
     if (!strcmp(assignment->name, ".")) error_in_file("Assigning to . in a section input isn't implemented");
     append_to_list(output_section->command_assignments, output_section_assignment);
+
+    return output_section_assignment;
 }
 
 // Process output sections commands in a SECTIONS command
@@ -302,7 +304,7 @@ static void layout_orphan_sections(RwElfFile *output_elf_file, List *input_elf_f
             if (is_discarded_section(elf_file->filename, section_name)) continue;
 
         if (DEBUG_LAYOUT)
-            printf("Leftover output section %s\n", section_name);
+            printf("Orphan output section %s\n", section_name);
 
             // Create the output section if it doesn't already exist
             RwSection *output_section = get_rw_section(output_elf_file, section_name);
@@ -311,10 +313,41 @@ static void layout_orphan_sections(RwElfFile *output_elf_file, List *input_elf_f
                     input_section->type, input_section->flags, input_section->align);
                 move_output_section_after_similar_ones(output_elf_file, output_section);
                 output_section->is_orphan = 1;
+                output_section->command_assignments = new_list(8);
             }
 
             // Add the section to the output
             add_input_to_output_section(output_section, input_section, elf_file);
+        }
+    }
+}
+
+// Add __start and __end symbols for sections that are C identifiers
+// These symbols are treated as if they were declared with PROVIDE() in the linker script.
+static void create_start_end_section_symbols(RwElfFile *output_elf_file) {
+    for (int i = 0; i < output_elf_file->sections_list->length; i++) {
+        RwSection *section = output_elf_file->sections_list->elements[i];
+
+        if (is_c_identifier(section->name)) {
+            // Add __start_ and __end_ symbols with provide flag set
+            char *symbol_name = malloc(strlen(section->name) + 16);
+
+            // Add a __start_* symbol at offset zero
+            sprintf(symbol_name, "__start_%s", section->name);
+            CommandAssignment *assignment = calloc(1, sizeof(CommandAssignment));
+            assignment->name = strdup(symbol_name);
+            assignment->provide = 1;
+            OutputSectionAssignment *output_section_assignment = add_output_section_assignment(section, assignment);
+            output_section_assignment->offset = 0;
+
+            // Add a __end_* symbol that defaults to the end of the section
+            sprintf(symbol_name, "__stop_%s", section->name);
+            assignment = calloc(1, sizeof(CommandAssignment));
+            assignment->name = strdup(symbol_name);
+            assignment->provide = 1;
+            add_output_section_assignment(section, assignment);
+
+            free(symbol_name);
         }
     }
 }
@@ -353,6 +386,7 @@ void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     }
 
     layout_orphan_sections(output_elf_file, input_elf_files);
+    create_start_end_section_symbols(output_elf_file);
 }
 
 // Assign offsets to the builtin sections and make the ELF section headers.
@@ -656,6 +690,7 @@ void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf
         RwSection *section = output_elf_file->sections_list->elements[i];
         List *command_assignments = section->command_assignments;
         if (!section->command_assignments) continue;
+
         for (int j = 0; j < command_assignments->length; j++) {
             OutputSectionAssignment *command_assignment = (OutputSectionAssignment *) command_assignments->elements[j];
             Symbol *symbol = get_global_defined_symbol(command_assignment->assignment->name);

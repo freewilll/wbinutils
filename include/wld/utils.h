@@ -6,5 +6,6 @@
 char *find_file(List *library_paths, const char *path, const char *what);
 int match_pattern(const char *string, const char *pattern);
 int match_path_pattern(const char *filename, const char *pattern);
+int is_c_identifier(const char *name);
 
 #endif

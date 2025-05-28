@@ -97,3 +97,19 @@ int match_path_pattern(const char *path, const char *pattern) {
     else
         return match_pattern(path, pattern);
 }
+
+int is_c_identifier(const char *name) {
+    if (!name[0]) return 0;
+
+    // It must start with A-Z, a-z or _
+    if (!((name[0] >= 'A' && name[0] <= 'Z') || (name[0] >= 'a' && name[0] <= 'z') || name[0] == '_')) return 0;
+
+    const char *p = name;
+    // It must containt only  A-Z, a-z, 0-9 or _
+    while (*p) {
+        if (!((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z') || (*p >= '0' && *p <= '9') || *p == '_')) return 0;
+        *p++;
+    }
+
+    return 1;
+}

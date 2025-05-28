@@ -127,7 +127,7 @@ static char *DEFAULT_LINKER_SCRIPT =
     "    .data :   { *(.data .data.*)                                           }\n"
     "    .bss :    { *(.bss .bss.*) *(COMMON)                                   }\n"
     "                                                                            \n"
-    "     /DISCARD/ : {                                                          \n"
+    "    /DISCARD/ : {                                                           \n"
     "         *(.note.GNU-stack)                                                 \n"
     "         *(.gnu_debuglink)                                                  \n"
     "         *(.gnu.lto_*)                                                      \n"

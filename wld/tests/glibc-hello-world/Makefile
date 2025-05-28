@@ -2,7 +2,9 @@ WCC = ../../../../src/wcc
 WAS = ../../../bin/was
 WLD = ../../../bin/wld
 
-all: main
+all: test
+
+test: run-main
 
 %.o: %.s
 	as $< -o $@
@@ -24,6 +26,15 @@ main: main.o
 		-lgcc_eh \
 		-lc \
 		/usr/lib/x86_64-linux-gnu/crtn.o
+
+run-main: main
+	@./main # Catch non-zero error
+	@MSG=$$(./main);\
+	if [ "$$MSG" != "Hello World!" ]; then \
+		echo "Message was not hello world."; \
+		exit 1; \
+	fi ;\
+	echo "Glibc hello world passed"
 
 clean:
 	@rm -f *.o
