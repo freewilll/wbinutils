@@ -374,15 +374,15 @@ static void test_orphan_sections_rearrangement(void) {
         ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x20,  SHF_ALLOC | SHF_EXECINSTR, 16,
         ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
         ".orphan",        SHT_PROGBITS,   0x402004, 0x2004, 0x08,  SHF_ALLOC | SHF_WRITE,     1,
-        ".bss",           SHT_NOBITS,     0x403000, 0x3000, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".bss",           SHT_NOBITS,     0x40200c, 0x200c, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
     // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz    Flags         Align
-        PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,     PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x2000,  0x402000,  0x0c,    0x1008,   PF_R | PF_W,  0x1000,
+        PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,     PF_R | PF_X,  0x1000,  // .text
+        PT_LOAD,          0x2000,  0x402000,  0x0c,    0x14,     PF_R | PF_W,  0x1000,  // .data, .bss
         PT_END
     );
 }
@@ -425,10 +425,99 @@ static void test_tls() {
     );
 }
 
+// Test merging of two bss sections in different files
+static void test_two_bss_sections(void) {
+    char *object_path1 = run_was(
+        ".text;"
+        ".globl _start;"
+
+        "_start:;"
+        "    movl $1, %eax;"        // sys_exit
+        "    movl $0, %ebx;"        // exit code
+        "    int $0x80;"            // call kernel
+        ".section .bss,\"aw\",@nobits;"
+        "    .zero 8;"
+    );
+
+    char *object_path2 = run_was(
+        ".section .bss,\"aw\",@nobits;"
+        "    .zero 8;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+    append_to_list(input_paths, object_path2);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x10,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".bss",           SHT_NOBITS,     0x402000, 0x2000, 0x10,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    // The orphan section gets merged into the .data section
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags        Align
+        PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X, 0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x00,    0x10,   PF_R | PF_W, 0x1000,
+        PT_END
+    );
+}
+
+// Test merging of data and two bss sections in different files
+static void test_data_and_two_bss_sections(void) {
+    char *object_path1 = run_was(
+        ".text;"
+        ".globl _start;"
+
+        "_start:;"
+        "    movl $1, %eax;"        // sys_exit
+        "    movl $0, %ebx;"        // exit code
+        "    int $0x80;"            // call kernel
+        ".data;"
+        "    .zero 8;"
+        ".section .bss,\"aw\",@nobits;"
+        "    .zero 8;"
+    );
+
+    char *object_path2 = run_was(
+        ".section .bss,\"aw\",@nobits;"
+        "    .zero 8;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+    append_to_list(input_paths, object_path2);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x10,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".bss",           SHT_NOBITS,     0x402008, 0x2008, 0x10,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    // The orphan section gets merged into the .data section
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags        Align
+        PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X, 0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x08,    0x18,   PF_R | PF_W, 0x1000,
+        PT_END
+    );
+}
+
 int main() {
     test_sanity();
     test_segments_are_page_aligned();
-    test_orphan_sections_no_rearrangement();
     test_orphan_sections_rearrangement();
+    test_orphan_sections_no_rearrangement();
     test_tls();
+    test_two_bss_sections();
+    test_data_and_two_bss_sections();
 }

@@ -420,10 +420,14 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
 
     // if the section cannot be merged with the last one, then
     // page align the start of a section to ensure kernel memory mappings
-    // never overlap. This is a bit hack to do here, since it's the program segment
+    // never overlap. This is a bit hack to do it here, since it's the program segment
     // that needs to be page aligned, not the section.
     int need_page_alignment = 0;
-    if (last_section && section->type != last_section->type) need_page_alignment = 1;
+
+    // NOBITS sections are allowed to be merged after non-NOBITS sections, but not the other way around.
+    if (last_section && last_section->type == SHT_NOBITS && section->type != SHT_NOBITS) need_page_alignment = 1;
+
+    // A flags mismatch requires page alignment
     if (last_section && (section->flags & IGNORE_FLAGS_MASK) != (last_section->flags & IGNORE_FLAGS_MASK)) need_page_alignment = 1;
 
     if (need_page_alignment) {
@@ -451,11 +455,6 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
             *poffset = ALIGN_UP(*poffset, section->align);
     }
 
-    // Page align all section offsets to ensure all segment offsets are also page-aligned.
-    // This is required to satisfy the ELF alignment rule:
-    // p_vaddr % p_align == p_offset % p_align
-    *poffset += (dot_symbol->dst_value - *poffset + 0x1000) % 0x1000;
-
     if (DEBUG_LAYOUT)
         printf("Adding %-20s of size %#08x at          %#x  offset %#lx\n",
             section->name, section->size, dot_symbol->dst_value, *poffset);
@@ -471,9 +470,8 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
     uint64_t segment_size_diff = *poffset - old_offset + section->size;
 
     // Increase the file size unless it's a BSS section
-    if (section->type != SHT_NOBITS) {
+    if (section->type != SHT_NOBITS)
         *poffset += section->size;
-    }
 
     // Save the total size of the .tdata + .tbss sections
     if (section->type == SHT_NOBITS && (section->flags & SHF_TLS)) {
@@ -558,10 +556,10 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
                 // If the current section is an orphan, layout all orphans until the first non-orphan is found.
                 RwSection *current = output_elf_file->sections_list->elements[current_sections_list_index];
                 while (current->is_orphan) {
-                    if (current->keep || current->size > 0)
+                    if (current->keep || current->size > 0) {
                         layout_one_section_in_executable(output_elf_file, current, last_section, dot_symbol, &offset);
-
-                    last_section = current;
+                        last_section = current;
+                    }
 
                     current_sections_list_index++;
                     if (current_sections_list_index == output_elf_file->sections_list->length) {
@@ -604,10 +602,10 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
                     }
                 }
 
-                if (section->keep || section->size > 0)
+                if (section->keep || section->size > 0) {
                     layout_one_section_in_executable(output_elf_file, section, last_section, dot_symbol, &offset);
-
-                last_section = section;
+                    last_section = section;
+                }
                 current_sections_list_index++;
             }
 
@@ -671,6 +669,7 @@ void layout_program_segments(RwElfFile *output_elf_file) {
     ElfProgramSegmentHeader *current_segment = NULL;
     int current_segment_type = -1;
     int current_segment_flags = -1;
+    int previous_section_type = -1;
     uint64_t previous_section_offset = 0;
 
     // Loop over all headers
@@ -679,10 +678,17 @@ void layout_program_segments(RwElfFile *output_elf_file) {
         if (section->type == SHT_NULL) continue;
         if (!(section->flags & SHF_ALLOC)) continue;
 
-        // Setup the segment
-        if (!current_segment || section->flags != current_segment_flags) {
-            // Either the segment is new, or the flags mismatch.
+        if (!current_segment ||
+            section->flags != current_segment_flags ||
+            (previous_section_type == SHT_NOBITS && section->type != SHT_NOBITS)
+        ) {
             // Create a new segment.
+
+            // Either the segment is new
+            // or the flags mismatch
+            // or the type goes from NOBITS to non-NOBITS.
+            //
+            // NOBITS sections are allowed to be merged after non-NOBITS sections, but not the other way around.
 
             if (current_segment && current_segment->p_offset + current_segment->p_filesz > section->offset) {
                 dump_sections(output_elf_file);
@@ -724,6 +730,9 @@ void layout_program_segments(RwElfFile *output_elf_file) {
         // Increase the memory size
         current_segment->p_memsz += segment_size_diff;
 
-        previous_section_offset = section->offset + section->size;
+        if (section->type != SHT_NOBITS)
+            previous_section_offset = section->offset + section->size;
+
+        previous_section_type = section->type;
     }
 }
