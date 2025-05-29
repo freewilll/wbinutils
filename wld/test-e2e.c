@@ -237,7 +237,7 @@ static void test_sanity() {
     );
 }
 
-// Test an oddball section with different flags after a data section.
+// Test an orphan section with different flags after a data section.
 // They must end up in their own pages, otherwise the kernel will drop
 // flags in a common page mapping and cause mayham.
 void test_segments_are_page_aligned() {
@@ -252,7 +252,7 @@ void test_segments_are_page_aligned() {
         ".section .data;"
         "    code: .long 0;"
         // A new section with different flags gets its own segment, which must be page aligned
-        ".section .oddball, \"awx\", @progbits;"
+        ".section .orphan, \"awx\", @progbits;"
         "    .long 0;"
     );
 
@@ -266,7 +266,7 @@ void test_segments_are_page_aligned() {
         // Name           Type            Address   Offset  Size   Flags                                  Align
         ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x10,  SHF_ALLOC | SHF_EXECINSTR,             16,
         ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,                 4,
-        ".oddball",       SHT_PROGBITS,   0x403000, 0x3000, 0x04,  SHF_ALLOC | SHF_EXECINSTR | SHF_WRITE, 1,
+        ".orphan",        SHT_PROGBITS,   0x403000, 0x3000, 0x04,  SHF_ALLOC | SHF_EXECINSTR | SHF_WRITE, 1,
         NULL
     );
 
@@ -281,7 +281,7 @@ void test_segments_are_page_aligned() {
 
 // This tests a secton with an odd name. There is no other section for it to be
 // merged into, so it becomes its own section in the ELF file.
-static void test_oddball_sections_no_merge(void) {
+static void test_orphan_sections_no_merge(void) {
     char *object_path1 = run_was(
         ".text;"
         ".globl _start;"
@@ -296,13 +296,13 @@ static void test_oddball_sections_no_merge(void) {
 
         // awx sections are unusual. None of the source files will have thus,
         // so this section ends up being a new section.
-        ".section .oddball, \"awx\";"
+        ".section .orphan, \"awx\";"
         "i: .long 1;"
     );
 
     char *object_path2 = run_was(
         ".globl j;"
-        ".section .oddball, \"awx\";"
+        ".section .orphan, \"awx\";"
         "j: .long 2;"
     );
 
@@ -311,16 +311,16 @@ static void test_oddball_sections_no_merge(void) {
     append_to_list(input_paths, object_path2);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "oddball sections");
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
         ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x20,  SHF_ALLOC | SHF_EXECINSTR,             16,
-        ".oddball",       SHT_PROGBITS,   0x402000, 0x2000, 0x08,  SHF_ALLOC | SHF_WRITE | SHF_EXECINSTR, 1,
+        ".orphan",        SHT_PROGBITS,   0x402000, 0x2000, 0x08,  SHF_ALLOC | SHF_WRITE | SHF_EXECINSTR, 1,
         NULL
     );
 
-    // The oddball section gets merged into the .data section
+    // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags               Align
         PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,   PF_R | PF_X,        0x1000,
@@ -330,9 +330,9 @@ static void test_oddball_sections_no_merge(void) {
 }
 
 // This tests a secton with an odd name. There is also a .data section
-// with the same permissions. The oddball section should get merged
+// with the same permissions. The orphan section should get merged
 // into it.
-static void test_oddball_sections_with_merge(void) {
+static void test_orphan_sections_with_merge(void) {
     char *object_path1 = run_was(
         ".text;"
         ".globl _start;"
@@ -347,7 +347,7 @@ static void test_oddball_sections_with_merge(void) {
         "    sub $6, %ebx;"         // exit code
         "    int $0x80;"            // call kernel
 
-        ".section .oddball, \"aw\";"
+        ".section .orphan, \"aw\";"
         "i: .long 1;"
         ".section .data, \"aw\";"
         "j: .long 2;"
@@ -355,7 +355,7 @@ static void test_oddball_sections_with_merge(void) {
 
     char *object_path2 = run_was(
         ".globl k;"
-        ".section .oddball, \"aw\";"
+        ".section .orphan, \"aw\";"
         "k: .long 3;"
     );
 
@@ -364,7 +364,7 @@ static void test_oddball_sections_with_merge(void) {
     append_to_list(input_paths, object_path2);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "oddball sections");
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -373,7 +373,7 @@ static void test_oddball_sections_with_merge(void) {
         NULL
     );
 
-    // The oddball section gets merged into the .data section
+    // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,   PF_R | PF_X,  0x1000,
@@ -423,7 +423,7 @@ static void test_tls() {
 int main() {
     test_sanity();
     test_segments_are_page_aligned();
-    test_oddball_sections_no_merge();
-    test_oddball_sections_with_merge();
+    test_orphan_sections_no_merge();
+    test_orphan_sections_with_merge();
     test_tls();
 }
