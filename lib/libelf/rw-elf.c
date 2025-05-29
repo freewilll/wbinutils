@@ -29,6 +29,43 @@ RwSection *add_rw_section(RwElfFile *rw_elf_file, const char *name, int type, in
     return section;
 }
 
+// Move output_section, which must be the last section in the list, to position
+void move_rw_section(RwElfFile *rw_elf_file, RwSection *output_section, int position) {
+    List *old_sections_list = rw_elf_file->sections_list;
+
+    // Check that the target position cannot be the initial NULL or first section
+    if (position < 2)
+        panic("Position %d too small %d", position, position);
+
+    // Check that the target position is within the range
+    if (position >= old_sections_list->length)
+        panic("Position %d exceeds amount of sections %d", position, old_sections_list->length);
+
+    // Check output_section is the last one
+    RwSection *last_output_section = old_sections_list->elements[old_sections_list->length - 1];
+    if (last_output_section != output_section)
+        panic("Section %s is not the last section", output_section->name);
+
+    // Check we're not moving the section onto itself
+    if (old_sections_list->elements[position] == output_section)
+        panic("Section %s is already where it needs to be", output_section->name);
+
+    // Recreate the sections list
+    List *new_sections_list = new_list(old_sections_list->length);
+
+    for (int i = 0; i < position; i++)
+        append_to_list(new_sections_list, old_sections_list->elements[i]);
+
+    append_to_list(new_sections_list, output_section);
+
+    for (int i = position; i < old_sections_list->length - 1; i++)
+        append_to_list(new_sections_list, old_sections_list->elements[i]);
+
+    free_list(old_sections_list);
+
+    rw_elf_file->sections_list = new_sections_list;
+}
+
 // Allocate space at the end of a section and return a pointer to it.
 // Dynamically allocate space size as needed.
 static void *allocate_in_section(RwSection *section, int size) {

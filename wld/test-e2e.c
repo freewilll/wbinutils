@@ -279,9 +279,9 @@ void test_segments_are_page_aligned() {
     );
 }
 
-// This tests a secton with an odd name. There is no other section for it to be
-// merged into, so it becomes its own section in the ELF file.
-static void test_orphan_sections_no_merge(void) {
+// This tests an orphan section with an odd name. There is no other section for it to be
+// placed afterwards, so it ends up at the end of the file
+static void test_orphan_sections_no_rearrangement(void) {
     char *object_path1 = run_was(
         ".text;"
         ".globl _start;"
@@ -330,9 +330,9 @@ static void test_orphan_sections_no_merge(void) {
 }
 
 // This tests a secton with an odd name. There is also a .data section
-// with the same permissions. The orphan section should get merged
-// into it.
-static void test_orphan_sections_with_merge(void) {
+// with the same permissions. The orphan section should be placed after it.
+// The .bss section is to ensure that the .orphan section actually gets moved.
+static void test_orphan_sections_rearrangement(void) {
     char *object_path1 = run_was(
         ".text;"
         ".globl _start;"
@@ -346,6 +346,9 @@ static void test_orphan_sections_with_merge(void) {
         "    add %ecx, %ebx;"
         "    sub $6, %ebx;"         // exit code
         "    int $0x80;"            // call kernel
+
+        ".section .bss,\"aw\",@nobits;"
+        "    .zero 8;"
 
         ".section .orphan, \"aw\";"
         "i: .long 1;"
@@ -369,15 +372,17 @@ static void test_orphan_sections_with_merge(void) {
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
         ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x20,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x0c,  SHF_ALLOC | SHF_WRITE,     4,
+        ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
+        ".orphan",        SHT_PROGBITS,   0x402004, 0x2004, 0x08,  SHF_ALLOC | SHF_WRITE,     1,
+        ".bss",           SHT_NOBITS,     0x403000, 0x3000, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
     // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
-        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
-        PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,   PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x2000,  0x402000,  0x0c,    0x0c,   PF_R | PF_W,  0x1000,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz    Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,     PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x0c,    0x1008,   PF_R | PF_W,  0x1000,
         PT_END
     );
 }
@@ -423,7 +428,7 @@ static void test_tls() {
 int main() {
     test_sanity();
     test_segments_are_page_aligned();
-    test_orphan_sections_no_merge();
-    test_orphan_sections_with_merge();
+    test_orphan_sections_no_rearrangement();
+    test_orphan_sections_rearrangement();
     test_tls();
 }

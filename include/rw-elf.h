@@ -28,7 +28,7 @@ typedef struct rw_section  {
     long entsize;                    // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
     long symtab_index;               // Index in the symbol table for this section
     struct rw_section *rela_section; // Optional related relocation section
-    int program_segment_index;       // Used by wld
+    int is_orphan;                   // Use by wld
     List *chunks;                    // Used by was
     int keep;                        // Include empty sections
     int layout_complete;             // This section has been allocated an offset and address
@@ -74,6 +74,7 @@ typedef struct rw_elf  {
 // Sections
 RwSection *get_rw_section(RwElfFile *elf_file, const char *name);
 RwSection *add_rw_section(RwElfFile *rw_elf_file, const char *name, int type, int flags, int align);
+void move_rw_section(RwElfFile *rw_elf_file, RwSection *output_section, int position);
 int add_to_rw_section(RwSection *section, const void *src, int size);
 int add_repeated_value_to_rw_section(RwSection *section, char value, int size);
 int add_zeros_to_rw_section(RwSection *section, int size);

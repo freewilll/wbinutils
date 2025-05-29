@@ -132,7 +132,7 @@ static void make_first_program_segment_header(RwElfFile *output) {
 // Print sections in a format similar to readelf's output
 void dump_sections(RwElfFile *output_elf_file) {
     printf("Sections:\n");
-    printf("[Nr] Name              Type            Address          Off      Size     ES Flg Lk Inf Al\n");
+    printf("[Nr] Name                          Type            Address          Off      Size     ES Flg Lk Inf Al\n");
 
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
@@ -149,7 +149,7 @@ void dump_sections(RwElfFile *output_elf_file) {
         if (section->flags & SHF_TLS)       *p++ = 'T';
         *p = '\0';
 
-        printf("%4d %-17s %-14s  %016x %08x %08x %02lx %-3s %2d %2d %3d\n",
+        printf("%4d %-29s %-14s  %016x %08x %08x %02lx %-3s %2d %2d %3d\n",
             i, section->name, SECTION_TYPE_NAMES[section->type], section->address, section->offset,
             section->size, section->entsize, flags, section->link, section->info, section->align);
     }
