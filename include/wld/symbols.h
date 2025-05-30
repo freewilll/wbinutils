@@ -6,13 +6,9 @@
 #include "strmap.h"
 #include "strmap-ordered.h"
 
+#include "wld/script.h"
+
 #define GLOBAL_OFFSET_TABLE_SYMBOL_NAME     "_GLOBAL_OFFSET_TABLE_"
-#define PREINIT_ARRAY_START_SYMBOL_NAME     "__preinit_array_start"
-#define PREINIT_ARRAY_END_SYMBOL_NAME       "__preinit_array_end"
-#define INIT_ARRAY_START_SYMBOL_NAME        "__init_array_start"
-#define INIT_ARRAY_END_SYMBOL_NAME          "__init_array_end"
-#define FINI_ARRAY_START_SYMBOL_NAME        "__fini_array_start"
-#define FINI_ARRAY_END_SYMBOL_NAME          "__fini_array_end"
 
 typedef struct symbol {
     char *name;                 // Name
@@ -57,9 +53,10 @@ Symbol *must_get_global_defined_symbol(char *name);
 SymbolTable *get_local_symbol_table(ElfFile *elf_file);
 Symbol *lookup_symbol(ElfFile *elf_file, char *name);
 int is_undefined_symbol(char *name);
-Symbol *get_or_add_linker_script_symbol(char *name);
+Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
 void finalize_symbols(void);
+void dump_rw_symbols(RwElfFile *output_elf_file);
 void debug_print_symbol(Symbol *symbol);
 void debug_summarize_symbols(void);
 int common_symbols_are_present(void);

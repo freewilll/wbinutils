@@ -73,6 +73,11 @@ static void test_constant() {
     value = run("1 ? 2 : 3");   assert_int(2,  value.number, "1 ? 2 : 3");
 }
 
+static Symbol *make_or_get_dot_symbol(void) {
+    CommandAssignment dot_assignment = (CommandAssignment) {.name = "."};
+    return get_or_add_linker_script_symbol(&dot_assignment);
+}
+
 static void test_symbol() {
     Value value;
 
@@ -85,7 +90,7 @@ static void test_symbol() {
     assert_int(1, value.symbol->dst_value, "foo");
 
     // .
-    get_or_add_linker_script_symbol(".")->dst_value = 0x400000;
+    make_or_get_dot_symbol()->dst_value = 0x400000;
     value = run(".");
     assert_int(0x400000, value.symbol->dst_value, ".");
 }
@@ -94,7 +99,7 @@ static void test_expressions_with_symbol() {
     Value value;
 
     init_symbols();
-    get_or_add_linker_script_symbol(".")->dst_value = 0x400000;
+    make_or_get_dot_symbol()->dst_value = 0x400000;
 
     // Expressions
     value = run(". + 0x1000");             assert_int(0x401000, value.number,  ". + 0x1000");
@@ -109,7 +114,7 @@ static void test_expressions_with_symbol() {
     value = run(". >  0x500000 ? 1 : 2");  assert_int(2,        value.number,  ". > 0x500000 ? 1 : 2");
 
     // ALIGN()
-    get_or_add_linker_script_symbol(".")->dst_value = 0x1800;
+    make_or_get_dot_symbol()->dst_value = 0x1800;
     value = run("ALIGN(0x1000)");          assert_int(0x2000, value.number,  "ALIGN(0x1000)");
     value = run("ALIGN(0x0fff, 0x1000)");  assert_int(0x1000, value.number,  "ALIGN(0x0fff, 0x1000)");
     value = run("ALIGN(0x1000, 0x1000)");  assert_int(0x1000, value.number,  "ALIGN(0x1000, 0x1000)");

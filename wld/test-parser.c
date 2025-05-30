@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "wld/expr.h"
 #include "wld/lexer.h"
 #include "wld/parser.h"
 #include "wld/script.h"
@@ -78,20 +79,20 @@ void test_sections_assignment() {
     // a = 1
     SectionsCommand *section_command = sections_commands->elements[0];
     assert_int(SECTIONS_CMD_ASSIGNMENT, section_command->type, script);
-    assert_string("a", section_command->assignment.symbol, script);
+    assert_string("a", section_command->assignment.name, script);
     assert_int(1, evaluate_test_node(section_command->assignment.node), script);
 
     // PROVIDE(b = 2)
     section_command = sections_commands->elements[1];
     assert_int(SECTIONS_CMD_ASSIGNMENT, section_command->type, script);
-    assert_string("b", section_command->assignment.symbol, script);
+    assert_string("b", section_command->assignment.name, script);
     assert_int(1, section_command->assignment.provide, script);
     assert_int(2, evaluate_test_node(section_command->assignment.node), script);
 
     // PROVIDE_HIDDEN(c = 3)
     section_command = sections_commands->elements[2];
     assert_int(SECTIONS_CMD_ASSIGNMENT, section_command->type, script);
-    assert_string("c", section_command->assignment.symbol, script);
+    assert_string("c", section_command->assignment.name, script);
     assert_int(1, section_command->assignment.provide_hidden, script);
     assert_int(3, evaluate_test_node(section_command->assignment.node), script);
 }
@@ -168,14 +169,14 @@ void test_sections_output() {
     output_item = output_items->elements[0];
     assert_int(SECTIONS_CMD_INPUT_ASSIGNMENT, output_item->type, script);
     CommandAssignment assignment = output_item->assignment;
-    assert_string("a", assignment.symbol, script);
+    assert_string("a", assignment.name, script);
     assert_int(1, evaluate_test_node(assignment.node), script);
 
     // .assignment_in_section PROVIDE(b = 2)
     output_item = output_items->elements[1];
     assert_int(SECTIONS_CMD_INPUT_ASSIGNMENT, output_item->type, script);
     assignment = output_item->assignment;
-    assert_string("b", assignment.symbol, script);
+    assert_string("b", assignment.name, script);
     assert_int(1, assignment.provide, script);
     assert_int(2, evaluate_test_node(assignment.node), script);
 
@@ -183,7 +184,7 @@ void test_sections_output() {
     output_item = output_items->elements[2];
     assert_int(SECTIONS_CMD_INPUT_ASSIGNMENT, output_item->type, script);
     assignment = output_item->assignment;
-    assert_string("c", assignment.symbol, script);
+    assert_string("c", assignment.name, script);
     assert_int(1, assignment.provide_hidden, script);
     assert_int(3, evaluate_test_node(assignment.node), script);
 }

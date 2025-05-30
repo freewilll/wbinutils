@@ -7,6 +7,7 @@
 #include "strmap-ordered.h"
 
 #include "wld/symbols.h"
+#include "wld/script.h"
 #include "wld/wld.h"
 
 static const char *SYMBOL_TYPE_NAMES[] = {
@@ -25,6 +26,7 @@ static const char *SYMBOL_VISIBILITY_NAMES[] = {
 
 SymbolTable *global_symbol_table;
 StrMap *local_symbol_tables; // Map from filename to symbol table
+StrMapOrdered *provided_symbols; // symbols from linker script PROVIDE() and PROVIDE_HIDDEN. Map from symbol name to Symbol
 
 char *last_error_message;
 
@@ -49,7 +51,7 @@ Symbol *get_global_defined_symbol(char *name) {
 // Get a symbol from the defined symbol table. Panic if it doesn't exist.
 Symbol *must_get_defined_symbol(SymbolTable *st, char *name) {
     Symbol *symbol = get_defined_symbol(st, name);
-    if (!symbol) panic("Expected a symbol %s, but got none", name);
+    if (!symbol) panic("Symbol not defined %s", name);
     return symbol;
 }
 
@@ -74,7 +76,7 @@ Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
 }
 
 // Get an undefined symbol. Returns NULL if not present.
-static Symbol *get_undefined_symbol(char *name) {
+static Symbol *get_undefined_symbol(const char *name) {
     return strmap_ordered_get(global_symbol_table->undefined_symbols, name);
 }
 
@@ -84,15 +86,15 @@ int is_undefined_symbol(char *name) {
 }
 
 // Remove a symbol from the undefined symbols set
-static void remove_undefined_symbol(char *name) {
+static void remove_undefined_symbol(const char *name) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s\n", name);
     strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
 }
 
-static Symbol *new_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+static Symbol *new_symbol(const char *name, int type, int binding, int other, int size, int is_library) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
-    symbol->name           = name;
+    symbol->name           = strdup(name);
     symbol->type           = type;
     symbol->binding        = binding;
     symbol->other          = other;
@@ -102,7 +104,7 @@ static Symbol *new_symbol(char *name, int type, int binding, int other, int size
     return symbol;
 }
 
-static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int binding, int other, int size, int is_library) {
+static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int type, int binding, int other, int size, int is_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s binding=%s\n", name, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
     strmap_ordered_put(st->defined_symbols, name, symbol);
@@ -111,7 +113,7 @@ static Symbol *add_defined_symbol(SymbolTable *st, char *name, int type, int bin
 
 // Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
 // Returns 1 if an undefined symbol has been resolved.
-static int resolve_undefined_symbol(char *name, char binding, int is_library, int read_only) {
+static int resolve_undefined_symbol(const char *name, int is_library, int read_only) {
     Symbol *undefined_symbol = get_undefined_symbol(name);
     if (!undefined_symbol) return 0;
 
@@ -134,15 +136,31 @@ static Symbol *add_undefined_symbol(char *name, int type, int binding, int other
 // Return a defined symbol if it already exists.
 // Otherwise, create one.
 // Resolve an undefined symbol if there is one.
-Symbol *get_or_add_linker_script_symbol(char *name) {
-    Symbol *result = get_global_defined_symbol(name);
-    if (result) return result;
-    result = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
-    result->is_abs = 1;
+Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment) {
+    char *name = strdup(assignment->name);
 
-    resolve_undefined_symbol(name, STT_NOTYPE, 0, 0);
+    Symbol *symbol;
 
-    return result;
+    // If already defined, fetch it from the global symbol table.
+    symbol = get_global_defined_symbol(name);
+    if (symbol) return symbol;
+
+    if (assignment->provide || assignment->provide_hidden) {
+        symbol = strmap_ordered_get(provided_symbols, name);
+        if (symbol) return symbol;
+
+        symbol = new_symbol(name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
+        strmap_ordered_put(provided_symbols, name, symbol);
+        if (assignment->provide_hidden) symbol->visibility = STV_HIDDEN;
+        symbol->is_abs = 1;
+    }
+    else {
+        symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
+        symbol->is_abs = 1;
+        resolve_undefined_symbol(name, 0, 0);
+    }
+
+    return symbol;
 }
 
 // Report an error, or in case we are being tested, write to last_error_message
@@ -183,7 +201,7 @@ static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_tabl
         new_symbol->src_value = symbol->st_value;
     }
 
-    return resolve_undefined_symbol(name, binding, is_library, read_only);
+    return resolve_undefined_symbol(name, is_library, read_only);
 }
 
 // Handle a symbol where either the found symbol or symbol is common
@@ -242,7 +260,7 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
             new_symbol->is_common = 1;
         }
 
-        result = resolve_undefined_symbol(name, binding, is_library, read_only);
+        result = resolve_undefined_symbol(name, is_library, read_only);
     }
 
     return result;
@@ -276,7 +294,7 @@ static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, S
             new_symbol->is_abs = 1;
         }
 
-        return resolve_undefined_symbol(name, binding, is_library, read_only);
+        return resolve_undefined_symbol(name, is_library, read_only);
     }
 
     return 0;
@@ -340,7 +358,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
             new_symbol->is_common = 0;
         }
 
-        result = resolve_undefined_symbol(name, binding, is_library, read_only);
+        result = resolve_undefined_symbol(name, is_library, read_only);
     }
 
     return result;
@@ -424,6 +442,17 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 void finalize_symbols(void) {
     int count = 0;
 
+    // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
+    strmap_ordered_foreach(provided_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *provided_symbol = strmap_ordered_get(provided_symbols, name);
+        Symbol *symbol = get_undefined_symbol(name);
+        if (symbol) {
+            resolve_undefined_symbol(name, 0, 0);
+            strmap_ordered_put(global_symbol_table->defined_symbols, name, provided_symbol);
+        }
+    }
+
     strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
@@ -455,10 +484,46 @@ static char *print_section_string(Symbol *symbol) {
     RwSection *rw_section = symbol->dst_section;
     int rw_section_index = rw_section ? rw_section->index : 0;
 
-    if (symbol->is_common)
+    if (symbol->is_abs)
+        printf("ABS");
+    else if (symbol->is_common)
         printf("COM");
     else
         printf("%3d", rw_section_index);
+}
+
+// Readelf compatible symbol table output
+void dump_rw_symbols(RwElfFile *output_elf_file) {
+    printf("Symbol Table:\n");
+    printf("   Num:     Value         Size Type    Bind   Vis      Ndx Name\n");
+    ElfSymbol *symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+
+    int count = output_elf_file->section_symtab->size / sizeof(ElfSymbol);
+    for (int i = 0; i < count; i++) {
+        ElfSymbol *symbol = &symbols[i];
+        char binding = (symbol->st_info >> 4) & 0xf;
+        char type = symbol->st_info & 0xf;
+        char visibility = symbol->st_other & 3;
+        const char *type_name = SYMBOL_TYPE_NAMES[type];
+        const char *binding_name = SYMBOL_BINDING_NAMES[binding];
+        const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
+
+        printf("%6d: %#016lx  %4ld %-8s%-7sDEFAULT  ", i, symbol->st_value, symbol->st_size, type_name, binding_name);
+        if ((unsigned short) symbol->st_shndx == SHN_UNDEF)
+            printf("UND");
+        else if ((unsigned short) symbol->st_shndx == SHN_ABS)
+            printf("ABS");
+        else if ((unsigned short) symbol->st_shndx == SHN_COMMON)
+            printf("COM");
+        else
+            printf("%3d", symbol->st_shndx);
+
+        int strtab_offset = symbol->st_name;
+        if (strtab_offset)
+            printf(" %s\n", &output_elf_file->section_strtab->data[strtab_offset]);
+        else
+            printf("\n");
+    }
 }
 
 void debug_print_symbol(Symbol *symbol) {
@@ -635,14 +700,9 @@ static void add_hidden_symbol(char *name) {
 void init_symbols(void) {
     global_symbol_table = new_symbol_table();
     local_symbol_tables = new_strmap();
+    provided_symbols = new_strmap_ordered();
 
     add_hidden_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
-    add_hidden_symbol(PREINIT_ARRAY_START_SYMBOL_NAME);
-    add_hidden_symbol(PREINIT_ARRAY_END_SYMBOL_NAME);
-    add_hidden_symbol(INIT_ARRAY_START_SYMBOL_NAME);
-    add_hidden_symbol(INIT_ARRAY_END_SYMBOL_NAME);
-    add_hidden_symbol(FINI_ARRAY_START_SYMBOL_NAME);
-    add_hidden_symbol(FINI_ARRAY_END_SYMBOL_NAME);
 }
 
 // Create the .got section, if needed

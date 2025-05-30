@@ -3,14 +3,14 @@
 
 #include "list.h"
 
-#include "wld/expr.h"
-
 #define LINKER_SCRIPT_COMMON_SECTION_NAME         "COMMON"
 #define LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME "/DISCARD/"
 
+typedef struct node Node;
+
 // Assigmnent command, used in sections and sections output
 typedef struct command_assignment  {
-    char *symbol;
+    char *name;
     Node *node;
     int provide;                 // Provide a regular symbol
     int provide_hidden;          // Provide a hidden symbol
@@ -108,19 +108,19 @@ static char *DEFAULT_LINKER_SCRIPT =
     "    .tdata : { *(.tdata .tdata.*)                                          }\n"
     "    .tbss :  { *(.tbss .tbss.*)                                            }\n"
     "    .preinit_array : {                                                      \n"
-    "        __preinit_array_start = .;                                          \n"
+    "        PROVIDE_HIDDEN(__preinit_array_start = .);                          \n"
     "        KEEP(*(.preinit_array .preinit_array.*))                            \n"
-    "        __preinit_array_end = .;                                            \n"
+    "        PROVIDE_HIDDEN(__preinit_array_end = .);                            \n"
     "     }                                                                      \n"
     "    .init_array : {                                                         \n"
-    "        __init_array_start = .;                                             \n"
+    "        PROVIDE_HIDDEN(__init_array_start = .);                             \n"
     "        KEEP(*(.init_array .init_array.*))                                  \n"
-    "        __init_array_end = .;                                               \n"
+    "        PROVIDE_HIDDEN(__init_array_end = .);                               \n"
     "    }                                                                       \n"
     "    .fini_array : {                                                         \n"
-    "        __fini_array_start = .;                                             \n"
+    "        PROVIDE_HIDDEN(__fini_array_start = .);                             \n"
     "        KEEP(*(.fini_array .fini_array.*))                                  \n"
-    "        __fini_array_end = .;                                               \n"
+    "        PROVIDE_HIDDEN(__fini_array_end = .);                               \n"
     "     }                                                                      \n"
     "    .got :    { *(.got)                                                    }\n"
     "    .got.plt: { *(.got.plt)                                                }\n"

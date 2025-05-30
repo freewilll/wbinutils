@@ -5,10 +5,12 @@
 #include <unistd.h>
 
 #include "list.h"
+#include "error.h"
 
+#include "wld/symbols.h"
 #include "wld/wld.h"
 
-#define PT_END -1
+#define END -1
 
 static void fail_sections(RwElfFile *elf_file, List *expected_sections) {
     printf("Got sections:\n");
@@ -94,7 +96,7 @@ static void assert_program_segments(RwElfFile *elf_file, ...) {
 
     while (1) {
         int type = va_arg(ap, int);
-        if (type == PT_END) break;
+        if (type == END) break;
 
         int offset = va_arg(ap, int);
         int vaddr = va_arg(ap, int);
@@ -136,6 +138,104 @@ static void assert_program_segments(RwElfFile *elf_file, ...) {
             printf("Program segments mismatch at position %d in expected program segments list\n", i);
             fail_program_segments(elf_file, expected_program_segments);
         }
+    }
+}
+
+static void assert_symbols(RwElfFile *elf_file, ...) {
+    RwSection *section = elf_file->section_symtab;
+
+    va_list ap;
+    va_start(ap, elf_file);
+
+    int pos = 1 * sizeof(ElfSymbol); // Skip null symbol
+
+    while (1) {
+        int expected_value = va_arg(ap, int);
+
+        if (expected_value == END) {
+            if (pos != section->size) {
+                dump_rw_symbols(elf_file);
+                panic("Unexpected data at position %d", (pos - 1) / sizeof(ElfSymbol));
+            }
+
+            return; // Success
+        }
+
+        int expected_size = va_arg(ap, int);
+        int expected_type = va_arg(ap, int);
+        int expected_binding = va_arg(ap, int);
+        int expected_visibility = va_arg(ap, int);
+        char *expected_section_name = va_arg(ap, char *);
+        char *expected_name = va_arg(ap, char *);
+
+        int expected_section_index;
+        if (!strcmp(expected_section_name, "ABS")) {
+            expected_section_index = SHN_ABS;
+        }
+        else if (!strcmp(expected_section_name, "COM")) {
+            expected_section_index = SHN_COMMON;
+        }
+        else {
+            RwSection *expected_section = get_rw_section(elf_file, expected_section_name);
+            if (!expected_section) {
+                dump_rw_symbols(elf_file);
+                panic("Section %s not found", expected_section_name);
+            }
+            expected_section_index = expected_section->index;
+        }
+
+        ElfSymbol *symbol = NULL;
+        while (pos < section->size) {
+            symbol = (ElfSymbol *) &section->data[pos];
+            int type = symbol->st_info & 0xf;
+            if (type != STT_SECTION && type != STT_FILE) break;
+
+            pos += sizeof(ElfSymbol);
+        }
+
+        if (pos == section->size) {
+            debug_summarize_symbols();
+            panic("Expected extra data");
+        }
+
+        int got_value = symbol->st_value;
+        int got_size = symbol->st_size;
+        int got_type = symbol->st_info & 0xf;
+        char got_binding = (symbol->st_info >> 4) & 0xf;
+        char got_visibility = symbol->st_other & 3;
+        unsigned short got_index = symbol->st_shndx;
+        char *got_name = symbol->st_name ? &elf_file->section_strtab->data[symbol->st_name] : 0;
+
+        int name_matches = ((!got_name && !expected_name) || (expected_name && !strcmp(expected_name, got_name)));
+
+        if (
+                expected_value != got_value ||
+                expected_size != got_size ||
+                expected_type != got_type ||
+                expected_binding != got_binding ||
+                expected_visibility != got_visibility ||
+                expected_section_index != got_index ||
+                !name_matches) {
+            debug_summarize_symbols();
+            panic("Symbols mismatch at position %d: expected %#lx, %#lx, %d, %d, %d, %s, got %#lx, %#lx, %d, %d, %d, %d, %s",
+                (pos - 1) / sizeof(ElfSymbol),
+                expected_value,
+                expected_size,
+                expected_type,
+                expected_binding,
+                expected_section_index,
+                expected_name ? expected_name : "null",
+                got_value,
+                got_size,
+                got_type,
+                got_binding,
+                got_visibility,
+                got_index,
+                got_name ? got_name : "null"
+            );
+        }
+
+        pos += sizeof(ElfSymbol);
     }
 }
 
@@ -233,8 +333,14 @@ static void test_sanity() {
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x04,    0x04,   PF_R | PF_W,  0x1000,
-        PT_END
+        END
     );
+
+    assert_symbols(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section   Name
+        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        END);
 }
 
 // Test an orphan section with different flags after a data section.
@@ -275,7 +381,7 @@ void test_segments_are_page_aligned() {
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X,        0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x04,    0x04,   PF_R | PF_W,        0x1000,
         PT_LOAD,          0x3000,  0x403000,  0x04,    0x04,   PF_R | PF_W | PF_X, 0x1000,
-        PT_END
+        END
     );
 }
 
@@ -325,7 +431,7 @@ static void test_orphan_sections_no_rearrangement(void) {
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags               Align
         PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,   PF_R | PF_X,        0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x08,    0x08,   PF_R | PF_X | PF_W, 0x1000,
-        PT_END
+        END
     );
 }
 
@@ -383,11 +489,11 @@ static void test_orphan_sections_rearrangement(void) {
         // Type           Offset   VirtAddr   FileSiz  MemSiz    Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,     PF_R | PF_X,  0x1000,  // .text
         PT_LOAD,          0x2000,  0x402000,  0x0c,    0x14,     PF_R | PF_W,  0x1000,  // .data, .bss
-        PT_END
+        END
     );
 }
 
-// A simple test with two sections
+// Test TLS tdata and tss sections
 static void test_tls() {
     char *object_path = run_was(
         ".globl _start;"
@@ -421,7 +527,7 @@ static void test_tls() {
         PT_LOAD,          0x1000,  0x401000,  0x0c,    0x0c,   PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R | PF_W,  0x1000,
         PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R       ,  8,
-        PT_END
+        END
     );
 }
 
@@ -463,7 +569,7 @@ static void test_two_bss_sections(void) {
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags        Align
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X, 0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x00,    0x10,   PF_R | PF_W, 0x1000,
-        PT_END
+        END
     );
 }
 
@@ -508,8 +614,91 @@ static void test_data_and_two_bss_sections(void) {
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags        Align
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X, 0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x08,    0x18,   PF_R | PF_W, 0x1000,
-        PT_END
+        END
     );
+}
+
+
+// Test reading etext without defining it. The linker adds it.
+static void test_etext_undefined() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    lea etext(%rip), %rdi;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "undefined etext");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x13,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        NULL
+    );
+
+    assert_program_segments(elf_file, //
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x13,    0x13,   PF_R | PF_X,  0x1000,
+        END
+    );
+
+    assert_symbols(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section   Name
+        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x401013,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "etext",                    // Set by linker
+        END);
+}
+
+// Test reading etext from a definition, so the linker doesn't override it
+static void test_defined_etext() {
+    char *object_path = run_was(
+        ".globl _start;"
+       ".globl etext;"
+        ".text;"
+        "_start:;"
+        "    lea etext(%rip), %rdi;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+        ".section .data;"
+        ".zero 0x1010;"    // Some padding; so that we can assert etext isn't set after .text by the linker
+        "etext: .long 1"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "defined etext");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size     Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x0013,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x1014,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_program_segments(elf_file, //
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x0013,  0x0013, PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x1014,  0x1014, PF_R | PF_W, 0x1000,
+        END
+    );
+
+    assert_symbols(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section   Name
+        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
+        0x403010,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",  "etext",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        END);
 }
 
 int main() {
@@ -520,4 +709,6 @@ int main() {
     test_tls();
     test_two_bss_sections();
     test_data_and_two_bss_sections();
+    test_etext_undefined();
+    test_defined_etext();
 }

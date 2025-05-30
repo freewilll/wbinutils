@@ -28,7 +28,7 @@ static CommandAssignment parse_assignment_rhs(char *identifier) {
     Node *node = parse_expression();
 
     CommandAssignment assignment = {0};
-    assignment.symbol = identifier;
+    assignment.name = identifier;
     assignment.node = node;
 
     return assignment;

@@ -26,7 +26,8 @@ static Node *make_integer_node(long value) {
 static Node *make_symbol_node(void) {
     Node *node = calloc(1, sizeof(Node));
     node->value = calloc(1, sizeof(Value));
-    node->value->symbol = get_or_add_linker_script_symbol(strdup(cur_identifier));
+    CommandAssignment assignment = (CommandAssignment) {.name = cur_identifier};
+    node->value->symbol = get_or_add_linker_script_symbol(&assignment);
     return node;
 }
 
