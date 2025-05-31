@@ -68,6 +68,12 @@ int main(int argc, char **argv) {
                 argc--;
                 argv++;
             }
+            // --dynamic-linker x
+            else if (!strcmp(argv[0], "-dynamic-linker")) {
+                // Not implemented
+                argc -= 2;
+                argv += 2;
+            }
             else {
                 error("Unknown parameter %s\n", argv[0]);
             }
@@ -85,9 +91,10 @@ int main(int argc, char **argv) {
     if (help) {
         printf("Usage: wld [-] [-o OUTPUT-FILE] INPUT-FILE...\n\n");
         printf("Flags\n");
-        printf("-h       Help\n");
-        printf("-o       Output filename\n");
-        printf("-static  Link static executable\n");
+        printf("-h               Help\n");
+        printf("-o               Output filename\n");
+        printf("-static          Link static executable\n");
+        printf("-dynamic-linker  Set the name of the dynamic linker\n");
         exit(1);
     }
 
