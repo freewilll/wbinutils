@@ -650,10 +650,10 @@ static void test_etext_undefined() {
     );
 
     assert_symbols(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section   Name
+    //  Value      Size   Type        Binding     Visibility    Section  Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
-        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
-        0x401013,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "etext",                    // Set by linker
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
+        0x401013,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "etext",                    // Set by linker
         END);
 }
 
@@ -689,7 +689,7 @@ static void test_defined_etext() {
     assert_program_segments(elf_file, //
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x0013,  0x0013, PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x2000,  0x402000,  0x1014,  0x1014, PF_R | PF_W, 0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x1014,  0x1014, PF_R | PF_W,  0x1000,
         END
     );
 
@@ -697,6 +697,47 @@ static void test_defined_etext() {
     //  Value      Size   Type        Binding     Visibility   Section   Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x403010,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",  "etext",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        END);
+}
+
+// Test doing nothing with etext.  This tests a case where an assignment could fail
+// due to the symbol being undefined.
+static void test_unused_etext() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+        ".section .preinit_array, \"aw\", @progbits;"
+        ".long 1"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "unused etext");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size     Flags                      Align
+        ".text",           SHT_PROGBITS,   0x401000, 0x1000, 0x000c,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".preinit_array",  SHT_PROGBITS,   0x402000, 0x2000, 0x0004,  SHF_ALLOC | SHF_WRITE,     1,
+        NULL
+    );
+
+    assert_program_segments(elf_file, //
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x401000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x0004,  0x0004, PF_R | PF_W,  0x1000,
+        END
+    );
+
+    assert_symbols(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section  Name
+        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         END);
 }
@@ -711,4 +752,5 @@ int main() {
     test_data_and_two_bss_sections();
     test_etext_undefined();
     test_defined_etext();
+    test_unused_etext();
 }

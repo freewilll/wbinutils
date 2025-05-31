@@ -658,9 +658,13 @@ void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf
         if (!section->command_assignments) continue;
         for (int j = 0; j < command_assignments->length; j++) {
             OutputSectionAssignment *command_assignment = (OutputSectionAssignment *) command_assignments->elements[j];
-            Symbol *symbol = must_get_global_defined_symbol(command_assignment->assignment->name);
-            uint64_t address = section->address + command_assignment->offset;
-            symbol->dst_value = address;
+            Symbol *symbol = get_global_defined_symbol(command_assignment->assignment->name);
+
+            // The symbol may not be defined if it was a provided one.
+            if (symbol) {
+                uint64_t address = section->address + command_assignment->offset;
+                symbol->dst_value = address;
+            }
         }
     }
 }
