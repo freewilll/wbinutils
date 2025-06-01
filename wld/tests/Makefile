@@ -12,6 +12,7 @@ test: \
 	symbol-resolution-double-strong-bindings \
 	symbol-resolution-weak-strong-bindings \
 	symbol-resolution-with-common-sections \
+	symbol-resolution-weak-strong-in-library \
 	local-symbols \
 	abs-symbol \
 	symbol-resolution-with-mixed-bss-and-common-sections \
@@ -67,6 +68,10 @@ symbol-resolution-weak-strong-bindings:
 symbol-resolution-with-common-sections:
 	make -C symbol-resolution-with-common-sections
 
+.PHONY: symbol-resolution-weak-strong-in-library
+symbol-resolution-weak-strong-in-library:
+	make -C symbol-resolution-weak-strong-in-library
+
 .PHONY: local-symbols
 local-symbols:
 	make -C local-symbols
@@ -119,6 +124,7 @@ clean:
 	@make -C symbol-resolution-double-strong-bindings clean
 	@make -C symbol-resolution-weak-strong-bindings clean
 	@make -C symbol-resolution-with-common-sections clean
+	@make -C symbol-resolution-weak-strong-in-library clean
 	@make -C local-symbols clean
 	@make -C abs-symbol clean
 	@make -C symbol-resolution-with-mixed-bss-and-common-sections clean

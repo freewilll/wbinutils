@@ -76,7 +76,7 @@ Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
 }
 
 // Get an undefined symbol. Returns NULL if not present.
-static Symbol *get_undefined_symbol(const char *name) {
+Symbol *get_undefined_symbol(const char *name) {
     return strmap_ordered_get(global_symbol_table->undefined_symbols, name);
 }
 
@@ -413,8 +413,15 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
             Symbol *found_symbol = get_defined_symbol(global_symbol_table, name);
             if (!found_symbol && !read_only) {
                 // Add an undefined symbol unless it already exists
-                if (!is_undefined_symbol(name)) {
+                Symbol *undefined_symbol = get_undefined_symbol(name);
+
+                if (!undefined_symbol) {
                     add_undefined_symbol(name, type, binding, other, size, is_library);
+                }
+                else {
+                    // Upgrade the undefined symbol from weak to strong
+                    if (undefined_symbol->binding == STB_WEAK && binding == STB_GLOBAL)
+                        undefined_symbol->binding = STB_GLOBAL;
                 }
             }
         }
@@ -641,7 +648,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
             }
 
             if (DEBUG_RELOCATIONS) {
-                printf("%-10s %-40s value=%08x  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
+                printf("%-60s %-60s value=%08x  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK)
                     printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->dst_offset);

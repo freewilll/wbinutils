@@ -207,8 +207,23 @@ static void test_common_symbols(void) {
     assert_int(2, must_get_global_defined_symbol("foo")->src_value, "Common then defined");
 }
 
+// Add two undefined symbols, the first weak, the second strong. The resulting undefined symbol must be strong.
+// This caused a bug where C-ctype.o in glibc wasn't being included, leading to a crash in __ctype_init.
+static void test_two_undefined_symbols_one_weak_one_strong(void) {
+    init_symbols();
+    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, SHN_UNDEF, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0);
+
+    Symbol *undefined_symbol = get_undefined_symbol("foo");
+    if (undefined_symbol->binding != STB_GLOBAL) {
+        printf("Expected a weak binding to be upgraded to a strong one\n");
+        exit(1);
+    }
+}
+
 int main() {
     test_two_strong_symbols();
     test_strong_and_weak_symbols();
     test_common_symbols();
+    test_two_undefined_symbols_one_weak_one_strong();
 }

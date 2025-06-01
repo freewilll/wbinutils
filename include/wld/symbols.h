@@ -52,6 +52,7 @@ Symbol *must_get_defined_symbol(SymbolTable *st, char *name);
 Symbol *must_get_global_defined_symbol(char *name);
 SymbolTable *get_local_symbol_table(ElfFile *elf_file);
 Symbol *lookup_symbol(ElfFile *elf_file, char *name);
+Symbol *get_undefined_symbol(const char *name);
 int is_undefined_symbol(char *name);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
