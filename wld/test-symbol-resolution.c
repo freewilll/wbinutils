@@ -81,18 +81,26 @@ ElfFile *init_elf_file(void) {
     return elf_file;
 }
 
-static void process_one_symbol(const char *name, int size, int binding, int type, int section_index, int value, int is_library) {
+// library values:
+// 0 - is_library=0
+// 1 - is_library=1
+// 2 - auto: is_library=1, but run with both read_only=1 and read_only=0, like the real linker does
+static int process_one_symbol(const char *name, int size, int binding, int type, int section_index, int value, int library, int read_only) {
     ElfFile *elf_file = init_elf_file();
     add_symbol(elf_file, name, size, binding, type, section_index, value);
 
-    if (is_library) {
+    int symbol_resolutions;
+
+    if (library == 2) {
         // Only include the library if it resolves other symbols.
-        int symbol_resolutions = process_elf_file_symbols(elf_file, is_library, 1);
-        if (symbol_resolutions) process_elf_file_symbols(elf_file, is_library, 0);
+        symbol_resolutions = process_elf_file_symbols(elf_file, 1, 1);
+        if (symbol_resolutions) process_elf_file_symbols(elf_file, 1, 0);
     }
     else {
-        process_elf_file_symbols(elf_file, is_library, 0);
+        process_elf_file_symbols(elf_file, library, read_only);
     }
+
+    return symbol_resolutions;
 }
 
 static void test_two_strong_symbols(void) {
@@ -101,23 +109,23 @@ static void test_two_strong_symbols(void) {
 
     // obj - obj is fail
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Two strong symbols in obj-obj");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_error("Multiple definition of foo", "Two strong symbols in obj-obj");
 
     // obj - lib is ok
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Two strong symbols in obj-lib");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
     assert_no_error("Two strong symbols in obj-lib");
 
     // lib - lib is ok
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
     assert_no_error("Two strong symbols in lib-lib");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
     assert_no_error("Two strong symbols in lib-lib");
 }
 
@@ -129,14 +137,14 @@ static void _test_strong_and_weak_symbols(int binding1, int is_lib2, int binding
     init_symbols();
 
     // Add the first symbol. It's undefined and in an object
-    process_one_symbol("foo", 4, binding1, STT_OBJECT, SHN_UNDEF, 0, 0);
+    process_one_symbol("foo", 4, binding1, STT_OBJECT, SHN_UNDEF, 0, 0, 0);
 
     // Add the second symbol
-    process_one_symbol("foo", 4, binding2, STT_OBJECT, 1, 1, is_lib2);
+    process_one_symbol("foo", 4, binding2, STT_OBJECT, 1, 1, is_lib2, 0);
     assert_no_error(message);
 
     // Add the third symbol
-    process_one_symbol("foo", 4, binding3, STT_OBJECT, 1, 2, is_lib3);
+    process_one_symbol("foo", 4, binding3, STT_OBJECT, 1, 2, is_lib3, 0);
     assert_no_error(message);
 
     if (expected_value != 0) {
@@ -154,55 +162,55 @@ static void test_strong_and_weak_symbols(void) {
     // A symbol in a library never resolves a weak symbol.
 
     _test_strong_and_weak_symbols(STB_GLOBAL, 0, STB_GLOBAL, 0, STB_WEAK,   1, "Three symbols with different bindings s - os - ow");
-    _test_strong_and_weak_symbols(STB_GLOBAL, 0, STB_GLOBAL, 1, STB_WEAK,   1, "Three symbols with different bindings s - os - lw");
-    _test_strong_and_weak_symbols(STB_GLOBAL, 1, STB_GLOBAL, 0, STB_WEAK,   1, "Three symbols with different bindings s - ls - ow");
-    _test_strong_and_weak_symbols(STB_GLOBAL, 1, STB_GLOBAL, 1, STB_WEAK,   1, "Three symbols with different bindings s - ls - lw");
+    _test_strong_and_weak_symbols(STB_GLOBAL, 0, STB_GLOBAL, 2, STB_WEAK,   1, "Three symbols with different bindings s - os - lw");
+    _test_strong_and_weak_symbols(STB_GLOBAL, 2, STB_GLOBAL, 0, STB_WEAK,   1, "Three symbols with different bindings s - ls - ow");
+    _test_strong_and_weak_symbols(STB_GLOBAL, 2, STB_GLOBAL, 2, STB_WEAK,   1, "Three symbols with different bindings s - ls - lw");
     _test_strong_and_weak_symbols(STB_GLOBAL, 0, STB_WEAK,   0, STB_GLOBAL, 2, "Three symbols with different bindings s - ow - os");
-    _test_strong_and_weak_symbols(STB_GLOBAL, 0, STB_WEAK,   1, STB_GLOBAL, 1, "Three symbols with different bindings s - ow - ls");
-    _test_strong_and_weak_symbols(STB_GLOBAL, 1, STB_WEAK,   0, STB_GLOBAL, 2, "Three symbols with different bindings s - lw - os");
-    _test_strong_and_weak_symbols(STB_GLOBAL, 1, STB_WEAK,   1, STB_GLOBAL, 1, "Three symbols with different bindings s - lw - ls");
+    _test_strong_and_weak_symbols(STB_GLOBAL, 0, STB_WEAK,   2, STB_GLOBAL, 1, "Three symbols with different bindings s - ow - ls");
+    _test_strong_and_weak_symbols(STB_GLOBAL, 2, STB_WEAK,   0, STB_GLOBAL, 2, "Three symbols with different bindings s - lw - os");
+    _test_strong_and_weak_symbols(STB_GLOBAL, 2, STB_WEAK,   2, STB_GLOBAL, 1, "Three symbols with different bindings s - lw - ls");
 
     _test_strong_and_weak_symbols(STB_WEAK,   0, STB_GLOBAL, 0, STB_WEAK,   1, "Three symbols with different bindings w - os - ow");
-    _test_strong_and_weak_symbols(STB_WEAK,   0, STB_GLOBAL, 1, STB_WEAK,   1, "Three symbols with different bindings w - os - lw");
-    _test_strong_and_weak_symbols(STB_WEAK,   1, STB_GLOBAL, 0, STB_WEAK,   2, "Three symbols with different bindings w - ls - ow");
-    _test_strong_and_weak_symbols(STB_WEAK,   1, STB_GLOBAL, 1, STB_WEAK,   0, "Three symbols with different bindings w - ls - lw");
+    _test_strong_and_weak_symbols(STB_WEAK,   0, STB_GLOBAL, 2, STB_WEAK,   1, "Three symbols with different bindings w - os - lw");
+    _test_strong_and_weak_symbols(STB_WEAK,   2, STB_GLOBAL, 0, STB_WEAK,   2, "Three symbols with different bindings w - ls - ow");
+    _test_strong_and_weak_symbols(STB_WEAK,   2, STB_GLOBAL, 2, STB_WEAK,   0, "Three symbols with different bindings w - ls - lw");
     _test_strong_and_weak_symbols(STB_WEAK,   0, STB_WEAK,   0, STB_GLOBAL, 2, "Three symbols with different bindings w - ow - os");
-    _test_strong_and_weak_symbols(STB_WEAK,   0, STB_WEAK,   1, STB_GLOBAL, 1, "Three symbols with different bindings w - ow - ls");
-    _test_strong_and_weak_symbols(STB_WEAK,   1, STB_WEAK,   0, STB_GLOBAL, 2, "Three symbols with different bindings w - lw - os");
-    _test_strong_and_weak_symbols(STB_WEAK,   1, STB_WEAK,   1, STB_GLOBAL, 0, "Three symbols with different bindings w - lw - ls");
+    _test_strong_and_weak_symbols(STB_WEAK,   0, STB_WEAK,   2, STB_GLOBAL, 1, "Three symbols with different bindings w - ow - ls");
+    _test_strong_and_weak_symbols(STB_WEAK,   2, STB_WEAK,   0, STB_GLOBAL, 2, "Three symbols with different bindings w - lw - os");
+    _test_strong_and_weak_symbols(STB_WEAK,   2, STB_WEAK,   2, STB_GLOBAL, 0, "Three symbols with different bindings w - lw - ls");
 }
 
 static void test_common_symbols(void) {
     // One common symbol
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("One common");
     assert_int(1, MGGS("foo")->is_common, "One common");
 
     // Undefined, then a common symbol
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
     assert_no_error("Undef then common");
     assert_int(1, is_undefined_symbol("foo"), "Undef then common");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("Undef then common");
     assert_int(0, is_undefined_symbol("foo"), "Undef then common");
 
     // Defined, then a common symbol
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Defined, then common");
     assert_int(1, MGGS("foo")->src_value, "Defined, then common");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_int(1, MGGS("foo")->src_value, "Defined, then common");
 
     // Common symbol, then defined
     init_symbols();
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("Common then defined");
     assert_int(1, MGGS("foo")->src_value, "Common then defined");
     assert_int(1, MGGS("foo")->is_common, "Common then defined");
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 2, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 2, 0, 0);
     assert_int(0, must_get_global_defined_symbol("foo")->is_common, "Common then defined");
     assert_int(2, must_get_global_defined_symbol("foo")->src_value, "Common then defined");
 }
@@ -211,8 +219,9 @@ static void test_common_symbols(void) {
 // This caused a bug where C-ctype.o in glibc wasn't being included, leading to a crash in __ctype_init.
 static void test_two_undefined_symbols_one_weak_one_strong(void) {
     init_symbols();
-    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, SHN_UNDEF, 1, 0);
-    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0);
+
+    process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
 
     Symbol *undefined_symbol = get_undefined_symbol("foo");
     if (undefined_symbol->binding != STB_GLOBAL) {
@@ -221,9 +230,49 @@ static void test_two_undefined_symbols_one_weak_one_strong(void) {
     }
 }
 
+static void test_two_defined_symbols_one_weak_one_strong(void) {
+    // A strong symbol in a library doesn't get it to be pulled in if a weak symbol already is present
+    init_symbols();
+
+    // Add an undefined symbol so that the library gets pulled in
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
+
+    // Add a library with a weak foo that resolves foo
+    int resolutions = process_one_symbol("foo", 4, STB_WEAK,   STT_OBJECT, 1, 1, 2, 0);
+    assert_int(1, resolutions, "Expected the weak symbol to resolve foo");
+
+    // Add another library with a strong foo. It is ignored
+    resolutions = process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 2, 0);
+    assert_int(0, resolutions, "Expected the strong symbol to be ignored");
+
+    // The weak symbol resolves foo
+    Symbol *symbol = must_get_defined_symbol(global_symbol_table, "foo");
+    assert_int(STB_WEAK, symbol->binding, "Expected the weak symbol to not be overridden by the strong one");
+
+    // If an object file in a library is loaded, and has a strong symbol, it overrides an already
+    // resolved weak symbol.
+    init_symbols();
+
+    // Add an undefined symbol so that the library gets pulled in
+    process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
+
+    // Add a library with a weak foo that resolves foo
+    resolutions = process_one_symbol("foo", 4, STB_WEAK,   STT_OBJECT, 1, 1, 2, 0);
+    assert_int(1, resolutions, "Expected the weak symbol to resolve foo");
+
+    // Load a library with a strong foo. foo becomes strong
+    resolutions = process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
+    assert_int(1, resolutions, "The strong symbol takes over the weak");
+
+    // The strong symbol overrides the weak one
+    symbol = must_get_defined_symbol(global_symbol_table, "foo");
+    assert_int(STB_GLOBAL, symbol->binding, "Expected the strong symbol to override the weak one");
+}
+
 int main() {
     test_two_strong_symbols();
     test_strong_and_weak_symbols();
     test_common_symbols();
     test_two_undefined_symbols_one_weak_one_strong();
+    test_two_defined_symbols_one_weak_one_strong();
 }

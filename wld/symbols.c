@@ -332,8 +332,10 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
             ; // Do nothing
         else {
             // One is strong and one is weak.
-            // If the new symbol is strong and not in a library, it resolves the exiting weak one
-            if (binding != STB_WEAK && !is_library) {
+            // Two cases:
+            // - If the new symbol is strong and not in a library, it resolves the exiting weak one.
+            // - If the new symbol is strong and is being loaded, it resolves the exiting weak one.
+            if (binding != STB_WEAK && (!is_library || !read_only)) {
                 // The new symbol is strong and takes over
                 result = 1;
 
