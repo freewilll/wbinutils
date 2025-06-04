@@ -1541,6 +1541,7 @@ static void test_debug_line_program(void) {
         0x20,               // Special opcode 19: advance Address by 1 to 0x1 and Line by 0 to 4
         DWARF_EPILOGUE,     // Extended opcode 1: End of Sequence
         END);
+    assert_relocations(".rela.debug_line", R_X86_64_64, get_symbol_symtab_index(".text"), 0x20, 0, END);
 
     input =
         ".section .debug_info\n.text\n"

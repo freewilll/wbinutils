@@ -9,6 +9,7 @@
 #include "was/elf.h"
 #include "was/list.h"
 #include "was/utils.h"
+#include "was/relocations.h"
 #include "was/symbols.h"
 
 #define LINE_BASE  -5
@@ -36,10 +37,11 @@ typedef struct state {
     int line_number;
 
     // Internal state
-    char *data;             // Buffer
-    int allocated;          // Allocated memory in buffer
-    int size;               // Used size
-    int locs_present;       // 1 if any .locs are present (the normal case)
+    char *data;                     // Buffer
+    int allocated;                  // Allocated memory in buffer
+    int size;                       // Used size
+    int locs_present;               // 1 if any .locs are present (the normal case)
+    int first_address_offset;   // The offset in the program if the first set address instruction // The 3 is the offset where the address is encoded
 } State;
 
 State state;
@@ -134,6 +136,16 @@ static void make_dwarf_debug_line_section_program(RwSection *debug_line_section)
     // Extended opcode 1: End of Sequence
     const char epilogue[] = {0x00, 0x01, DW_LNE_end_sequence};
     add_to_state_data(epilogue, sizeof(epilogue));
+
+    // Add a relocation for the address in the first DW_LNE_set_address instruction.
+    // The relocation points at the start of .text. The linker resolves this relocation.
+    Symbol *symbol = get_symbol(".text");
+    add_relocation(
+        get_relocation_section(debug_line_section),
+        symbol,
+        R_X86_64_64,
+        debug_line_section->size + state.first_address_offset,
+        0);
 
     add_to_rw_section(debug_line_section, state.data, state.size);
 }
@@ -240,6 +252,8 @@ static void add_dwarf_loc_increment_line(int line_increment) {
 
 void add_dwarf_loc(int file_index, int line_number, int address) {
     if (!state.locs_present) {
+        state.first_address_offset = state.size + 3; // The 3 is the offset where the address is encoded
+
         // Extended opcode 2: set Address to 0x0
         const char prologue[] = {0x00, 0x09, DW_LNE_set_address, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00};
         add_to_state_data(prologue, sizeof(prologue));
