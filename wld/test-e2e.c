@@ -12,6 +12,13 @@
 
 #define END -1
 
+static void assert_int(int expected, int actual, const char *message) {
+    if (expected != actual) {
+        printf("%s: expected %d, got %d\n", message, expected, actual);
+        exit(1);
+    }
+}
+
 static void fail_sections(RwElfFile *elf_file, List *expected_sections) {
     printf("Got sections:\n");
     dump_sections(elf_file);
@@ -789,6 +796,42 @@ static void test_automatic_start_stop_symbols() {
         END);
 }
 
+// Ensure the relocation to .debug_abbrev is correct and the address is zero.
+static void test_dwarf() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+        ".section foo, \"aw\", @progbits;"
+        "   .long 1;"
+        // Incomplete debug info
+        ".section .debug_info, \"\", @progbits;\n"
+        "   .long .debug_abbrev;"
+        ".section .debug_abbrev, \"\", @progbits;\n"
+        "   .long 0;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *output_path;
+    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "dwarf lines");
+
+    // Ensure that the .debug_abbrev has address zero. This is required by DWARF.
+    // No alloc sections must have address zero.
+    RwSection *debug_abbrev_section = get_rw_section(elf_file, ".debug_abbrev");
+    if (!debug_abbrev_section) panic("Expected a .debug_abbrev section");
+    assert_int(0, debug_abbrev_section->address, ".debug_abbrev has zero address");
+
+    // Ensure the .debug_abbrev pointer in .debug_info points to the zero address.
+    RwSection *debug_info_section = get_rw_section(elf_file, ".debug_info");
+    assert_int(4, debug_info_section->size, ".debug_info size is 4");
+    uint32_t *offset = (uint32_t *) debug_info_section->data;
+    assert_int(0, *offset, ".debug_info pointer inside .debug_abbrev is zero");
+}
 
 int main() {
     test_sanity();
@@ -802,4 +845,5 @@ int main() {
     test_defined_etext();
     test_unused_etext();
     test_automatic_start_stop_symbols();
+    test_dwarf();
 }

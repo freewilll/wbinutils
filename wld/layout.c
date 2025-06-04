@@ -497,7 +497,12 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
 
     // Set the section offset and address
     section->offset = *poffset;
-    section->address = dot_symbol->dst_value;
+
+    // Set the section address if it's an allocatable section
+    if (section->flags & SHF_ALLOC)
+        section->address = dot_symbol->dst_value;
+    else
+        section->address = 0;
 
     // Advance the . symbol
     dot_symbol->dst_value += section->size;
