@@ -93,6 +93,7 @@ int main(int argc, char **argv) {
         printf("Flags\n");
         printf("-h               Help\n");
         printf("-o               Output filename\n");
+        printf("-T               Use linker script\n");
         printf("-static          Link static executable\n");
         printf("-dynamic-linker  Set the name of the dynamic linker\n");
         exit(1);

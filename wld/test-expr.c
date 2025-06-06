@@ -25,7 +25,6 @@ static void assert_string(const char *expected, const char *actual, const char *
 }
 
 static Value run(char *script) {
-    linker_script = new_list(1);
     init_lexer_from_string(script);
 
     RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
@@ -125,7 +124,6 @@ static void test_expressions_with_symbol() {
 
 void test_sizeof() {
     char *script = "SIZEOF(.text)";
-    linker_script = new_list(1);
     init_lexer_from_string(script);
 
     RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
@@ -138,7 +136,6 @@ void test_sizeof() {
 
 void test_sizeof_headers() {
     char *script = "SIZEOF_HEADERS";
-    linker_script = new_list(1);
     init_lexer_from_string(script);
 
     RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);

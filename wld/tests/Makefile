@@ -4,6 +4,7 @@ test: \
 	sanity1 \
 	sanity2 \
 	glibc-hello-world \
+	glibc-math \
 	glibc-with-gcc-ld \
 	musl-libc-hello-world \
 	musl-libc-tls-hello-world \
@@ -36,6 +37,10 @@ sanity2:
 .PHONY: glibc-hello-world
 glibc-hello-world:
 	make -C glibc-hello-world
+
+.PHONY: glibc-math
+glibc-math:
+	make -C glibc-math
 
 .PHONY: glibc-with-gcc-ld
 glibc-with-gcc-ld:
@@ -121,6 +126,7 @@ clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
 	@make -C glibc-hello-world clean
+	@make -C glibc-math clean
 	@make -C glibc-with-gcc-ld clean
 	@make -C musl-libc-hello-world clean
 	@make -C musl-libc-tls-hello-world clean

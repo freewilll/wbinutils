@@ -106,6 +106,23 @@ void index_archive_file(ArchiveFile *ar_file) {
     }
 }
 
+// Check if an archive file starts with a GNU magic string
+int is_gnu_linker_script_file(const char *filename) {
+    FILE *file = fopen(filename, "r");
+
+    int result = 0;
+
+    char magic[GNU_LD_SCRIPT_MAGIC_LEN];
+    if (fread(magic, 1, GNU_LD_SCRIPT_MAGIC_LEN, file) == GNU_LD_SCRIPT_MAGIC_LEN) {
+        if (!memcmp(magic, GNU_LD_SCRIPT_MAGIC, GNU_LD_SCRIPT_MAGIC_LEN)) {
+            result = 1;
+        }
+    }
+
+    fclose(file);
+    return result;
+}
+
 ArchiveFile *open_archive_file(const char *filename) {
     ArchiveFile *ar_file = malloc(sizeof(ArchiveFile));
 
@@ -121,18 +138,24 @@ ArchiveFile *open_archive_file(const char *filename) {
     // Check the magic string
     char magic[AR_MAGIC_LEN];
     if (fread(magic, 1, AR_MAGIC_LEN, ar_file->file) != AR_MAGIC_LEN)
-        error("Unable to read input file: %s", filename);
+        error("Unable to read archive file: %s", filename);
+
+    if (memcmp(magic, AR_MAGIC, AR_MAGIC_LEN))
+        error("Not an archive file: %s", filename);
 
     index_archive_file(ar_file);
 
     return ar_file;
 }
 
-void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
+// Process an archive and return the amount of object files that were added to the link
+int process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
     StrMap *included_objects_map = new_strmap();
     List *included_objects_list = new_list(32);
 
     int objects_added;
+    int total_objects_added = 0;
+
     // Repeat over all objects in the archive file until no objects have
     // been added. These multiple passes are needed, since an object might need a
     // symbol in a previously scanned object.
@@ -157,6 +180,7 @@ void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
                     strmap_put(included_objects_map, obj->filename, elf_file);
                     append_to_list(included_objects_list, elf_file);
                     objects_added++;
+                    total_objects_added++;
                 }
             }
         }
@@ -170,6 +194,8 @@ void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
 
     free_strmap(included_objects_map);
     free_list(included_objects_list);
+
+    return total_objects_added;
 }
 
 void dump_archive_file_symbols(ArchiveFile* ar_file) {

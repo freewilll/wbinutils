@@ -8,6 +8,8 @@
 #include "strmap-ordered.h"
 
 #include "wld/layout.h"
+#include "wld/lexer.h"
+#include "wld/parser.h"
 #include "wld/libs.h"
 #include "wld/relocations.h"
 #include "wld/script.h"
@@ -71,6 +73,38 @@ Section *create_extra_section(RwElfFile *output_elf_file, char *name, uint32_t t
     return extra_section;
 }
 
+// Static libraries subh as libm.a can consist of a linker script that looks something like:
+// /* GNU ld script
+// */
+// OUTPUT_FORMAT(elf64-x86-64)
+// GROUP ( /usr/lib/x86_64-linux-gnu/libm-2.31.a /usr/lib/x86_64-linux-gnu/libmvec.a )
+// Parse the linker script and process all libraries in the GROUP()
+static void run_archive_file_linker_script(char *path, List *input_elf_files) {
+    init_lexer(path);
+    List *linker_script = parse();
+
+    // Loop over the group
+    for (int i = 0; i < linker_script->length; i++) {
+        ScriptCommand *command = linker_script->elements[i];
+        if (command->type != CMD_GROUP) continue;
+
+        // Loop over the group until no more objects are added
+        while (1) {
+            int objects_added = 0;
+
+            List *filenames = command->group.filenames;
+            for (int j = 0; j < filenames->length; j++) {
+                char *path = filenames->elements[j];
+
+                ArchiveFile *ar_file = open_archive_file(path);
+                objects_added += process_library_symbols(ar_file, input_elf_files);
+            }
+
+            if (!objects_added) break;
+        }
+    }
+}
+
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files) {
     List *input_elf_files = new_list(32);
@@ -82,8 +116,14 @@ static List *read_input_files(List *library_paths, List *input_files) {
 
         if (input_file->is_library) {
             char *path = search_for_library(library_paths, input_filename);
-            ArchiveFile *ar_file = open_archive_file(path);
-            process_library_symbols(ar_file, input_elf_files);
+
+            if (is_gnu_linker_script_file(path)) {
+                run_archive_file_linker_script(path, input_elf_files);
+            }
+            else {
+                ArchiveFile *ar_file = open_archive_file(path);
+                process_library_symbols(ar_file, input_elf_files);
+            }
         }
         else {
             ElfFile *elf_file = open_elf_file(input_filename);
@@ -97,8 +137,8 @@ static List *read_input_files(List *library_paths, List *input_files) {
 
 // Go through the linker script and set the entrypoint symbol
 static void set_entrypoint_symbol(RwElfFile *output_elf_file, List *input_elf_files) {
-    for (int i = 0; i < linker_script->length; i++) {
-        ScriptCommand *script_command = linker_script->elements[i];
+    for (int i = 0; i < output_elf_file->linker_script->length; i++) {
+        ScriptCommand *script_command = output_elf_file->linker_script->elements[i];
 
         if (script_command->type == CMD_ENTRY)
             entrypoint_symbol_name = script_command->entry.symbol;
@@ -360,7 +400,7 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     // Setup symbol tables
     init_symbols();
 
-    parse_linker_scripts(library_paths, linker_scripts);
+    parse_linker_scripts(output_elf_file, library_paths, linker_scripts);
 
     // Read input file
     List *input_elf_files = read_input_files(library_paths, input_files);

@@ -8,6 +8,9 @@
 #define AR_MAGIC "!<arch>\n"
 #define AR_MAGIC_LEN 8
 
+#define GNU_LD_SCRIPT_MAGIC "/* GNU ld script"
+#define GNU_LD_SCRIPT_MAGIC_LEN 16
+
 typedef struct archive_file_object {
     char *filename;
     int offset;
@@ -32,8 +35,9 @@ typedef struct archive_file {
 extern const char *BUILTIN_LIBRARY_PATHS[];
 
 char *search_for_library(List *library_paths, const char *input_filename);
+int is_gnu_linker_script_file(const char *filename);
 ArchiveFile *open_archive_file(const char *filename);
 void dump_archive_file_symbols(ArchiveFile* ar_file);
-void process_library_symbols(ArchiveFile *ar_file, List *input_elf_files);
+int process_library_symbols(ArchiveFile *ar_file, List *input_elf_files);
 
 #endif

@@ -1,18 +1,16 @@
 #include "list.h"
 
+#include "rw-elf.h"
+
 #include "wld/lexer.h"
 #include "wld/parser.h"
 #include "wld/utils.h"
 #include "wld/script.h"
 
-List *linker_script;
-
-void parse_linker_scripts(List *library_paths, List *linker_scripts) {
-    linker_script = new_list(1);
-
+void parse_linker_scripts(RwElfFile *output_elf_file, List *library_paths, List *linker_scripts) {
     if (linker_scripts->length == 0) {
         init_lexer_from_string(DEFAULT_LINKER_SCRIPT);
-        parse();
+        output_elf_file->linker_script = parse();
         return;
     }
 
@@ -20,6 +18,6 @@ void parse_linker_scripts(List *library_paths, List *linker_scripts) {
         char *filename = linker_scripts->elements[i];
         char *path = find_file(library_paths, filename, "linker script");
         init_lexer(path);
-        parse();
+        output_elf_file->linker_script = parse();
     }
 }

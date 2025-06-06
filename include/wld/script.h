@@ -60,6 +60,7 @@ typedef struct sections_command  {
 typedef enum script_command_type {
     CMD_ENTRY    = 1,
     CMD_SECTIONS = 2,
+    CMD_GROUP = 3,
 } ScriptCommandType;
 
 typedef struct script_command_entry {
@@ -70,15 +71,18 @@ typedef struct script_command_section {
     List *commands;
 } ScriptCommandSections;
 
+typedef struct script_command_group {
+    List *filenames;
+} ScriptCommandGroup;
+
 typedef struct script_command {
     ScriptCommandType type;
     union {
         ScriptCommandEntry entry;
         ScriptCommandSections sections;
+        ScriptCommandGroup group;
     };
 } ScriptCommand;
-
-extern List *linker_script;
 
 static char *DEFAULT_LINKER_SCRIPT =
     "ENTRY(_start)"
@@ -141,6 +145,6 @@ static char *DEFAULT_LINKER_SCRIPT =
     "     }                                                                      \n"
     "}                                                                           \n";
 
-void parse_linker_scripts(List *library_paths, List *linker_scripts);
+void parse_linker_scripts(RwElfFile *output_elf_file, List *library_paths, List *linker_scripts);
 
 #endif

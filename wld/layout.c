@@ -375,8 +375,8 @@ void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files) {
         }
     }
 
-    for (int i = 0; i < linker_script->length; i++) {
-        ScriptCommand *script_command = linker_script->elements[i];
+    for (int i = 0; i < output_elf_file->linker_script->length; i++) {
+        ScriptCommand *script_command = output_elf_file->linker_script->elements[i];
 
         if (script_command->type == CMD_SECTIONS) {
             List *section_commands = script_command->sections.commands;
@@ -587,8 +587,8 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     // to within the script's sections
     int current_sections_list_index = -1; // This will be set when the first output section is encountered in the script.
 
-    for (int i = 0; i < linker_script->length; i++) {
-        ScriptCommand *script_command = linker_script->elements[i];
+    for (int i = 0; i < output_elf_file->linker_script->length; i++) {
+        ScriptCommand *script_command = output_elf_file->linker_script->elements[i];
 
         if (script_command->type != CMD_SECTIONS) continue;
         List *section_commands = script_command->sections.commands;

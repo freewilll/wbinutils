@@ -8,6 +8,8 @@
 #include "wld/script.h"
 #include "wld/symbols.h"
 
+static List *linker_script;
+
 static void assert_int(int expected, int actual, char *message) {
     if (expected != actual) {
         printf("%s: expected %d, got %d\n", message, expected, actual);
@@ -23,9 +25,8 @@ static void assert_string(const char *expected, const char *actual, const char *
 }
 
 static void run(char *script) {
-    linker_script = new_list(1);
     init_lexer_from_string(script);
-    parse();
+    linker_script = parse();
 }
 
 static uint64_t evaluate_test_node(Node *node) {
@@ -194,11 +195,48 @@ static void test_parse_default_linker_script() {
     run(DEFAULT_LINKER_SCRIPT);
 }
 
+static void test_parse_output_format() {
+    run("OUTPUT_FORMAT(foo)");
+    assert_int(0, linker_script->length, "OUTPUT_FORMAT(foo)");
+
+    run("OUTPUT_FORMAT(foo, bar, baz)");
+    assert_int(0, linker_script->length, "OUTPUT_FORMAT(foo, bar, baz)");
+}
+
+static void test_parse_group() {
+    char *script = "GROUP(/path/libm.a /path/libm2.a)";
+    run(script);
+
+    assert_int(1, linker_script->length, script);
+    ScriptCommand *command = linker_script->elements[0];
+    assert_int(CMD_GROUP, command->type, script);
+
+    List *filenames = command->group.filenames;
+    assert_int(2, filenames->length, script);
+    assert_string("/path/libm.a", (char *) filenames->elements[0], script);
+    assert_string("/path/libm2.a", (char *) filenames->elements[1], script);
+
+    // With filenames delimited by commas
+    script = "GROUP(/path/libm.a, /path/libm2.a)";
+    run(script);
+
+    assert_int(1, linker_script->length, script);
+    command = linker_script->elements[0];
+    assert_int(CMD_GROUP, command->type, script);
+
+    filenames = command->group.filenames;
+    assert_int(2, filenames->length, script);
+    assert_string("/path/libm.a", (char *) filenames->elements[0], script);
+    assert_string("/path/libm2.a", (char *) filenames->elements[1], script);
+}
+
 int main() {
     test_comments();
     test_entry();
     test_double_entry();
     test_sections_assignment();
     test_sections_output();
+    test_parse_output_format();
+    test_parse_group();
     test_parse_default_linker_script();
 }

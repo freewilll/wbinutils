@@ -8,6 +8,8 @@
 #include "wld/lexer.h"
 #include "wld/script.h"
 
+List *current_linker_script;
+
 static SectionsCommand *parse_sections_command();
 static SectionsCommandOutputItem *parse_sections_command_output_item();
 
@@ -209,7 +211,7 @@ static void parse_sections(void) {
     ScriptCommand *script_command = malloc(sizeof(ScriptCommand));
     script_command->type = CMD_SECTIONS;
     script_command->sections.commands = section_commands;
-    append_to_list(linker_script, script_command);
+    append_to_list(current_linker_script, script_command);
 
     while (1) {
         while (cur_token == TOK_SEMICOLON) next();
@@ -221,7 +223,35 @@ static void parse_sections(void) {
     consume(TOK_RCURLY, "}");
 }
 
-void parse(void) {
+static void parse_group(void) {
+    next();
+    consume(TOK_LPAREN, "(");
+
+    List *filenames = new_list(8);
+
+    while (1) {
+        if (cur_token == TOK_RPAREN || cur_token == TOK_EOF) break;
+
+        if (cur_token == TOK_FILENAME)
+            append_to_list(filenames, strdup(cur_identifier));
+
+        consume(TOK_FILENAME, "filename");
+
+        while (cur_token == TOK_COMMA) next();
+    }
+
+    consume(TOK_RPAREN, ")");
+
+    ScriptCommand *command = malloc(sizeof(ScriptCommand));
+    command->type = CMD_GROUP;
+    command->group.filenames = filenames;
+    append_to_list(current_linker_script, command);
+}
+
+// Parse a linker script, returning a list of commands
+List *parse(void) {
+    current_linker_script = new_list(1);
+
     while (cur_token != TOK_EOF) {
         while (cur_token == TOK_SEMICOLON) next();
 
@@ -233,7 +263,7 @@ void parse(void) {
             ScriptCommand *command = malloc(sizeof(ScriptCommand));
             command->type = CMD_ENTRY;
             command->entry.symbol = strdup(cur_identifier);;
-            append_to_list(linker_script, command);
+            append_to_list(current_linker_script, command);
 
             consume(TOK_RPAREN, ")");
         }
@@ -242,8 +272,20 @@ void parse(void) {
             parse_sections();
         }
 
+        else if (cur_token == TOK_OUTPUT_FORMAT) {
+            // Ignore OUTPUT_FORMAT(...)
+            while (cur_token != TOK_EOF && cur_token != TOK_RPAREN) next();
+            if (cur_token == TOK_RPAREN) next();
+        }
+
+        else if (cur_token == TOK_GROUP) {
+            parse_group();
+        }
+
         else {
             error_in_file("Unknown command");
         }
     }
+
+    return current_linker_script;
 }
