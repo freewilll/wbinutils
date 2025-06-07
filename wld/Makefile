@@ -46,14 +46,24 @@ HEADERS_PATH := ${HEADERS:%=../include/%}
 LIBS_PREFIXED_L := ${LIBS:%=-l%}
 LIBS_PATH := ${LIBS:%=../lib/lib%.a}
 
-%.o: %.c ${HEADERS_PATH}
-	gcc -g -Werror -I ../include -c $< -o $@
+LINKER_SCRIPTS_HEADERS = \
+	default.ld.h \
+	default-shared.ld.h \
 
-libwld.a: ${OBJECTS} ${LIBS_PATH}
+%.o: %.c ${HEADERS_PATH} ${LINKER_SCRIPTS_HEADERS}
+	gcc -g -Werror -I . -I ../include -c $< -o $@
+
+default.ld.h: default-linker-script.template.h
+	gcc -E default-linker-script.template.h -D STATIC > default.ld.h
+
+default-shared.ld.h: default-linker-script.template.h
+	gcc -E default-linker-script.template.h -D SHARED > default-shared.ld.h
+
+libwld.a: ${OBJECTS} ${LIBS_PATH} ${LINKER_SCRIPTS_HEADERS}
 	ar rcsT libwld.a ${OBJECTS} ${LIBS_PATH}
 
 ${TARGET}: libwld.a main.o ${LIBS_PATH}
-	gcc -g -Werror -I ../include main.o libwld.a -o ${TARGET}
+	gcc -g -Werror -I . -I ../include main.o libwld.a -o ${TARGET}
 
 test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser run-test-expr run-test-utils run-test-e2e
 	make -C tests
@@ -67,7 +77,7 @@ libtest-archive-loading-long.a: test-archive-loading.o
 
 test-archive-loading: libwld.a test-archive-loading.o
 	ar rcs libtest-archive-loading.a test-archive-loading.o
-	gcc -g -Werror -I ../include test-archive-loading.o libwld.a  -o test-archive-loading
+	gcc -g -Werror -I . -I ../include test-archive-loading.o libwld.a  -o test-archive-loading
 
 .PHONY: run-test-archive-loading
 run-test-archive-loading: test-archive-loading libtest-archive-loading.a libtest-archive-loading-long.a
@@ -102,6 +112,8 @@ run-test-e2e: test-e2e
 
 clean:
 	@rm -f *.o
+	@rm -f default.ld.h
+	@rm -f default-shared.ld.h
 	@rm -f libwld.a
 	@rm -f ${TARGET}
 	@make -C tests clean

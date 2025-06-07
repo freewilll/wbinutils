@@ -1,5 +1,7 @@
 *.o
 /*.s
+default.ld.h
+default-shared.ld.h
 libwld.a
 wld
 core
@@ -8,6 +10,8 @@ test
 /test.c
 /test.s
 /test2.s
+/libtest.c
+/libtest.so
 /hello.c
 /hello.s
 /hello

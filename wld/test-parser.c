@@ -192,7 +192,7 @@ void test_sections_output() {
 
 static void test_parse_default_linker_script() {
     init_symbols();
-    run(DEFAULT_LINKER_SCRIPT);
+    run(DEFAULT_LINKER_SCRIPT_STATIC);
 }
 
 static void test_parse_output_format() {

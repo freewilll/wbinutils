@@ -297,7 +297,7 @@ static RwElfFile *run_wld(List *input_filenames, char **poutput_path, int run_ex
     List *library_paths = new_list(0);
     List *linker_scripts = new_list(0);
 
-    RwElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path);
+    RwElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, OUTPUT_TYPE_STATIC);
 
     if (run_executable) {
         // Run the executable and assert an exit code of zero

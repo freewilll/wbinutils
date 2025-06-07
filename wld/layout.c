@@ -92,7 +92,7 @@ void remove_empty_sections(RwElfFile *output_elf_file) {
 
         // Only include the first NULL section. The other NULL sections are artifacts of the layout and
         // are discarded here.
-        if (i == 0 || section->type == SHT_STRTAB || section->type == SHT_SYMTAB || section->keep || section->size) {
+        if (i == 0 || section->type == SHT_STRTAB || section->type == SHT_SYMTAB || section->type == SHT_DYNAMIC || section->keep || section->size) {
             append_to_list(new_section_list, section);
         }
         else {
@@ -395,7 +395,7 @@ void make_elf_section_headers(RwElfFile *output_elf_file) {
     output_elf_file->elf_section_headers_size = sizeof(ElfSectionHeader) * output_elf_file->sections_list->length;
     output_elf_file->elf_section_headers = calloc(1, output_elf_file->elf_section_headers_size);
 
-    // Loop over all headers
+    // Loop over all sections
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
         make_rw_section_header(output_elf_file, &output_elf_file->elf_section_headers[i], section);
@@ -440,7 +440,7 @@ static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSe
     if (section->flags & SHF_WRITE) psh->p_flags |= PF_W;
     if (section->flags & SHF_EXECINSTR) psh->p_flags |= PF_X;
 
-    psh->p_type = PT_LOAD;          // Segment type
+    psh->p_type = PT_LOAD;
 }
 
 // Given an input section and an output section, align the input section, update the sizes and process TLS.
@@ -714,10 +714,9 @@ void layout_program_segments(RwElfFile *output_elf_file) {
     output_elf_file->program_segments_list = new_list(16);
 
     ElfProgramSegmentHeader *current_segment = NULL;
-    int current_segment_type = -1;
-    int current_segment_flags = -1;
+    int current_section_flags = -1;
     int previous_section_type = -1;
-    uint64_t previous_section_offset = 0;
+    uint64_t current_section_offset = 0;
 
     // Loop over all headers
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
@@ -726,7 +725,7 @@ void layout_program_segments(RwElfFile *output_elf_file) {
         if (!(section->flags & SHF_ALLOC)) continue;
 
         if (!current_segment ||
-            section->flags != current_segment_flags ||
+            section->flags != current_section_flags ||
             (previous_section_type == SHT_NOBITS && section->type != SHT_NOBITS)
         ) {
             // Create a new segment.
@@ -758,9 +757,8 @@ void layout_program_segments(RwElfFile *output_elf_file) {
             current_segment->p_paddr = section->address;
             current_segment->p_align = 0x1000;
 
-            current_segment_type = section->type;
-            current_segment_flags = section->flags;
-            previous_section_offset = section->offset;
+            current_section_flags = section->flags;
+            current_section_offset = section->offset;
         }
 
         if (DEBUG_LAYOUT)
@@ -768,7 +766,7 @@ void layout_program_segments(RwElfFile *output_elf_file) {
                 section->name, section->size, section->address, section->offset);
 
         // The increase in segment size consists of the difference in alignment + the section size
-        uint64_t segment_size_diff = section->offset - previous_section_offset + section->size;
+        uint64_t segment_size_diff = section->offset - current_section_offset + section->size;
 
         // Increase the file size unless it's a BSS section
         if (section->type != SHT_NOBITS)
@@ -778,7 +776,7 @@ void layout_program_segments(RwElfFile *output_elf_file) {
         current_segment->p_memsz += segment_size_diff;
 
         if (section->type != SHT_NOBITS)
-            previous_section_offset = section->offset + section->size;
+            current_section_offset = section->offset + section->size;
 
         previous_section_type = section->type;
     }

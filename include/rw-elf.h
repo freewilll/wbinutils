@@ -36,7 +36,7 @@ typedef struct rw_section  {
 } RwSection;
 
 typedef struct rw_elf  {
-    const char *filename;                                   // Output filenamne
+    const char *filename;                                   // Output filename
     int type;                                               // Object file type, one of ET_*
     List *sections_list;                                    // List of RwSections
     StrMap *sections_map;                                   // Map of the same RwSections as in the list

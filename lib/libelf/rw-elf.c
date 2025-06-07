@@ -157,7 +157,7 @@ void make_elf_headers(RwElfFile *output) {
     // - Program segment headers (if an executable)
     // - Section headers
 
-    int e_phentsize = output->type == ET_EXEC ? sizeof(ElfProgramSegmentHeader) : 0;
+    int e_phentsize = (output->type == ET_EXEC || output->type == ET_DYN) ? sizeof(ElfProgramSegmentHeader) : 0;
 
     // ELF header
     ElfHeader *elf_header = (ElfHeader *) output->data;
@@ -328,8 +328,8 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
         RwSection *section = output_elf_file->sections_list->elements[i];
 
-        // Align program sections to page boundaries if it's an executable
-        if (output_elf_file->type == ET_EXEC && section->type == SHT_PROGBITS)
+        // Align program sections to page boundaries if it's an executable or library
+        if ((output_elf_file->type == ET_EXEC || output_elf_file->type == ET_DYN) && section->type == SHT_PROGBITS)
             offset = ALIGN_UP(offset, 0x1000);
 
         section->offset = offset;

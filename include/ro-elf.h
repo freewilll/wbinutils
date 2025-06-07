@@ -19,7 +19,7 @@ typedef struct section {
     uint64_t align;                       // Alignment
     int dst_offset;                       // Offset in output section
     RwSection *dst_section;               // Target Section (for WLD)
-    void *data;                           // Potentially loaded section
+    void *data;                           // Potentially loaded section, or synthetic section
 } Section;
 
 // In-memory input ELF file

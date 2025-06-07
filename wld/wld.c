@@ -44,8 +44,10 @@ static const char *SECTION_TYPE_NAMES[] = {
 
 static const char *PROGRAM_SEGMENT_TYPE_NAMES[] = { "NULL", "LOAD", "DYNAMIC", "INTERP", "NOTE", "SHLIB", "PHDR", "TLS", "NUM" };
 
-static RwElfFile *init_output_elf_file(const char *output_filename) {
-    RwElfFile *result = new_rw_elf_file(output_filename, ET_EXEC);
+RwElfFile *init_output_elf_file(const char *output_filename, int output_type) {
+    int elf_output_type = output_type == OUTPUT_TYPE_STATIC ? ET_EXEC : ET_DYN;
+
+    RwElfFile *result = new_rw_elf_file(output_filename, elf_output_type);
     result->extra_sections = new_strmap_ordered();
     result->ifunc_symbols = new_list(0);
     result->global_symbols_in_use  = new_strmap();
@@ -72,6 +74,12 @@ Section *create_extra_section(RwElfFile *output_elf_file, char *name, uint32_t t
     strmap_ordered_put(output_elf_file->extra_sections, strdup(name), extra_section);
 
     return extra_section;
+}
+
+static Section *get_or_create_extra_section(RwElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align) {
+    Section *section = get_extra_section(output_elf_file, name);
+    if (section) return section;
+    return create_extra_section(output_elf_file, name, type, flags, align);
 }
 
 // Static libraries subh as libm.a can consist of a linker script that looks something like:
@@ -138,11 +146,74 @@ static List *read_input_files(List *library_paths, List *input_files) {
 
 // Go through the linker script and set the entrypoint symbol
 static void set_entrypoint_symbol(RwElfFile *output_elf_file, List *input_elf_files) {
+    if (output_elf_file->type != ET_EXEC) return;
+
     for (int i = 0; i < output_elf_file->linker_script->length; i++) {
         ScriptCommand *script_command = output_elf_file->linker_script->elements[i];
 
         if (script_command->type == CMD_ENTRY)
             entrypoint_symbol_name = script_command->entry.symbol;
+    }
+}
+
+// Add .dynamic section if it's a shared library
+static void create_dynamic_section(RwElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+
+    Section *section_dynamic = get_or_create_extra_section(output_elf_file, DYNAMIC_SECTION_NAME, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE, 8);
+    section_dynamic->size = DYNAMIC_SECTION_ENTRY_COUNT * sizeof(ElfDyn);
+    section_dynamic->data = calloc(1, section_dynamic->size);
+
+    // TODO actually put something in .dynstr
+    Section *section_dynstr = get_or_create_extra_section(output_elf_file, DYNSTR_SECTION_NAME, SHT_STRTAB, SHF_ALLOC, 1);
+    section_dynstr->size = 0x100;
+    section_dynstr->data = calloc(1, section_dynstr->size);
+
+    // TODO actually put something in .dynsym
+    Section *section_dynsym = get_or_create_extra_section(output_elf_file, DYNSYM_SECTION_NAME, SHT_DYNSYM, SHF_ALLOC, 1);
+    section_dynsym->size = sizeof(ElfSymbol); // TODO
+    section_dynsym->data = calloc(1, section_dynsym->size);
+}
+
+static void set_in_dynamic_section(RwElfFile *output_elf_file, int index, int64_t tag, uint64_t val_or_addr) {
+    Section *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+
+    if (index >= DYNAMIC_SECTION_ENTRY_COUNT)
+        panic("Exceeded DYNAMIC_SECTION_ENTRY_COUNT=%d", DYNAMIC_SECTION_ENTRY_COUNT);
+
+    ElfDyn entry = {.d_tag = tag, .d_un.d_val = val_or_addr};
+    ElfDyn *entries = section_dynamic->data; // = realloc(section_dynamic->data, section_dynamic->size + sizeof(ElfDyn));
+    entries[index] = entry;
+}
+
+// Update values in .dynamic section
+static void update_dynamic_section(RwElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+
+    Section *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+    Section *section_dynstr = get_extra_section(output_elf_file, DYNSTR_SECTION_NAME);
+    Section *section_dynsym = get_extra_section(output_elf_file, DYNSYM_SECTION_NAME);
+
+    set_in_dynamic_section(output_elf_file, 0, DT_STRTAB, section_dynstr->dst_section->address);
+    set_in_dynamic_section(output_elf_file, 1, DT_SYMTAB, section_dynsym->dst_section->address);
+    set_in_dynamic_section(output_elf_file, 2, DT_STRSZ,  section_dynstr->size);
+    set_in_dynamic_section(output_elf_file, 3, DT_SYMENT, sizeof(ElfSymbol));
+    set_in_dynamic_section(output_elf_file, 4, DT_NULL, 0);
+}
+
+// Associate sections using sh_info
+static void associate_sections(RwElfFile *output_elf_file) {
+    if (output_elf_file->type == ET_DYN) {
+        Section *section_dynstr = get_extra_section(output_elf_file, DYNSTR_SECTION_NAME);
+
+        Section *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+        ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_dynamic->dst_section->index];
+        h->sh_link = section_dynstr->dst_section->index;
+
+        Section *section_dynsym = get_extra_section(output_elf_file, DYNSYM_SECTION_NAME);
+        h = &output_elf_file->elf_section_headers[section_dynsym->dst_section->index];
+        h->sh_link = section_dynstr->dst_section->index;
+        h->sh_entsize = sizeof(ElfSymbol);
     }
 }
 
@@ -240,6 +311,23 @@ static void make_elf_program_segment_headers(RwElfFile *output_elf_file) {
         append_to_list(output_elf_file->program_segments_list, tls_program_segment);
     }
 
+    if (output_elf_file->type == ET_DYN) {
+        Section *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+
+        ElfProgramSegmentHeader *tls_program_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
+
+        tls_program_segment->p_type = PT_DYNAMIC;
+        tls_program_segment->p_flags = PF_R;
+        tls_program_segment->p_offset = section_dynamic->dst_section->offset;
+        tls_program_segment->p_filesz = section_dynamic->dst_section->size;
+        tls_program_segment->p_memsz = section_dynamic->dst_section->size;
+        tls_program_segment->p_vaddr = section_dynamic->dst_section->address;
+        tls_program_segment->p_paddr = section_dynamic->dst_section->address;
+        tls_program_segment->p_align = 8;
+
+        append_to_list(output_elf_file->program_segments_list, tls_program_segment);
+    }
+
     // Allocate memory for the program segment headers
     output_elf_file->elf_program_segments_count = output_elf_file->program_segments_list->length + 1;
     output_elf_file->elf_program_segments_header_size = sizeof(ElfProgramSegmentHeader) * output_elf_file->elf_program_segments_count;
@@ -320,6 +408,8 @@ static void make_symbol_values(RwElfFile *output_elf_file, List *input_elf_files
 
 // Set the executable entrypoint
 static void set_entrypoint(RwElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_EXEC) return;
+
     if (!entrypoint_symbol_name) entrypoint_symbol_name = DEFAULT_ENTRYPOINT_SYMBOL_NAME;
     Symbol *symbol = get_defined_symbol(global_symbol_table, entrypoint_symbol_name);
     if (!symbol) error("Missing %s symbol", entrypoint_symbol_name);
@@ -394,9 +484,9 @@ static void copy_extra_sections_to_output(RwElfFile *output_elf_file) {
     }
 }
 
-RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename) {
+RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type) {
     // Create output file
-    RwElfFile *output_elf_file = init_output_elf_file(output_filename);
+    RwElfFile *output_elf_file = init_output_elf_file(output_filename, output_type);
 
     // Setup symbol tables
     init_symbols();
@@ -433,6 +523,9 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     // Process IFUNCs and create .got.plt, .iplt and .rela.iplt if required
     process_ifuncs(output_elf_file, input_elf_files);
 
+    // Add .dynamic section if it's a shared library
+    create_dynamic_section(output_elf_file);
+
     // Allocate memory for extra sections like .got.plt, .iplt and .rela.iplt
     allocate_extra_sections(output_elf_file);
 
@@ -445,6 +538,9 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     // Run through linker script again, determine section offsets and assign addresses to symbols in the script
     layout_output_sections(output_elf_file, input_elf_files);
 
+    // Update values in .dynamic section
+    update_dynamic_section(output_elf_file);
+
     // Remove sections from the section list that did not get included in the final file
     remove_empty_sections(output_elf_file);
 
@@ -456,6 +552,9 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
 
     // At this point all section sizes are known. Assign offsets to the builtin sections and make the ELF section headers.
     make_elf_section_headers(output_elf_file);
+
+    // Associate sections using sh_info
+    associate_sections(output_elf_file);
 
     // Now that the size of the ELF file is known, allocate memory for it.
     allocate_elf_output_memory(output_elf_file);
