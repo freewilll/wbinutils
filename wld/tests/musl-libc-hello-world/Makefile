@@ -1,16 +1,18 @@
-WCC = ../../../../src/wcc
 WAS = ../../../bin/was
 WLD = ../../../bin/wld
 
-test: all
+# Use wcc if available, otherwise fall back to gcc
+CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
 
-all: run-main
+all: test
+
+test: run-main
 
 %.o: %.s
 	as $< -o $@
 
 main.o: main.c
-	AS=${WAS} ${WCC} -c main.c -o main.o
+	AS=${WAS} ${CC} -c main.c -o main.o
 
 main: main.o ${WLD}
 	${WLD} \

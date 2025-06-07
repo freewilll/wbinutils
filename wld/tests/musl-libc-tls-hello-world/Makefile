@@ -1,4 +1,3 @@
-WCC = ../../../../src/wcc
 WAS = ../../../bin/was
 WLD = ../../../bin/wld
 
@@ -13,6 +12,12 @@ all:  \
 
 %.o: %.c
 	gcc -c $< -o $@
+
+main-bss: main-bss.o
+	gcc main-bss.o -o main-bss
+
+main-data-and-bss: main-data-and-bss.o
+	gcc main-data-and-bss.o -o main-data-and-bss
 
 %-data: %-data.o ${WLD}
 	@${WLD} \
