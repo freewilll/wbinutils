@@ -48,6 +48,7 @@ static RwElfFile *init_output_elf_file(const char *output_filename) {
     RwElfFile *result = new_rw_elf_file(output_filename, ET_EXEC);
     result->extra_sections = new_strmap_ordered();
     result->ifunc_symbols = new_list(0);
+    result->global_symbols_in_use  = new_strmap();
 
     return result;
 }
@@ -417,8 +418,11 @@ RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, con
     // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script
     layout_output_sections(output_elf_file, input_elf_files);
 
+    // Make set of all global symbols that have relocations
+    make_global_symbols_in_use(output_elf_file, input_elf_files);
+
     // At this point all symbols should be defined. Ensure this is the case.
-    finalize_symbols();
+    finalize_symbols(output_elf_file);
 
     // Relax instructions where possible and determine which symbols need to be in the GOT
     apply_relocations(input_elf_files, NULL, RELOCATION_PHASE_SCAN);

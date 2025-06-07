@@ -24,7 +24,8 @@ test: \
 	relocation-tls \
 	array-lifecycle \
 	orphan-sections \
-	ifuncs
+	ifuncs \
+	undefined-unreferenced-symbol
 
 .PHONY: sanity1
 sanity1:
@@ -122,6 +123,10 @@ orphan-sections:
 ifuncs:
 	make -C ifuncs
 
+.PHONY: undefined-unreferenced-symbol
+undefined-unreferenced-symbol:
+	make -C undefined-unreferenced-symbol
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -147,3 +152,4 @@ clean:
 	@make -C array-lifecycle clean
 	@make -C orphan-sections clean
 	@make -C ifuncs clean
+	@make -C undefined-unreferenced-symbol clean

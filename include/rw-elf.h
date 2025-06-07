@@ -61,6 +61,7 @@ typedef struct rw_elf  {
     StrMapOrdered *extra_sections;                          // Used by wld
     List *ifunc_symbols;                                    // Used by wld
     List *linker_script;                                    // Used by wld
+    StrMap *global_symbols_in_use;                          // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

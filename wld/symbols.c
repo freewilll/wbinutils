@@ -448,7 +448,7 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 }
 
 // Treat all weak symbols as defined, with value zero. Fail if any undefined symbols are left
-void finalize_symbols(void) {
+void finalize_symbols(RwElfFile *output_elf_file) {
     int count = 0;
 
     // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
@@ -462,6 +462,8 @@ void finalize_symbols(void) {
         }
     }
 
+    // Make a count of undefined unused unreferenced symbols
+    StrMap *global_symbols_in_use = output_elf_file->global_symbols_in_use;
     strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
@@ -470,6 +472,10 @@ void finalize_symbols(void) {
         if (symbol->binding == STB_WEAK) {
             symbol->dst_value = 0;
             strmap_ordered_put(global_symbol_table->defined_symbols, name, symbol);
+        }
+        else if (!strmap_get(global_symbols_in_use, name))  {
+            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring unused undefined symbol %s\n", name);
+            continue;
         }
         else
             count++;

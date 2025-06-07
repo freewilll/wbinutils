@@ -56,7 +56,7 @@ Symbol *get_undefined_symbol(const char *name);
 int is_undefined_symbol(char *name);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
 int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only);
-void finalize_symbols(void);
+void finalize_symbols(RwElfFile *output_elf_file);
 void dump_rw_symbols(RwElfFile *output_elf_file);
 void debug_print_symbol(Symbol *symbol);
 void debug_summarize_symbols(void);

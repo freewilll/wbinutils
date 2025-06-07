@@ -12,6 +12,7 @@
 #define SCAN_RELOCATION_ERROR     1
 #define SCAN_RELOCATION_NEEDS_GOT 2
 
+int make_global_symbols_in_use(RwElfFile *output_elf_file, List *input_elf_files);
 int scan_relocation(void *input_data, ElfRelocation *relocation);
 int apply_relocation(RwElfFile *output_elf_file, void *output_pointer, uint64_t rw_section_offset, uint64_t rw_section_address, uint64_t output_offset, ElfRelocation *relocation, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset);
 void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file, int phase);

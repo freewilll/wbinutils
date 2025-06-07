@@ -70,6 +70,50 @@ static const char *RELOCATION_NAMES[] = {
 
 int RELOCATION_NAMES_COUNT = sizeof(RELOCATION_NAMES) / sizeof(RELOCATION_NAMES[0]) - 1;
 
+// Make set of all global symbols that have relocations
+int make_global_symbols_in_use(RwElfFile *output_elf_file, List *input_elf_files) {
+    StrMap *global_symbols_in_use = output_elf_file->global_symbols_in_use;
+
+    // Loop over all input files
+    for (int i = 0; i < input_elf_files->length; i++) {
+        ElfFile *input_elf_file = input_elf_files->elements[i];
+
+        // Loop over all relocation sections
+        for (int j = 0; j < input_elf_file->section_list->length; j++) {
+            Section *rela_input_section  = (Section *) input_elf_file->section_list->elements[j];
+            if (rela_input_section->type != SHT_RELA) continue;
+
+            int target_section_index = rela_input_section->info;
+            Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
+
+            // Loop over all relocations
+            ElfRelocation *relocations = load_section_uncached(input_elf_file, j);
+            ElfRelocation *relocation = relocations;
+            ElfRelocation *end = ((void *) relocations) + rela_input_section->size;
+
+            while (relocation < end) {
+                int type = relocation->r_info & 0xffffffff;
+                int symbol_index = relocation->r_info >> 32;
+
+                // Get the symbol
+                ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+                int elf_symbol_type = elf_symbol->st_info & 0xf;
+
+                if (elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC) {
+                    char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
+                    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
+                    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry %s\n", symbol_name);
+                    if (!strmap_get(global_symbols_in_use, symbol->name)) strmap_put(global_symbols_in_use, symbol->name, (void *) 1);
+                }
+
+                relocation++;
+            }
+
+            free(relocations);
+        }
+    }
+}
+
 // Convert an opcode where the first operand is in G encoding to E encoding
 // G: The reg field of the ModR/M byte selects a general register
 // E: A ModR/M byte follows the opcode and specifies the operand. The operand is either a general-purpose register or a memory address.
