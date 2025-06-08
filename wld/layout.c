@@ -637,6 +637,7 @@ void layout_output_sections(OutputElfFile *output_elf_file, List *input_elf_file
                     // This handles the first section script command. Advance the current section to match
                     // the section in the script.
                     // This moves past default sections like the NULL, strtab etc.
+                    current_sections_list_index = 0;
                     while (section != output_elf_file->sections_list->elements[current_sections_list_index]) {
                         current_sections_list_index++;
                         if (current_sections_list_index == output_elf_file->sections_list->length)
