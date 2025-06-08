@@ -24,7 +24,8 @@ test: \
 	array-lifecycle \
 	orphan-sections \
 	ifuncs \
-	undefined-unreferenced-symbol
+	undefined-unreferenced-symbol \
+	lib-minimal
 
 .PHONY: sanity1
 sanity1:
@@ -122,6 +123,10 @@ ifuncs:
 undefined-unreferenced-symbol:
 	make -C undefined-unreferenced-symbol
 
+.PHONY: lib-minimal
+lib-minimal:
+	make -C lib-minimal
+
 clean:
 	@make -C sanity1 clean
 	@make -C sanity2 clean
@@ -147,3 +152,4 @@ clean:
 	@make -C orphan-sections clean
 	@make -C ifuncs clean
 	@make -C undefined-unreferenced-symbol clean
+	@make -C lib-minimal clean
