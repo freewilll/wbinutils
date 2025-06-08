@@ -4,12 +4,12 @@ all: ${TARGET}
 
 HEADERS = \
 	../../include/elf.h \
-	../../include/ro-elf.h \
-	../../include/rw-elf.h
+	../../include/input-elf.h \
+	../../include/output-elf.h
 
 OBJECTS = \
-	ro-elf.o \
-	rw-elf.o
+	input-elf.o \
+	output-elf.o
 
 %.o: %.c ${HEADERS}
 	gcc -g -Wunused -I ../../include -c $< -o $@

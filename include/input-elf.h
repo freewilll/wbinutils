@@ -6,9 +6,9 @@
 #include "list.h"
 #include "elf.h"
 #include "strmap.h"
-#include "rw-elf.h"
+#include "output-elf.h"
 
-typedef struct section {
+typedef struct input_section {
     char *name;                           // Section name
     int index;                            // Index in the ELF section headers table
     uint64_t size;                        // Size in bytes of the section in the file image. May be 0.
@@ -18,9 +18,9 @@ typedef struct section {
     uint32_t info;                        // Contains extra information about the section, from ELF
     uint64_t align;                       // Alignment
     int dst_offset;                       // Offset in output section
-    RwSection *dst_section;               // Target Section (for WLD)
+    OutputSection *output_section;        // Target Section (for WLD)
     void *data;                           // Potentially loaded section, or synthetic section
-} Section;
+} InputSection;
 
 // In-memory input ELF file
 typedef struct input_elf_file {
@@ -35,12 +35,12 @@ typedef struct input_elf_file {
     char *strtab_strings;
     ElfSymbol *symbol_table;
     int symbol_count;
-} ElfFile;
+} InputElfFile;
 
-ElfFile *open_elf_file(const char *filename);
-ElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
-void *load_section_uncached(ElfFile *elf_file, int section_index);
-void *load_section(ElfFile *elf_file, Section *section);
-void dump_symbols(ElfFile *elf_file);
+InputElfFile *open_elf_file(const char *filename);
+InputElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
+void *load_section_uncached(InputElfFile *elf_file, int section_index);
+void *load_section(InputElfFile *elf_file, InputSection *section);
+void dump_symbols(InputElfFile *elf_file);
 
 #endif

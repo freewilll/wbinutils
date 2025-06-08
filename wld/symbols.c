@@ -61,14 +61,14 @@ Symbol *must_get_global_defined_symbol(char *name) {
 }
 
 // Get an input elf file's local symbol table. Panic if it doesn't exist.
-SymbolTable *get_local_symbol_table(ElfFile *elf_file) {
+SymbolTable *get_local_symbol_table(InputElfFile *elf_file) {
     SymbolTable *local_symbol_table = strmap_get(local_symbol_tables, elf_file->filename);
     if (!local_symbol_table) panic("Missing local symbol table for %s", elf_file->filename);
     return local_symbol_table;
 }
 
 // Get a symbol from either the local, otherwise the global defined symbol tables. Returns NULL if not present.
-Symbol *lookup_symbol(ElfFile *elf_file, char *name) {
+Symbol *lookup_symbol(InputElfFile *elf_file, char *name) {
     SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
     Symbol *s = get_defined_symbol(local_symbol_table, name);
     if (s) return s;
@@ -164,7 +164,7 @@ Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment) {
 }
 
 // Report an error, or in case we are being tested, write to last_error_message
-static void fail(ElfFile *elf_file, char *format, ...) {
+static void fail(InputElfFile *elf_file, char *format, ...) {
     va_list ap;
     va_start(ap, format);
     va_list ap2;
@@ -183,7 +183,7 @@ static void fail(ElfFile *elf_file, char *format, ...) {
     verror_in_file(format, ap);
 }
 
-static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
+static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
     char *name = &elf_file->strtab_strings[symbol->st_name];
 
@@ -192,12 +192,12 @@ static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_tabl
     int size = symbol->st_size;
     int other = symbol->st_other;
 
-    Section *src_section = elf_file->section_list->elements[symbol->st_shndx];
+    InputSection *input_section = elf_file->section_list->elements[symbol->st_shndx];
 
     if (!read_only) {
         Symbol *new_symbol = add_defined_symbol(local_symbol_table, name, type, binding, other, size, is_library);
         new_symbol->src_elf_file = elf_file;
-        new_symbol->src_section = src_section;
+        new_symbol->input_section = input_section;
         new_symbol->src_value = symbol->st_value;
     }
 
@@ -208,7 +208,7 @@ static int handle_local_symbol(ElfFile *elf_file, SymbolTable *local_symbol_tabl
 // The found symbol may be undefined.
 // Returns if the symbol has resolved an undefined symbol
 // Not all the cases in https://www.airs.com/blog/archives/49 are handled, just the simple ones.
-static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+static int handle_common_symbol(InputElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int result = 0;
 
     int strtab_offset = symbol->st_name;
@@ -232,9 +232,9 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
             result = 1;
 
             if (!read_only) {
-                Section *src_section = elf_file->section_list->elements[symbol->st_shndx];
+                InputSection *input_section = elf_file->section_list->elements[symbol->st_shndx];
                 found_symbol->src_elf_file = elf_file;
-                found_symbol->src_section = src_section;
+                found_symbol->input_section = input_section;
                 found_symbol->src_value = symbol->st_value;
                 found_symbol->is_common = 0;
             }
@@ -255,7 +255,7 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
             // Add a new symbol
             Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
             new_symbol->src_elf_file = elf_file;
-            new_symbol->src_section = NULL;
+            new_symbol->input_section = NULL;
             new_symbol->src_value = symbol->st_value;
             new_symbol->is_common = 1;
         }
@@ -268,7 +268,7 @@ static int handle_common_symbol(ElfFile *elf_file, int is_library, int read_only
 
 // The new symbol is ABS
 // Not very much is checked here, only undefined symbols are resolved.
-static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
     char *name = &elf_file->strtab_strings[symbol->st_name];
 
@@ -289,7 +289,7 @@ static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, S
             // Add a new symbol
             Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
             new_symbol->src_elf_file = elf_file;
-            new_symbol->src_section = NULL;
+            new_symbol->input_section = NULL;
             new_symbol->src_value = symbol->st_value;
             new_symbol->is_abs = 1;
         }
@@ -302,7 +302,7 @@ static int handle_abs_symbol(ElfFile *elf_file, int is_library, int read_only, S
 
 // Handle a symbol where the left side is defined. Both are not common.
 // Returns if the symbol has resolved an undefined symbol
-static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+static int handle_non_common_symbol(InputElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int result = 0;
 
     int strtab_offset = symbol->st_name;
@@ -313,7 +313,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
     int size = symbol->st_size;
     int other = symbol->st_other;
 
-    Section *src_section = elf_file->section_list->elements[symbol->st_shndx];
+    InputSection *input_section = elf_file->section_list->elements[symbol->st_shndx];
 
     if (found_symbol)  {
         // Check bindings
@@ -341,7 +341,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
 
                 if (!read_only) {
                     found_symbol->src_elf_file = elf_file;
-                    found_symbol->src_section = src_section;
+                    found_symbol->input_section = input_section;
                     found_symbol->src_value = symbol->st_value;
                     found_symbol->is_common = 0;
                     found_symbol->binding = binding;
@@ -355,7 +355,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
             // Add a new symbol
             Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
             new_symbol->src_elf_file = elf_file;
-            new_symbol->src_section = src_section;
+            new_symbol->input_section = input_section;
             new_symbol->src_value = symbol->st_value;
             new_symbol->is_common = 0;
         }
@@ -368,7 +368,7 @@ static int handle_non_common_symbol(ElfFile *elf_file, int is_library, int read_
 
 // Process all symbols in a file. Returns the amount of undefined symbols in
 // the symbol table that would be resolved.
-int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
+int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int read_only) {
     last_error_message = NULL;
     int resolved_symbols = 0;
 
@@ -392,18 +392,18 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 
         if (type == STT_FILE) continue;
 
-        Section *src_section = NULL;
+        InputSection *input_section = NULL;
         int is_abs = symbol->st_shndx == SHN_ABS;
         int is_common = symbol->st_shndx == SHN_COMMON;
         int is_undef = symbol->st_shndx == SHN_UNDEF;
 
-        // Look up the src_section unless the symbol is common
+        // Look up the input_section unless the symbol is common
         if (!is_abs && !is_common) {
             if (symbol->st_shndx >= elf_file->section_list->length)
                 fail(elf_file, "Invalid section index in %s: %d >= %d",
                     elf_file->filename, symbol->st_shndx, elf_file->section_list->length);
 
-            src_section = elf_file->section_list->elements[symbol->st_shndx];
+            input_section = elf_file->section_list->elements[symbol->st_shndx];
         }
 
         if (is_local) {
@@ -448,7 +448,7 @@ int process_elf_file_symbols(ElfFile *elf_file, int is_library, int read_only) {
 }
 
 // Treat all weak symbols as defined, with value zero. Fail if any undefined symbols are left
-void finalize_symbols(RwElfFile *output_elf_file) {
+void finalize_symbols(OutputElfFile *output_elf_file) {
     int count = 0;
 
     // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
@@ -496,7 +496,7 @@ void finalize_symbols(RwElfFile *output_elf_file) {
 }
 
 static char *print_section_string(Symbol *symbol) {
-    RwSection *rw_section = symbol->dst_section;
+    OutputSection *rw_section = symbol->output_section;
     int rw_section_index = rw_section ? rw_section->index : 0;
 
     if (symbol->is_abs)
@@ -508,7 +508,7 @@ static char *print_section_string(Symbol *symbol) {
 }
 
 // Readelf compatible symbol table output
-void dump_rw_symbols(RwElfFile *output_elf_file) {
+void dump_output_symbols(OutputElfFile *output_elf_file) {
     printf("Symbol Table:\n");
     printf("   Num:     Value         Size Type    Bind   Vis      Ndx Name\n");
     ElfSymbol *symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
@@ -598,7 +598,7 @@ int common_symbols_are_present(void) {
 }
 
 // Returns 1 if any defined symbols are common
-void layout_common_symbols_in_bss_section(RwSection *bss_section) {
+void layout_common_symbols_in_bss_section(OutputSection *bss_section) {
     int offset = bss_section->size;
     int section_align = 1;
 
@@ -611,7 +611,7 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
         if (symbol_align > section_align) section_align = symbol_align;
 
         symbol->src_value = offset;
-        symbol->dst_section = bss_section;
+        symbol->output_section = bss_section;
 
         offset = ALIGN_UP(offset + symbol->size, symbol_align);
     }
@@ -621,7 +621,7 @@ void layout_common_symbols_in_bss_section(RwSection *bss_section) {
 }
 
 // Assign final values to all symbols
-void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTable *symbol_table) {
+void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table) {
     strmap_ordered_foreach(symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
@@ -630,36 +630,36 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
             // Do nothing, it's already resolved
         }
         else if (symbol->is_common) {
-            RwSection *section_bss = output_elf_file->section_bss;
+            OutputSection *section_bss = output_elf_file->section_bss;
             symbol->dst_value = section_bss->address + symbol->src_value;
-            symbol->dst_section = section_bss;
+            symbol->output_section = section_bss;
         }
         else {
-            // Skip weak undefined symbols that don't have a src_section
-            if (symbol->src_section) {
+            // Skip weak undefined symbols that don't have a input_section
+            if (symbol->input_section) {
                 // Get the output section
-                if (!symbol->src_section->dst_section) panic("Unexpectedly got null dst_section for %s from %s\n", symbol->name, symbol->src_section->name);
+                if (!symbol->input_section->output_section) panic("Unexpectedly got null output_section for %s from %s\n", symbol->name, symbol->input_section->name);
 
-                RwSection *rw_section = symbol->src_section->dst_section;
+                OutputSection *rw_section = symbol->input_section->output_section;
                 if (!rw_section) panic("Unexpected empty output section for %s", name);
-                symbol->dst_section = rw_section;
+                symbol->output_section = rw_section;
 
-                if (!symbol->src_section)
-                    panic("Unexpected null symbol->src_section for %s", name);
-                if (!symbol->src_section->dst_section)
-                    panic("Unexpected null symbol->src_section->dst_section for symbol %s in section %s", name, symbol->src_section->name);
+                if (!symbol->input_section)
+                    panic("Unexpected null symbol->input_section for %s", name);
+                if (!symbol->input_section->output_section)
+                    panic("Unexpected null symbol->input_section->output_section for symbol %s in section %s", name, symbol->input_section->name);
 
                 if (symbol->type == STT_TLS)
-                    symbol->dst_value = symbol->src_section->dst_section->offset + symbol->src_section->dst_offset + symbol->src_value - output_elf_file->tls_template_offset;
+                    symbol->dst_value = symbol->input_section->output_section->offset + symbol->input_section->dst_offset + symbol->src_value - output_elf_file->tls_template_offset;
                 else
-                    symbol->dst_value = symbol->src_section->dst_section->address + symbol->src_section->dst_offset + symbol->src_value;
+                    symbol->dst_value = symbol->input_section->output_section->address + symbol->input_section->dst_offset + symbol->src_value;
             }
 
             if (DEBUG_RELOCATIONS) {
                 printf("%-60s %-60s value=%08x  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK)
-                    printf("dst sec off %#0x sec off %#08x\n", symbol->src_section->dst_section->offset, symbol->src_section->dst_offset);
+                    printf("dst sec off %#0x sec off %#08x\n", symbol->input_section->output_section->offset, symbol->input_section->dst_offset);
                 else
                     printf("\n");
             }
@@ -670,7 +670,7 @@ void make_symbol_values_from_symbol_table(RwElfFile *output_elf_file, SymbolTabl
 // Add the symbols to the ELF symbol table.
 // The values and will be updated later.
 // section indexes are also updated later unless it's an ABS section.
-void make_elf_symbols(RwElfFile *output_elf_file) {
+void make_elf_symbols(OutputElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_header = &output_elf_file->elf_section_headers[output_elf_file->section_symtab->index];
 
     output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
@@ -679,7 +679,7 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
     add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, STV_DEFAULT, i);
     }
 
@@ -693,16 +693,16 @@ void make_elf_symbols(RwElfFile *output_elf_file) {
 }
 
 // Set the symbol's value and section indexes
-void update_elf_symbols(RwElfFile *output_elf_file) {
+void update_elf_symbols(OutputElfFile *output_elf_file) {
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         if (!strcmp(name, ".")) continue;
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
-        if (!symbol->is_abs && !symbol->dst_section) continue; // Weak symbols may not be defined
+        if (!symbol->is_abs && !symbol->output_section) continue; // Weak symbols may not be defined
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
         elf_symbol->st_value = symbol->dst_value;
-        elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->dst_section->index;
+        elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
     }
 }
 
@@ -721,7 +721,7 @@ void init_symbols(void) {
 }
 
 // Create the .got section, if needed
-void create_got_section(RwElfFile *output_elf_file) {
+void create_got_section(OutputElfFile *output_elf_file) {
     // Scan the symbol table and count the amount of GOT entries
     int got_entries_count = 0;
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
@@ -732,19 +732,19 @@ void create_got_section(RwElfFile *output_elf_file) {
 
     if (!got_entries_count) return;
 
-    Section *extra_section = create_extra_section(output_elf_file, GOT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+    InputSection *extra_section = create_extra_section(output_elf_file, GOT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
     extra_section->size = 8 * got_entries_count;;
     extra_section->data = malloc(extra_section->size);
 }
 
 // Set the symbol values in the GOT (if present)
-void update_got_symbol_values(RwElfFile *output_elf_file) {
-    Section *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
+void update_got_symbol_values(OutputElfFile *output_elf_file) {
+    InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
     if (!section_got) return; // No GOT, do nothing
 
     // Set the special GOT symbol to the virtual address of the GOT
     Symbol *got_symbol = must_get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
-    got_symbol->dst_value = section_got->dst_section->address + section_got->dst_offset;
+    got_symbol->dst_value = section_got->output_section->address + section_got->dst_offset;
 
     // Set the address of the GOT
     output_elf_file->got_virt_address = got_symbol->dst_value;
@@ -770,10 +770,10 @@ void update_got_symbol_values(RwElfFile *output_elf_file) {
 // - Create .got.plt
 // - Create .iplt
 // - Create .rela.iplt
-void process_ifuncs_from_symbol_table(RwElfFile *output_elf_file, SymbolTable *symbol_table) {
-    Section *section_got_iplt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
-    Section *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
-    Section *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
+void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table) {
+    InputSection *section_got_iplt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    InputSection *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
+    InputSection *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
 
      strmap_ordered_foreach(symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
@@ -810,16 +810,16 @@ void process_ifuncs_from_symbol_table(RwElfFile *output_elf_file, SymbolTable *s
 }
 
 // Allocate memory for extra sections like .got.plt and .iplt, .rela.iplt
-void allocate_extra_sections(RwElfFile *output_elf_file) {
-    Section *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+void allocate_extra_sections(OutputElfFile *output_elf_file) {
+    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
     if (section_got_plt && section_got_plt->size)
         section_got_plt->data = calloc(1, section_got_plt->size);
 
-    Section *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
+    InputSection *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
     if (section_iplt && section_iplt->size)
         section_iplt->data = calloc(1, section_iplt->size);
 
-    Section *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
+    InputSection *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
     if (section_rela_iplt && section_rela_iplt->size)
         section_rela_iplt->data = calloc(1, section_rela_iplt->size);
 }
@@ -828,10 +828,10 @@ void allocate_extra_sections(RwElfFile *output_elf_file) {
 // Make .iplt jmp instructions that refer to the entries in .got.iplt
 // Note: the calls to the ifunc code aren't rewritten, the loader does that, using the relocations
 // added in .rela.iplt.
-void update_iplt(RwElfFile *output_elf_file) {
-    Section *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
-    Section *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
-    Section *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
+void update_iplt(OutputElfFile *output_elf_file) {
+    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    InputSection *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
+    InputSection *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
 
     if (!section_got_plt && !section_iplt && !section_rela_iplt) return; // No ifuncs are present
 
@@ -844,11 +844,11 @@ void update_iplt(RwElfFile *output_elf_file) {
 
     // The entries in .plt and .got.plt correspond 1:1. .got.plt has a NULL header and .iplt doesn't.
 
-    if (!section_got_plt->dst_section) panic("No address for %s", GOT_PLT_SECTION_NAME);
-    if (!section_iplt->dst_section) panic("No address for %s", IPLT_SECTION_NAME);
+    if (!section_got_plt->output_section) panic("No address for %s", GOT_PLT_SECTION_NAME);
+    if (!section_iplt->output_section) panic("No address for %s", IPLT_SECTION_NAME);
 
-    uint64_t got_iplt_address = section_got_plt->dst_section->address + section_got_plt->dst_offset;
-    uint64_t iplt_address = section_iplt->dst_section->address + section_iplt->dst_offset;
+    uint64_t got_iplt_address = section_got_plt->output_section->address + section_got_plt->dst_offset;
+    uint64_t iplt_address = section_iplt->output_section->address + section_iplt->dst_offset;
 
     char *iplt_data = section_iplt->data;
     char *rela_iplt_data = section_rela_iplt->data;
@@ -877,9 +877,9 @@ void update_iplt(RwElfFile *output_elf_file) {
 
     // Set info in .rela.iplt section to .got.plt section
     // This has to be done in the ELF headers, which have already been made from the output sections.
-    section_rela_iplt->dst_section->link = section_got_plt->index;
-    ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_iplt->dst_section->index];
-    h->sh_info = section_got_plt->dst_section->index;
+    section_rela_iplt->output_section->link = section_got_plt->index;
+    ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_iplt->output_section->index];
+    h->sh_info = section_got_plt->output_section->index;
     h->sh_entsize = sizeof(ElfRelocation);
 
     // Store the addresses, for use in the relocations code

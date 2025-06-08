@@ -6,7 +6,7 @@ HEADERS = \
 	elf.h \
 	error.h \
 	list.h \
-	rw-elf.h \
+	output-elf.h \
 	strmap.h \
 	was/base128.h \
 	was/branches.h \

@@ -47,8 +47,8 @@ Symbol *get_or_add_symbol(char *name) {
 }
 
 // Add a section + associated symbol
-RwSection *add_section(char *name, int type, int flags, int align) {
-    RwSection *section = add_rw_section(output_elf_file, name, type, flags, align);
+OutputSection *add_section(char *name, int type, int flags, int align) {
+    OutputSection *section = add_output_section(output_elf_file, name, type, flags, align);
 
     // Add a symbol unless it's the null section
     if (name[0]) {
@@ -86,7 +86,7 @@ void make_symbols_section(void) {
             symbol->symtab_index = add_elf_symbol(output_elf_file, elf_name, symbol->value, symbol->size, symbol->binding, symbol->type, STV_DEFAULT, symbol->section_index);
 
             if (symbol->type == STT_SECTION) {
-                RwSection *section = get_rw_section(output_elf_file, name);
+                OutputSection *section = get_output_section(output_elf_file, name);
                 section->symtab_index = symbol->symtab_index;
             }
         }
@@ -121,7 +121,7 @@ void init_default_sections(void) {
     output_elf_file->section_shstrtab    = add_section(".shstrtab",    SHT_STRTAB,   0,                         0x01);
 
     // Start string table entries at 1, so that the zero value goes to an empty string
-    add_to_rw_section(output_elf_file->section_strtab, "", 1);
+    add_to_output_section(output_elf_file->section_strtab, "", 1);
 
     add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 }

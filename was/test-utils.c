@@ -71,7 +71,7 @@ static int hexdump(char *data, int size) {
 }
 
 // Print hex bytes for a section
-int dump_section(RwSection *section) {
+int dump_section(OutputSection *section) {
     hexdump(section->data, section->size);
 }
 
@@ -104,19 +104,19 @@ void vassert_data(char *data, int size, va_list ap) {
     }
 }
 
-void vassert_section_data(RwSection* section, va_list ap) {
+void vassert_section_data(OutputSection* section, va_list ap) {
     if (!section) panic("Assert section on a NULL");
     vassert_data(section->data, section->size, ap);
 }
 
-void assert_section_data(RwSection* section, ...) {
+void assert_section_data(OutputSection* section, ...) {
     va_list ap;
     va_start(ap, section);
     vassert_section_data(section, ap);
     va_end(ap);
 }
 
-void dump_relocations(RwSection* section) {
+void dump_relocations(OutputSection* section) {
     printf("Relocations:\n");
     printf("info          offset   addend\n");
     ElfRelocation *relocations = (ElfRelocation *) section->data;
@@ -129,7 +129,7 @@ void dump_relocations(RwSection* section) {
 }
 
 void assert_relocations(char *section_name, ...) {
-    RwSection *section = get_rw_section(output_elf_file, section_name);
+    OutputSection *section = get_output_section(output_elf_file, section_name);
     if (!section) panic("No section %s\n", section_name);
 
     va_list ap;
@@ -223,7 +223,7 @@ void dump_symbols(void) {
 }
 
 void assert_symbols(int first, ...) {
-    RwSection *section = output_elf_file->section_symtab;
+    OutputSection *section = output_elf_file->section_symtab;
 
     va_list ap;
     va_start(ap, first);
@@ -309,7 +309,7 @@ void assert_symbols(int first, ...) {
 }
 
 void assert_section(char *name, int type, int flags) {
-    RwSection *section = get_rw_section(output_elf_file, name);
+    OutputSection *section = get_output_section(output_elf_file, name);
     if (!section) panic("No section %s", name);
 
     if (section->type != type) panic("Mismatched type, expected %d, got %d", type, section->type);
@@ -323,7 +323,7 @@ int get_symbol_symtab_index(char *name) {
 }
 
 static void dump_dwarf_dirs(void) {
-    RwSection *section = get_rw_section(output_elf_file, ".debug_line");
+    OutputSection *section = get_output_section(output_elf_file, ".debug_line");
     if (!section) panic("No .debug_line section");
 
     printf("DWARF directory table:\n");
@@ -336,7 +336,7 @@ static void dump_dwarf_dirs(void) {
 }
 
 static void dump_dwarf_files(void) {
-    RwSection *section = get_rw_section(output_elf_file, ".debug_line");
+    OutputSection *section = get_output_section(output_elf_file, ".debug_line");
     if (!section) panic("No .debug_line section");
 
     char *files = section->data + sizeof(LineNumberProgramHeader);
@@ -356,7 +356,7 @@ static void dump_dwarf_files(void) {
 }
 
 void assert_dwarf_dirs(char *first, ...) {
-    RwSection *section = get_rw_section(output_elf_file, ".debug_line");
+    OutputSection *section = get_output_section(output_elf_file, ".debug_line");
     if (!section) panic("No .debug_line section");
 
     char *dirs = section->data + sizeof(LineNumberProgramHeader);
@@ -402,7 +402,7 @@ void assert_dwarf_dirs(char *first, ...) {
 }
 
 void assert_dwarf_files(int first, ...) {
-    RwSection *section = get_rw_section(output_elf_file, ".debug_line");
+    OutputSection *section = get_output_section(output_elf_file, ".debug_line");
     if (!section) panic("No .debug_line section");
 
     char *files = section->data + sizeof(LineNumberProgramHeader);
@@ -459,7 +459,7 @@ void assert_dwarf_files(int first, ...) {
 // Assert the contents of the dwarf line numbers program. The dummy is
 // a sential to lazily avoid mind fucks when it comes to vararg processing.
 void assert_dwarf_line_program(int dummy, ...) {
-    RwSection *section = get_rw_section(output_elf_file, ".debug_line");
+    OutputSection *section = get_output_section(output_elf_file, ".debug_line");
     if (!section) panic("No .debug_line section");
 
     LineNumberProgramHeader *header = (LineNumberProgramHeader *) section->data;

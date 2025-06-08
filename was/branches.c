@@ -61,7 +61,7 @@ void dump_frags(List *chunks) {
 #endif
 
 // Update all symbol offsets
-static void make_symbol_offsets(RwSection *section) {
+static void make_symbol_offsets(OutputSection *section) {
     List *chunks = section->chunks;
 
     int offset = 0;
@@ -243,7 +243,7 @@ static void reduce(List *chunks) {
     #endif
 }
 
-void layout_section(RwSection *section) {
+void layout_section(OutputSection *section) {
     make_symbol_offsets(section);
 
     if (!section->chunks->length) return;

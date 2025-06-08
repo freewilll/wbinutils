@@ -3,8 +3,8 @@
 
 #include "error.h"
 #include "list.h"
-#include "ro-elf.h"
-#include "rw-elf.h"
+#include "input-elf.h"
+#include "output-elf.h"
 
 #include "wld/expr.h"
 #include "wld/layout.h"
@@ -17,7 +17,7 @@ static SectionsCommandOutput *discard_sections_command_output;
 
 #define IGNORE_FLAGS_MASK (~(SHF_MERGE | SHF_STRINGS | SHF_GROUP))
 
-static int input_and_output_sections_match(RwSection *output_section, Section *input_section, int fail_on_mismatch, ElfFile *maybe_elf_file) {
+static int input_and_output_sections_match(OutputSection *output_section, InputSection *input_section, int fail_on_mismatch, InputElfFile *maybe_elf_file) {
     int existing_flags = output_section->flags;
     int new_flags = input_section->flags;
 
@@ -50,9 +50,9 @@ static int input_and_output_sections_match(RwSection *output_section, Section *i
 // If not empty, it checks if the input section is compatible.
 // If all is well, the offset, size and alignment is determined.
 // elf_file may be null
-static void add_input_to_output_section(RwSection *output_section, Section *input_section, ElfFile *maybe_elf_file) {
+static void add_input_to_output_section(OutputSection *output_section, InputSection *input_section, InputElfFile *maybe_elf_file) {
     // Associate the input and output sections
-    input_section->dst_section = output_section;
+    input_section->output_section = output_section;
 
     // Check type and flags
     int existing_flags = output_section->flags;
@@ -84,11 +84,11 @@ static void add_input_to_output_section(RwSection *output_section, Section *inpu
 // Remove sections from the section list that did not get included in the final file.
 // Due to implementation details in the layout functions, empty sections can make it in the sections list.
 // Discard them, unless they have the keep flag set.
-void remove_empty_sections(RwElfFile *output_elf_file) {
+void remove_empty_sections(OutputElfFile *output_elf_file) {
     List *new_section_list = new_list(output_elf_file->sections_list->length);
 
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
 
         // Only include the first NULL section. The other NULL sections are artifacts of the layout and
         // are discarded here.
@@ -129,7 +129,7 @@ static int is_discarded_section(const char *input_filename, const char *input_se
     for (int i = 0; i < output_items->length; i++) {
         SectionsCommandOutputItem *output_item = output_items->elements[i];
         if (output_item->type != SECTIONS_CMD_INPUT_SECTION) continue;
-        InputSection *input_section = &output_item->input_section;
+        ScriptInputSection *input_section = &output_item->input_section;
 
         if (!match_path_pattern(input_filename, input_section->file_pattern)) continue;
 
@@ -149,7 +149,7 @@ static int is_discarded_section(const char *input_filename, const char *input_se
 
 // Add an assignment that happens in the middle of an output section. The offset relative to the section is
 // noted. A loop later on assigns the final address, once all addresses are known.
-static OutputSectionAssignment *add_output_section_assignment(RwSection *output_section, CommandAssignment *assignment) {
+static OutputSectionAssignment *add_output_section_assignment(OutputSection *output_section, CommandAssignment *assignment) {
     Symbol *symbol = get_or_add_linker_script_symbol(assignment);
     OutputSectionAssignment *output_section_assignment = calloc(1, sizeof(OutputSectionAssignment));
     output_section_assignment->assignment = assignment;
@@ -164,7 +164,7 @@ static OutputSectionAssignment *add_output_section_assignment(RwSection *output_
 // This determines the placement and mapping between input sections and output sections.
 // It also creates the output sections.
 // This function can be run multiple times. Running it twice in a row should produce the same results.
-static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_elf_files, List *section_commands) {
+static void layout_sections_with_script(OutputElfFile *output_elf_file, List *input_elf_files, List *section_commands) {
     // Loop over all section commands of type output
     for (int i = 0; i < section_commands->length; i++) {
         SectionsCommand *sections_command = section_commands->elements[i];
@@ -185,10 +185,10 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
             printf("Output section %s\n", output_section_name);
 
         // A section might already exist
-        RwSection *output_section = get_rw_section(output_elf_file, output_section_name);
+        OutputSection *output_section = get_output_section(output_elf_file, output_section_name);
         if (!output_section)
             // Create the initial output section
-            output_section = add_rw_section(output_elf_file, output_section_name, SHT_NULL, 0, 0);
+            output_section = add_output_section(output_elf_file, output_section_name, SHT_NULL, 0, 0);
 
         // Reset the output section from a potential previous run
         output_section->command_assignments = new_list(8);
@@ -204,7 +204,7 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
             }
 
             // Implicit else, it's an SECTIONS_CMD_INPUT_SECTION
-            InputSection *script_input_section = &output_item->input_section;
+            ScriptInputSection *script_input_section = &output_item->input_section;
             List *section_patterns = script_input_section->section_patterns;
 
             // Match script input section with file input section
@@ -220,16 +220,16 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
 
                 // Loop over all input files
                 for (int k = 0; k < input_elf_files->length; k++) {
-                    ElfFile *elf_file = input_elf_files->elements[k];
+                    InputElfFile *elf_file = input_elf_files->elements[k];
 
                     // Check the input file matches the pattern
                     if (!match_path_pattern(elf_file->filename, script_input_section->file_pattern)) continue;
 
                     // Loop over all sections in the input file
                     for (int l = 0; l < elf_file->section_list->length; l++) {
-                        Section *file_input_section = (Section *) elf_file->section_list->elements[l];
+                        InputSection *file_input_section = elf_file->section_list->elements[l];
 
-                        if (file_input_section->dst_section) continue; // Already included
+                        if (file_input_section->output_section) continue; // Already included
 
                         // Check the section name matches the pattern
                         if (!match_pattern(file_input_section->name, section_pattern)) continue;
@@ -244,7 +244,7 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
                 // See if anything in extra_sections matches the pattern
                 strmap_ordered_foreach(output_elf_file->extra_sections, it) {
                     const char *name = strmap_ordered_iterator_key(&it);
-                    Section *section = strmap_ordered_get(output_elf_file->extra_sections, name);
+                    InputSection *section = strmap_ordered_get(output_elf_file->extra_sections, name);
                     if (!match_pattern(section->name, section_pattern)) continue;
                     add_input_to_output_section(output_section, section, NULL);
                 }
@@ -257,11 +257,11 @@ static void layout_sections_with_script(RwElfFile *output_elf_file, List *input_
 // with compatible type and flags that it can be placed after.
 // This is an optimization, that allows for less program segments to be created, since orphan sections
 // can be merged with preceding compatible ones.
-static void move_output_section_after_similar_ones(RwElfFile *output_elf_file, RwSection *output_section) {
+static void move_output_section_after_similar_ones(OutputElfFile *output_elf_file, OutputSection *output_section) {
     int position = -1; // Start with no compatible section found
 
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *existing_output_section = output_elf_file->sections_list->elements[i];
+        OutputSection *existing_output_section = output_elf_file->sections_list->elements[i];
         // If we get to the last section and nothing compatible was found, then do nothing
         if (existing_output_section == output_section) return;
 
@@ -279,21 +279,21 @@ static void move_output_section_after_similar_ones(RwElfFile *output_elf_file, R
 
     if (position == -1) panic("Unexpectedly didn't find a place for %s", output_section->name);
 
-    move_rw_section(output_elf_file, output_section, position + 1);
+    move_output_section(output_elf_file, output_section, position + 1);
 }
 
 // Loop over all sections in the input files and create the target sections in the output file if not already there.
 // This happens for sections that don't match anything in the linker script and could not
 // be merged into an existing sections due to differing flags.
-static void layout_orphan_sections(RwElfFile *output_elf_file, List *input_elf_files) {
+static void layout_orphan_sections(OutputElfFile *output_elf_file, List *input_elf_files) {
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *elf_file = input_elf_files->elements[i];
+        InputElfFile *elf_file = input_elf_files->elements[i];
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {
-            Section *input_section  = (Section *) elf_file->section_list->elements[j];
-            if (input_section->dst_section) continue; // Already placed
+            InputSection *input_section  = (InputSection *) elf_file->section_list->elements[j];
+            if (input_section->output_section) continue; // Already placed
 
             const char *section_name = input_section->name;
 
@@ -307,9 +307,9 @@ static void layout_orphan_sections(RwElfFile *output_elf_file, List *input_elf_f
             printf("Orphan output section %s\n", section_name);
 
             // Create the output section if it doesn't already exist
-            RwSection *output_section = get_rw_section(output_elf_file, section_name);
+            OutputSection *output_section = get_output_section(output_elf_file, section_name);
             if (!output_section) {
-                output_section = add_rw_section(output_elf_file, section_name,
+                output_section = add_output_section(output_elf_file, section_name,
                     input_section->type, input_section->flags, input_section->align);
                 move_output_section_after_similar_ones(output_elf_file, output_section);
                 output_section->is_orphan = 1;
@@ -324,9 +324,9 @@ static void layout_orphan_sections(RwElfFile *output_elf_file, List *input_elf_f
 
 // Add __start and __end symbols for sections that are C identifiers
 // These symbols are treated as if they were declared with PROVIDE() in the linker script.
-static void create_start_end_section_symbols(RwElfFile *output_elf_file) {
+static void create_start_end_section_symbols(OutputElfFile *output_elf_file) {
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
 
         if (is_c_identifier(section->name)) {
             // Add __start_ and __end_ symbols with provide flag set
@@ -354,10 +354,10 @@ static void create_start_end_section_symbols(RwElfFile *output_elf_file) {
 
 // Process section commands in a linker script, creating output sections and making the mapping
 // between input and output sections.
-void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files) {
+void layout_input_sections(OutputElfFile *output_elf_file, List *input_elf_files) {
     // Reset section sizes
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
 
         // If it's not a symbol table or string table, set size to zero
         if (section->type != SHT_SYMTAB && section->type != SHT_STRTAB)
@@ -366,12 +366,12 @@ void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files) {
 
     // Reset dst sections
     for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *elf_file = input_elf_files->elements[i];
+        InputElfFile *elf_file = input_elf_files->elements[i];
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {
-            Section *input_section  = (Section *) elf_file->section_list->elements[j];
-            input_section->dst_section = NULL;
+            InputSection *input_section  = (InputSection *) elf_file->section_list->elements[j];
+            input_section->output_section = NULL;
         }
     }
 
@@ -390,26 +390,26 @@ void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files) {
 }
 
 // Assign offsets to the builtin sections and make the ELF section headers.
-void make_elf_section_headers(RwElfFile *output_elf_file) {
+void make_elf_section_headers(OutputElfFile *output_elf_file) {
     // Allocate memory for section headers
     output_elf_file->elf_section_headers_size = sizeof(ElfSectionHeader) * output_elf_file->sections_list->length;
     output_elf_file->elf_section_headers = calloc(1, output_elf_file->elf_section_headers_size);
 
     // Loop over all sections
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
-        make_rw_section_header(output_elf_file, &output_elf_file->elf_section_headers[i], section);
+        OutputSection *section = output_elf_file->sections_list->elements[i];
+        make_output_section_header(output_elf_file, &output_elf_file->elf_section_headers[i], section);
         output_elf_file->elf_section_headers[i].sh_addr = section->address;
     }
 
     // Assign offsets to last 3 sections
     uint64_t offset = -1;
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         if (!strcmp(section->name, ".symtab") || !strcmp(section->name, ".strtab") || !strcmp(section->name, ".shstrtab")) {
             if (offset == -1) {
                 if (i == 0) error("Trying to link an ELF file with no contents");
-                RwSection *previous_section = output_elf_file->sections_list->elements[i - 1];
+                OutputSection *previous_section = output_elf_file->sections_list->elements[i - 1];
                 offset = previous_section->offset + previous_section->size;
             }
             offset = ALIGN_UP(offset, section->align);
@@ -421,7 +421,7 @@ void make_elf_section_headers(RwElfFile *output_elf_file) {
 
     // Check all section offsets are sane
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         if (!section->offset) panic("Unexpected section offset zero for output section %s", section->name);
     }
 
@@ -434,7 +434,7 @@ void make_elf_section_headers(RwElfFile *output_elf_file) {
 }
 
 // Make an ELF program segment header
-static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSegmentHeader *psh, RwSection *section) {
+static void make_program_segment_header(OutputElfFile *output_elf_file, ElfProgramSegmentHeader *psh, OutputSection *section) {
     psh->p_flags = PF_R;
 
     if (section->flags & SHF_WRITE) psh->p_flags |= PF_W;
@@ -446,7 +446,7 @@ static void make_program_segment_header(RwElfFile *output_elf_file, ElfProgramSe
 // Given an input section and an output section, align the input section, update the sizes and process TLS.
 // If the current output program segment is suitable to include the input section, update it,
 // otherwise, create a new one.
-static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSection *section, RwSection *last_section, Symbol *dot_symbol, uint64_t *poffset) {
+static void layout_one_section_in_executable(OutputElfFile *output_elf_file, OutputSection *section, OutputSection *last_section, Symbol *dot_symbol, uint64_t *poffset) {
     if (!section) panic("Got NULL output section in layout_one_section_in_executable()");
 
     if (!section->keep && section->size == 0) return;
@@ -524,7 +524,7 @@ static void layout_one_section_in_executable(RwElfFile *output_elf_file, RwSecti
 }
 
 // Process an assignment command in a section.
-static uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbol, CommandAssignment *assignment, uint64_t offset) {
+static uint64_t process_assignment(OutputElfFile *output_elf_file, Symbol *dot_symbol, CommandAssignment *assignment, uint64_t offset) {
     Value value = evaluate_node(assignment->node, output_elf_file);
     Symbol *symbol = get_or_add_linker_script_symbol(assignment);
 
@@ -553,12 +553,12 @@ static uint64_t process_assignment(RwElfFile *output_elf_file, Symbol *dot_symbo
 // Reset layout_complete on all sections
 static void reset_layout_complete(List *input_elf_files) {
     for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *elf_file = input_elf_files->elements[i];
+        InputElfFile *elf_file = input_elf_files->elements[i];
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {
-            Section *input_section  = (Section *) elf_file->section_list->elements[j];
-            RwSection *output_section = input_section->dst_section;
+            InputSection *input_section  = (InputSection *) elf_file->section_list->elements[j];
+            OutputSection *output_section = input_section->output_section;
             if (!output_section) continue; // Not included
             output_section->layout_complete = 0;
         }
@@ -570,7 +570,7 @@ static void reset_layout_complete(List *input_elf_files) {
 // This function is run twice. The first time to collect the symbols in assignments. The offsets and addresses may be incorrect.
 // The second time when the final layout is done.
 // The script does a parallel walk of the the sections output list (which may contain orphans) and the script
-void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
+void layout_output_sections(OutputElfFile *output_elf_file, List *input_elf_files) {
     if (DEBUG_LAYOUT) printf("------------------------------------\nLaying out executable\n");
 
     reset_layout_complete(input_elf_files);
@@ -581,7 +581,7 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
     Symbol *dot_symbol = get_or_add_linker_script_symbol(&dot_assignment);
     dot_symbol->dst_value = 0; // Zero indicates no offset has been set yet.
 
-    RwSection* last_section = NULL;
+    OutputSection* last_section = NULL;
 
     // Walk the sections list in parallel with the script to also handle orphans that have been relocated
     // to within the script's sections
@@ -596,7 +596,7 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
         for (int j = 0; j < section_commands->length; j++) {
             if (current_sections_list_index != -1) {
                 // If the current section is an orphan, layout all orphans until the first non-orphan is found.
-                RwSection *current = output_elf_file->sections_list->elements[current_sections_list_index];
+                OutputSection *current = output_elf_file->sections_list->elements[current_sections_list_index];
                 while (current->is_orphan) {
                     if (current->keep || current->size > 0) {
                         layout_one_section_in_executable(output_elf_file, current, last_section, dot_symbol, &offset);
@@ -624,12 +624,12 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
                 char *section_name = sections_command->output.output_section_name;
 
                 if (!strcmp(section_name, LINKER_SCRIPT_DISCARD_OUTPUT_SECTION_NAME)) continue;
-                RwSection *section = get_rw_section(output_elf_file, section_name);
+                OutputSection *section = get_output_section(output_elf_file, section_name);
                 if (!section) panic("Got NULL output section in layout_output_sections()");
 
                 // Ensure the current section is the same as the one referenced in the script.
                 if (current_sections_list_index != -1 && section != output_elf_file->sections_list->elements[current_sections_list_index]) {
-                    RwSection *unexpected_section = output_elf_file->sections_list->elements[current_sections_list_index];
+                    OutputSection *unexpected_section = output_elf_file->sections_list->elements[current_sections_list_index];
                     panic("Expected %s, got %s", section->name, unexpected_section->name);
                 }
 
@@ -657,12 +657,12 @@ void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files) {
 }
 
 // Check that sections have an increasing offset and don't overlap.
-void check_output_sections(RwElfFile *output_elf_file) {
+void check_output_sections(OutputElfFile *output_elf_file) {
     // Loop over all pairs of sections
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
         for (int j = i + 1; j < output_elf_file->sections_list->length; j++) {
-            RwSection *s1 = output_elf_file->sections_list->elements[i];
-            RwSection *s2 = output_elf_file->sections_list->elements[j];
+            OutputSection *s1 = output_elf_file->sections_list->elements[i];
+            OutputSection *s2 = output_elf_file->sections_list->elements[j];
 
             if (s1->type == SHT_NOBITS) continue; // BSS sections are allowed to overlap
 
@@ -690,9 +690,9 @@ void check_output_sections(RwElfFile *output_elf_file) {
 }
 
 // Assign values to symbols in the linker script
-void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf_file) {
+void make_output_section_command_assignments_symbol_values(OutputElfFile *output_elf_file) {
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         List *command_assignments = section->command_assignments;
         if (!section->command_assignments) continue;
 
@@ -710,7 +710,7 @@ void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf
 }
 
 // Given a list of sections, group them by type and make the list of program segment headers.
-void layout_program_segments(RwElfFile *output_elf_file) {
+void layout_program_segments(OutputElfFile *output_elf_file) {
     output_elf_file->program_segments_list = new_list(16);
 
     ElfProgramSegmentHeader *current_segment = NULL;
@@ -720,7 +720,7 @@ void layout_program_segments(RwElfFile *output_elf_file) {
 
     // Loop over all headers
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         if (section->type == SHT_NULL) continue;
         if (!(section->flags & SHF_ALLOC)) continue;
 

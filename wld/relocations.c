@@ -5,7 +5,7 @@
 #include "elf.h"
 #include "error.h"
 #include "list.h"
-#include "ro-elf.h"
+#include "input-elf.h"
 
 #include "wld/symbols.h"
 #include "wld/relocations.h"
@@ -71,20 +71,20 @@ static const char *RELOCATION_NAMES[] = {
 int RELOCATION_NAMES_COUNT = sizeof(RELOCATION_NAMES) / sizeof(RELOCATION_NAMES[0]) - 1;
 
 // Make set of all global symbols that have relocations
-int make_global_symbols_in_use(RwElfFile *output_elf_file, List *input_elf_files) {
+int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_files) {
     StrMap *global_symbols_in_use = output_elf_file->global_symbols_in_use;
 
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *input_elf_file = input_elf_files->elements[i];
+        InputElfFile *input_elf_file = input_elf_files->elements[i];
 
         // Loop over all relocation sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
-            Section *rela_input_section  = (Section *) input_elf_file->section_list->elements[j];
+            InputSection *rela_input_section  = (InputSection *) input_elf_file->section_list->elements[j];
             if (rela_input_section->type != SHT_RELA) continue;
 
             int target_section_index = rela_input_section->info;
-            Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
+            InputSection *input_section  = (InputSection *) input_elf_file->section_list->elements[target_section_index];
 
             // Loop over all relocations
             ElfRelocation *relocations = load_section_uncached(input_elf_file, j);
@@ -133,7 +133,7 @@ static void convert_Gvqp_to_Evqp(void *data, uint8_t opcode, uint8_t binary_oper
 // This function updates the values in the output ELF file. The code may already have been relaxed by
 // scan_relocation().
 // All ELF file details are abstracted away, so that function can be easily tested.
-int apply_relocation(RwElfFile *output_elf_file, void *output_pointer,
+int apply_relocation(OutputElfFile *output_elf_file, void *output_pointer,
         uint64_t rw_section_offset, uint64_t rw_section_address, uint64_t output_offset,
         ElfRelocation *relocation, uint64_t value,
         int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset) {
@@ -265,7 +265,7 @@ int apply_relocation(RwElfFile *output_elf_file, void *output_pointer,
 }
 
 // Given an input file, output file, input section and relocation, process the relocation by modifying the output.
-static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFile *input_elf_file, Section *input_section, ElfRelocation *relocation) {
+static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
     int symbol_index = relocation->r_info >> 32;
 
@@ -281,20 +281,20 @@ static int apply_relocation_to_output_elf_file(RwElfFile *output_elf_file, ElfFi
     uint64_t got_iplt_offset = -1;
 
     // Get the output section
-    RwSection *rw_section = input_section->dst_section;
+    OutputSection *rw_section = input_section->output_section;
     if (!rw_section) return 0; // The section is not included
 
     // Determine the value of the symbol
     if (elf_symbol_type == STT_SECTION) {
         // Handle a relocation to a section symbol
 
-        Section *symbol_section = (Section *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+        InputSection *symbol_section = (InputSection *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
         symbol_name = symbol_section->name;
 
-        RwSection *symbol_rw_section = symbol_section->dst_section;
-        if (!symbol_rw_section) panic("Unexpected null section in output when applying relocations");
+        OutputSection *symbol_output_section = symbol_section->output_section;
+        if (!symbol_output_section) panic("Unexpected null section in output when applying relocations");
 
-        dst_value = symbol_rw_section->address + symbol_section->dst_offset + elf_symbol->st_value;
+        dst_value = symbol_output_section->address + symbol_section->dst_offset + elf_symbol->st_value;
     }
     else {
         // Handle a relocation to a non-section symbol
@@ -426,7 +426,7 @@ int scan_relocation(void *input_data, ElfRelocation *relocation) {
     return SCAN_RELOCATION_OK;
 }
 
-static int scan_relocation_in_input_elf_file(ElfFile *input_elf_file, Section *input_section, ElfRelocation *relocation) {
+static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
     int result = scan_relocation(input_section->data, relocation);
@@ -460,7 +460,7 @@ static int scan_relocation_in_input_elf_file(ElfFile *input_elf_file, Section *i
     return SCAN_RELOCATION_OK;
 }
 
-void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file, int phase) {
+void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, int phase) {
     // While in development, collect all problems, report them and bail.
     // This way I know what lies ahead until the executable can be run.
     int failed_relocations = 0;
@@ -469,17 +469,17 @@ void apply_relocations(List *input_elf_files, RwElfFile *output_elf_file, int ph
 
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
-        ElfFile *input_elf_file = input_elf_files->elements[i];
+        InputElfFile *input_elf_file = input_elf_files->elements[i];
 
         if (DEBUG_RELOCATIONS) printf("%s\n", input_elf_file->filename);
 
         // Loop over all relocation sections
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
-            Section *rela_input_section  = (Section *) input_elf_file->section_list->elements[j];
+            InputSection *rela_input_section  = (InputSection *) input_elf_file->section_list->elements[j];
             if (rela_input_section->type != SHT_RELA) continue;
 
             int target_section_index = rela_input_section->info;
-            Section *input_section  = (Section *) input_elf_file->section_list->elements[target_section_index];
+            InputSection *input_section  = (InputSection *) input_elf_file->section_list->elements[target_section_index];
 
             // Loop over all relocations
             ElfRelocation *relocations = load_section_uncached(input_elf_file, j);

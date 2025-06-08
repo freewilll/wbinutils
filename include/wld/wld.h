@@ -2,8 +2,8 @@
 #define _WLD_H
 
 #include "list.h"
-#include "ro-elf.h"
-#include "rw-elf.h"
+#include "input-elf.h"
+#include "output-elf.h"
 
 #define OUTPUT_TYPE_STATIC   1
 #define OUTPUT_TYPE_SHARED   2
@@ -39,11 +39,11 @@ typedef struct input_file {
     int is_library;       // On the command line with -l
 } InputFile;
 
-RwElfFile *init_output_elf_file(const char *output_filename, int output_type);
-Section *get_extra_section(RwElfFile *output_elf_file, char *name);
-Section *create_extra_section(RwElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align);
-void dump_sections(RwElfFile *output_elf_file);
-void dump_program_segments(RwElfFile *output_elf_file);
-RwElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type);
+OutputElfFile *init_output_elf_file(const char *output_filename, int output_type);
+InputSection *get_extra_section(OutputElfFile *output_elf_file, char *name);
+InputSection *create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align);
+void dump_sections(OutputElfFile *output_elf_file);
+void dump_program_segments(OutputElfFile *output_elf_file);
+OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type);
 
 #endif

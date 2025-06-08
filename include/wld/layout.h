@@ -9,12 +9,12 @@ typedef struct output_section_assignment  {
     uint64_t offset;                // Offset into the output section
 } OutputSectionAssignment;
 
-void layout_input_sections(RwElfFile *output_elf_file, List *input_elf_files);
-void layout_output_sections(RwElfFile *output_elf_file, List *input_elf_files);
-void check_output_sections(RwElfFile *output_elf_file);
-void remove_empty_sections(RwElfFile *output_elf_file);
-void make_elf_section_headers(RwElfFile *output_elf_file);
-void make_output_section_command_assignments_symbol_values(RwElfFile *output_elf_file);
-void layout_program_segments(RwElfFile *output_elf_file);
+void layout_input_sections(OutputElfFile *output_elf_file, List *input_elf_files);
+void layout_output_sections(OutputElfFile *output_elf_file, List *input_elf_files);
+void check_output_sections(OutputElfFile *output_elf_file);
+void remove_empty_sections(OutputElfFile *output_elf_file);
+void make_elf_section_headers(OutputElfFile *output_elf_file);
+void make_output_section_command_assignments_symbol_values(OutputElfFile *output_elf_file);
+void layout_program_segments(OutputElfFile *output_elf_file);
 
 #endif

@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "rw-elf.h"
+#include "output-elf.h"
 
 #include "was/list.h"
 #include "was/elf.h"
@@ -15,7 +15,7 @@ void init_relocations(void) {
 }
 
 // Get .rela.x associated with section .x. Create one if not existent
-RwSection *get_relocation_section(RwSection *section) {
+OutputSection *get_relocation_section(OutputSection *section) {
     if (!section->rela_section) {
         char *name = malloc(strlen(section->name + 5));
         sprintf(name, "%s%s", ".rela", section->name);
@@ -25,7 +25,7 @@ RwSection *get_relocation_section(RwSection *section) {
     return section->rela_section;
 }
 
-void add_relocation(RwSection *section, Symbol *symbol, int type, long offset, int addend) {
+void add_relocation(OutputSection *section, Symbol *symbol, int type, long offset, int addend) {
     Relocation *r = malloc(sizeof(Relocation));
     r->type = type;
     r->offset = offset;
@@ -54,7 +54,7 @@ void make_rela_sections(void) {
     add_elf_relocations();
 
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         if (section->rela_section) {
             section->rela_section->link = output_elf_file->section_symtab->index;
             section->rela_section->info = section->index;

@@ -1,6 +1,6 @@
 #include <stdarg.h>
 
-#include "rw-elf.h"
+#include "output-elf.h"
 #include "lexer.h"
 #include "parser.h"
 #include "relocations.h"
@@ -12,9 +12,9 @@
 
 void init_tests(void);
 void test_full_assembly(char *summary, char *input, ...);
-int dump_section(RwSection *section);
-void vassert_section_data(RwSection* section, va_list ap);
-void assert_section_data(RwSection* section, ...);
+int dump_section(OutputSection *section);
+void vassert_section_data(OutputSection* section, va_list ap);
+void assert_section_data(OutputSection* section, ...);
 void assert_relocations(char *section_name, ...);
 void dump_symbols(void);
 void assert_symbols(int first, ...);

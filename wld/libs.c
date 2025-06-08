@@ -5,7 +5,7 @@
 
 #include "error.h"
 #include "list.h"
-#include "ro-elf.h"
+#include "input-elf.h"
 #include "strmap.h"
 
 #include "wld/libs.h"
@@ -170,7 +170,7 @@ int process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
             // Don't process the same object twice
             if (strmap_get(included_objects_map, obj->filename)) continue;
 
-            ElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
+            InputElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
             if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s in archive %s\n", elf_file->filename, ar_file->filename);
             int resolved_symbols = process_elf_file_symbols(elf_file, 1, 1);
             if (resolved_symbols) {
@@ -187,7 +187,7 @@ int process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
     } while (objects_added);
 
     for (int i = 0; i < included_objects_list->length; i++) {
-        ElfFile *elf_file = included_objects_list->elements[i];
+        InputElfFile *elf_file = included_objects_list->elements[i];
         append_to_list(input_elf_files, elf_file);
         if (DEBUG_SYMBOL_RESOLUTION) printf("Including %s\n", elf_file->filename);
     }
@@ -204,7 +204,7 @@ void dump_archive_file_symbols(ArchiveFile* ar_file) {
         ArchiveFileObject *ar_file_object = (ArchiveFileObject *) ar_file->objects->elements[i];
         char *pseudo_filename = malloc(strlen(ar_file->filename) + strlen(ar_file_object->filename) + 2);
         sprintf(pseudo_filename, "%s/%s", ar_file->filename, ar_file_object->filename);
-        ElfFile *elf_file = open_elf_file_in_archive(ar_file->file, pseudo_filename, ar_file_object->offset);
+        InputElfFile *elf_file = open_elf_file_in_archive(ar_file->file, pseudo_filename, ar_file_object->offset);
         dump_symbols(elf_file);
     }
 }

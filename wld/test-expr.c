@@ -3,7 +3,7 @@
 #include <string.h>
 
 #include "elf.h"
-#include "rw-elf.h"
+#include "output-elf.h"
 
 #include "wld/lexer.h"
 #include "wld/expr.h"
@@ -27,9 +27,9 @@ static void assert_string(const char *expected, const char *actual, const char *
 static Value run(char *script) {
     init_lexer_from_string(script);
 
-    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
+    OutputElfFile *output_elf_file = new_output_elf_file("", ET_EXEC);
 
-    return evaluate_node(parse_expression(), rw_elf_file);
+    return evaluate_node(parse_expression(), output_elf_file);
 }
 
 static void test_constant() {
@@ -126,11 +126,11 @@ void test_sizeof() {
     char *script = "SIZEOF(.text)";
     init_lexer_from_string(script);
 
-    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
-    RwSection *section = add_rw_section(rw_elf_file, ".text" , SHT_PROGBITS, 0, 0x1000);
+    OutputElfFile *output_elf_file = new_output_elf_file("", ET_EXEC);
+    OutputSection *section = add_output_section(output_elf_file, ".text" , SHT_PROGBITS, 0, 0x1000);
     section->size = 0x100;
 
-    Value value = evaluate_node(parse_expression(), rw_elf_file);
+    Value value = evaluate_node(parse_expression(), output_elf_file);
     assert_int(0x100, value.number, script);
 }
 
@@ -138,11 +138,11 @@ void test_sizeof_headers() {
     char *script = "SIZEOF_HEADERS";
     init_lexer_from_string(script);
 
-    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
-    rw_elf_file->elf_program_segments_header_size = 0x100;
-    rw_elf_file->elf_section_headers_size = 0x200;
+    OutputElfFile *output_elf_file = new_output_elf_file("", ET_EXEC);
+    output_elf_file->elf_program_segments_header_size = 0x100;
+    output_elf_file->elf_section_headers_size = 0x200;
 
-    Value value = evaluate_node(parse_expression(), rw_elf_file);
+    Value value = evaluate_node(parse_expression(), output_elf_file);
     assert_int(sizeof(ElfHeader) + 0x300, value.number, script);
 }
 

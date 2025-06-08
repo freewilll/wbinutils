@@ -19,7 +19,7 @@ static void assert_int(int expected, int actual, const char *message) {
     }
 }
 
-static void fail_sections(RwElfFile *elf_file, List *expected_sections) {
+static void fail_sections(OutputElfFile *elf_file, List *expected_sections) {
     printf("Got sections:\n");
     dump_sections(elf_file);
 
@@ -30,7 +30,7 @@ static void fail_sections(RwElfFile *elf_file, List *expected_sections) {
     exit(1);
 }
 
-static void assert_sections(RwElfFile *elf_file, ...) {
+static void assert_sections(OutputElfFile *elf_file, ...) {
     List *expected_sections = new_list(32);
 
     va_list ap;
@@ -47,7 +47,7 @@ static void assert_sections(RwElfFile *elf_file, ...) {
         int flags = va_arg(ap, int);
         int align = va_arg(ap, int);
 
-        RwSection *section = calloc(1, sizeof(RwSection));
+        OutputSection *section = calloc(1, sizeof(OutputSection));
         section->name = strdup(name);
         section->type = type;
         section->address = address;
@@ -66,8 +66,8 @@ static void assert_sections(RwElfFile *elf_file, ...) {
     }
 
     for (int i = 0; i < expected_sections->length; i++) {
-        RwSection *got = elf_file->sections_list->elements[i + 1];
-        RwSection *expected = expected_sections->elements[i];
+        OutputSection *got = elf_file->sections_list->elements[i + 1];
+        OutputSection *expected = expected_sections->elements[i];
 
         if (
             strcmp(got->name, expected->name) ||
@@ -84,7 +84,7 @@ static void assert_sections(RwElfFile *elf_file, ...) {
     }
 }
 
-static void fail_program_segments(RwElfFile *elf_file, List *expected_program_segments) {
+static void fail_program_segments(OutputElfFile *elf_file, List *expected_program_segments) {
     printf("Got program_segments:\n");
     dump_program_segments(elf_file);
 
@@ -95,7 +95,7 @@ static void fail_program_segments(RwElfFile *elf_file, List *expected_program_se
     exit(1);
 }
 
-static void assert_program_segments(RwElfFile *elf_file, ...) {
+static void assert_program_segments(OutputElfFile *elf_file, ...) {
     List *expected_program_segments = new_list(32);
 
     va_list ap;
@@ -148,8 +148,8 @@ static void assert_program_segments(RwElfFile *elf_file, ...) {
     }
 }
 
-static void assert_symbols(RwElfFile *elf_file, ...) {
-    RwSection *section = elf_file->section_symtab;
+static void assert_symbols(OutputElfFile *elf_file, ...) {
+    OutputSection *section = elf_file->section_symtab;
 
     va_list ap;
     va_start(ap, elf_file);
@@ -161,7 +161,7 @@ static void assert_symbols(RwElfFile *elf_file, ...) {
 
         if (expected_value == END) {
             if (pos != section->size) {
-                dump_rw_symbols(elf_file);
+                dump_output_symbols(elf_file);
                 panic("Unexpected data at position %d", (pos - 1) / sizeof(ElfSymbol));
             }
 
@@ -183,9 +183,9 @@ static void assert_symbols(RwElfFile *elf_file, ...) {
             expected_section_index = SHN_COMMON;
         }
         else {
-            RwSection *expected_section = get_rw_section(elf_file, expected_section_name);
+            OutputSection *expected_section = get_output_section(elf_file, expected_section_name);
             if (!expected_section) {
-                dump_rw_symbols(elf_file);
+                dump_output_symbols(elf_file);
                 panic("Section %s not found", expected_section_name);
             }
             expected_section_index = expected_section->index;
@@ -276,7 +276,7 @@ static char *run_was(char *assembly) {
     return strdup(object_path);
 }
 
-static RwElfFile *run_wld(List *input_filenames, char **poutput_path, int run_executable, char *test_name) {
+static OutputElfFile *run_wld(List *input_filenames, char **poutput_path, int run_executable, char *test_name) {
     // Make list of InputFile from the input filenames
     List *input_files = new_list(input_filenames->length);
     for (int i = 0; i < input_filenames->length; i++) {
@@ -297,7 +297,7 @@ static RwElfFile *run_wld(List *input_filenames, char **poutput_path, int run_ex
     List *library_paths = new_list(0);
     List *linker_scripts = new_list(0);
 
-    RwElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, OUTPUT_TYPE_STATIC);
+    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, OUTPUT_TYPE_STATIC);
 
     if (run_executable) {
         // Run the executable and assert an exit code of zero
@@ -330,7 +330,7 @@ static void test_sanity() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -376,7 +376,7 @@ void test_segments_are_page_aligned() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -427,7 +427,7 @@ static void test_orphan_sections_no_rearrangement(void) {
     append_to_list(input_paths, object_path2);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -483,7 +483,7 @@ static void test_orphan_sections_rearrangement(void) {
     append_to_list(input_paths, object_path2);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -522,7 +522,7 @@ static void test_tls() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "tls");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "tls");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                            Align
@@ -565,7 +565,7 @@ static void test_two_bss_sections(void) {
     append_to_list(input_paths, object_path2);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -609,7 +609,7 @@ static void test_data_and_two_bss_sections(void) {
     append_to_list(input_paths, object_path2);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -645,7 +645,7 @@ static void test_etext_undefined() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "undefined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "undefined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -687,7 +687,7 @@ static void test_defined_etext() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "defined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "defined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size     Flags                      Align
@@ -729,7 +729,7 @@ static void test_unused_etext() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "unused etext");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "unused etext");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -771,7 +771,7 @@ static void test_automatic_start_stop_symbols() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "__start_ and __end_ symbols");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -818,16 +818,16 @@ static void test_dwarf() {
     append_to_list(input_paths, object_path);
 
     char *output_path;
-    RwElfFile *elf_file = run_wld(input_paths, &output_path, 1, "dwarf lines");
+    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "dwarf lines");
 
     // Ensure that the .debug_abbrev has address zero. This is required by DWARF.
     // No alloc sections must have address zero.
-    RwSection *debug_abbrev_section = get_rw_section(elf_file, ".debug_abbrev");
+    OutputSection *debug_abbrev_section = get_output_section(elf_file, ".debug_abbrev");
     if (!debug_abbrev_section) panic("Expected a .debug_abbrev section");
     assert_int(0, debug_abbrev_section->address, ".debug_abbrev has zero address");
 
     // Ensure the .debug_abbrev pointer in .debug_info points to the zero address.
-    RwSection *debug_info_section = get_rw_section(elf_file, ".debug_info");
+    OutputSection *debug_info_section = get_output_section(elf_file, ".debug_info");
     assert_int(4, debug_info_section->size, ".debug_info size is 4");
     uint32_t *offset = (uint32_t *) debug_info_section->data;
     assert_int(0, *offset, ".debug_info pointer inside .debug_abbrev is zero");

@@ -1,7 +1,7 @@
 #ifndef _PARSER_H
 #define _PARSER_H
 
-#include "rw-elf.h"
+#include "output-elf.h"
 #include "instr.h"
 
 // Code (instructions) and data (.byte, .word, etc) chunks are treated in a similar
@@ -80,6 +80,6 @@ Chunk *parse_instruction_statement(void);
 Chunk *parse_directive_statement(void);
 void parse(void);
 void init_parser(void);
-void emit_section_code(RwSection *section);
+void emit_section_code(OutputSection *section);
 
 #endif

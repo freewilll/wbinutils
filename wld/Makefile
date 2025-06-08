@@ -8,8 +8,8 @@ HEADERS = \
 	strmap-ordered.h \
 	elf.h \
 	list.h \
-	ro-elf.h \
-	rw-elf.h \
+	input-elf.h \
+	output-elf.h \
 	error.h \
 	wld/expr.h \
 	wld/layout.h \

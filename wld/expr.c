@@ -207,7 +207,7 @@ Node *parse_expression() {
     return parse(TOK_COMMA);
 }
 
-Value evaluate_node(Node *node, RwElfFile *elf_file) {
+Value evaluate_node(Node *node, OutputElfFile *elf_file) {
     if (node->value) return *node->value;
 
     Value result = {0};
@@ -249,7 +249,7 @@ Value evaluate_node(Node *node, RwElfFile *elf_file) {
         }
 
         case OP_SIZEOF: {
-            RwSection *section = get_rw_section(elf_file, node->identifier);
+            OutputSection *section = get_output_section(elf_file, node->identifier);
             if (!section) error_in_file("Unknown section %s", node->identifier);
 
             result.number = section->size;

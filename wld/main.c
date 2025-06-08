@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
 
         // Print linker script
         char *output_filename = "dummy";
-        RwElfFile *output_elf_file = init_output_elf_file(output_filename, output_type);
+        OutputElfFile *output_elf_file = init_output_elf_file(output_filename, output_type);
         char *linker_script = default_linker_script(output_elf_file);
         printf("Linker script:\n");
         printf("--------------\n");

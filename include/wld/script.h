@@ -26,11 +26,11 @@ typedef enum sections_command_type {
 } SectionsCommandType;
 
 // Output section command
-typedef struct input_section  {
+typedef struct script_input_section  {
     char *file_pattern;
     List *section_patterns;      // A list of strings, e.g. ".text", ".text.*"
     int keep;                    // Include empty sections
-} InputSection;
+} ScriptInputSection;
 
 // Section commands
 typedef enum sections_command_input_type {
@@ -41,8 +41,8 @@ typedef enum sections_command_input_type {
 typedef struct sections_command_output_item  {
     SectionsCommandType type;
     union {
-        CommandAssignment assignment;   // SECTIONS_CMD_INPUT_ASSIGNMENT
-        InputSection input_section;     // SECTIONS_CMD_INPUT_SECTION
+        CommandAssignment assignment;       // SECTIONS_CMD_INPUT_ASSIGNMENT
+        ScriptInputSection input_section;   // SECTIONS_CMD_INPUT_SECTION
     };
 } SectionsCommandOutputItem;
 
@@ -87,7 +87,7 @@ typedef struct script_command {
     };
 } ScriptCommand;
 
-char *default_linker_script(RwElfFile *output_elf_file);
-void parse_linker_scripts(RwElfFile *output_elf_file, List *library_paths, List *linker_scripts);
+char *default_linker_script(OutputElfFile *output_elf_file);
+void parse_linker_scripts(OutputElfFile *output_elf_file, List *library_paths, List *linker_scripts);
 
 #endif

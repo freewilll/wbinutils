@@ -910,7 +910,7 @@ void test_relocations_with_rip_and_defined_symbol(void) {
         END);
 
     // There should be no relocations
-    if (get_rw_section(output_elf_file, ".rela.text")) panic("Unexpectedly got a .rela.text section");
+    if (get_output_section(output_elf_file, ".rela.text")) panic("Unexpectedly got a .rela.text section");
 }
 
 // Symbols that are defined and local get resolved without a relocation
@@ -929,7 +929,7 @@ void test_local_defined_symbol_relocation(void) {
     );
 
     // There should be no relocations
-    if (get_rw_section(output_elf_file, ".rela.text")) panic("Unexpectedly got a .rela.text section");
+    if (get_output_section(output_elf_file, ".rela.text")) panic("Unexpectedly got a .rela.text section");
 }
 
 // Symbols that are defined and global get a relocation pointing at the symbol.
@@ -1495,7 +1495,7 @@ static void test_debug_line_files(void) {
         END);
 
     // Check entire section is OK
-    assert_section_data(get_rw_section(output_elf_file, ".debug_line"),
+    assert_section_data(get_output_section(output_elf_file, ".debug_line"),
         // Header
         0x76, 0x00, 0x00, 0x00,             // unit_length
         0x03, 0x00,                         // DWARF version

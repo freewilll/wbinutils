@@ -6,7 +6,7 @@
 #include <unistd.h>
 
 #include "list.h"
-#include "ro-elf.h"
+#include "input-elf.h"
 #include "strmap.h"
 #include "error.h"
 
@@ -24,7 +24,7 @@ static const char *SYMBOL_VISIBILITY_NAMES[] = {
     "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
 };
 
-static void read_header(ElfFile *elf_file) {
+static void read_header(InputElfFile *elf_file) {
     fseek(elf_file->file, elf_file->file_offset, SEEK_SET);
     elf_file->elf_header = malloc(sizeof(ElfHeader));
     int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
@@ -32,14 +32,14 @@ static void read_header(ElfFile *elf_file) {
 }
 
 // Read from the file into a buffer
-static void *read_from_file(ElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
+static void *read_from_file(InputElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
     fseek(elf_file->file, elf_file->file_offset + offset, SEEK_SET);
     int read = fread(dst, 1, size, elf_file->file);
     if (read != size) error("Unable to read input file: %s", elf_file->filename);
 }
 
 // Allocate memory for a section, read it, and return it
-void *load_section_uncached(ElfFile *elf_file, int section_index) {
+void *load_section_uncached(InputElfFile *elf_file, int section_index) {
     ElfSectionHeader *section_header = &elf_file->section_headers[section_index];
     void *result = malloc(section_header->sh_size);
     read_from_file(elf_file, result, section_header->sh_offset, section_header->sh_size);
@@ -48,7 +48,7 @@ void *load_section_uncached(ElfFile *elf_file, int section_index) {
 }
 
 // Unless already done, allocate memory for a section, read it, and return it
-void *load_section(ElfFile *elf_file, Section *section) {
+void *load_section(InputElfFile *elf_file, InputSection *section) {
     if (section->data) return section->data;
     section->data = malloc(section->size);
     read_from_file(elf_file, section->data, section->src_offset, section->size);
@@ -57,7 +57,7 @@ void *load_section(ElfFile *elf_file, Section *section) {
 }
 
 // Ensure the file is an x86_64 ELF object file
-static void check_file(ElfFile *elf_file) {
+static void check_file(InputElfFile *elf_file) {
     ElfHeader *elf_header = elf_file->elf_header;
 
     // Ensure it's an elf file
@@ -93,11 +93,11 @@ static void check_file(ElfFile *elf_file) {
 }
 
 // May return NULL if not existent
-static Section *get_input_section(ElfFile *elf_file, char *name) {
+static InputSection *get_input_section(InputElfFile *elf_file, char *name) {
     return strmap_get(elf_file->section_map, name);
 }
 
-static void load_sections(ElfFile *elf_file) {
+static void load_sections(InputElfFile *elf_file) {
     // Init section caches
     elf_file->section_list = new_list(32);
     elf_file->section_map = new_strmap();
@@ -119,7 +119,7 @@ static void load_sections(ElfFile *elf_file) {
         ElfSectionHeader *elf_section_header = &elf_file->section_headers[i];
         char *name = &elf_file->section_header_strings[elf_section_header->sh_name];
 
-        Section *section = calloc(1, sizeof(Section));
+        InputSection *section = calloc(1, sizeof(InputSection));
         section->name = name;
         section->index = i;
         section->size = elf_section_header->sh_size;
@@ -134,14 +134,14 @@ static void load_sections(ElfFile *elf_file) {
     }
 
     // Look up string table
-    Section *strtab_section = get_input_section(elf_file, ".strtab");
+    InputSection *strtab_section = get_input_section(elf_file, ".strtab");
     if (!strtab_section)
         elf_file->strtab_strings = NULL;
     else
         elf_file->strtab_strings = load_section_uncached(elf_file, strtab_section->index);
 
     // Look up symbol table
-    Section *symtab_section = get_input_section(elf_file, ".symtab");
+    InputSection *symtab_section = get_input_section(elf_file, ".symtab");
     if (!symtab_section) {
         elf_file->symbol_table = NULL;
         elf_file->symbol_count = 0;
@@ -152,15 +152,15 @@ static void load_sections(ElfFile *elf_file) {
     }
 }
 
-static void read_common_file_data(ElfFile *elf_file) {
+static void read_common_file_data(InputElfFile *elf_file) {
     read_header(elf_file);
     check_file(elf_file);
     load_sections(elf_file);
 }
 
 // Open an object file
-ElfFile *open_elf_file(const char *filename) {
-    ElfFile *elf_file = calloc(1, sizeof(ElfFile));
+InputElfFile *open_elf_file(const char *filename) {
+    InputElfFile *elf_file = calloc(1, sizeof(InputElfFile));
     elf_file->filename = strdup(filename);
     elf_file->file = fopen(filename, "r");
 
@@ -175,8 +175,8 @@ ElfFile *open_elf_file(const char *filename) {
 }
 
 // Open an object file in an archive
-ElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int offset) {
-    ElfFile *elf_file = calloc(1, sizeof(ElfFile));
+InputElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int offset) {
+    InputElfFile *elf_file = calloc(1, sizeof(InputElfFile));
     elf_file->filename = filename ? strdup(filename) : NULL;
     elf_file->file = file;
     elf_file->file_offset = offset;
@@ -187,7 +187,7 @@ ElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int offset) 
 }
 
 // Print readelf compatible symbol table output
-void dump_symbols(ElfFile *elf_file) {
+void dump_symbols(InputElfFile *elf_file) {
     if (elf_file->symbol_count && !elf_file->symbol_table)
         panic("There are symbols, yet no symbol table");
 

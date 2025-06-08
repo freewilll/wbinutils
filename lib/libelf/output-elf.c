@@ -8,30 +8,30 @@
 #include "error.h"
 #include "list.h"
 #include "strmap.h"
-#include "rw-elf.h"
+#include "output-elf.h"
 
 // Get a RW section. May return NULL if not existent
-RwSection *get_rw_section(RwElfFile *elf_file, const char *name) {
+OutputSection *get_output_section(OutputElfFile *elf_file, const char *name) {
     return strmap_get(elf_file->sections_map, name);
 }
 
 // Add a read/write section to an elf file
-RwSection *add_rw_section(RwElfFile *rw_elf_file, const char *name, int type, int flags, int align) {
-    RwSection *section = calloc(1, sizeof(RwSection));
+OutputSection *add_output_section(OutputElfFile *output_elf_file, const char *name, int type, int flags, int align) {
+    OutputSection *section = calloc(1, sizeof(OutputSection));
     section->name = strdup(name);
     section->type = type;
     section->flags = flags;
     section->align = align;
 
-    append_to_list(rw_elf_file->sections_list, section);
-    strmap_put(rw_elf_file->sections_map, name, section);
+    append_to_list(output_elf_file->sections_list, section);
+    strmap_put(output_elf_file->sections_map, name, section);
 
     return section;
 }
 
 // Move output_section, which must be the last section in the list, to position
-void move_rw_section(RwElfFile *rw_elf_file, RwSection *output_section, int position) {
-    List *old_sections_list = rw_elf_file->sections_list;
+void move_output_section(OutputElfFile *output_elf_file, OutputSection *output_section, int position) {
+    List *old_sections_list = output_elf_file->sections_list;
 
     // Check that the target position cannot be the initial NULL or first section
     if (position < 2)
@@ -42,7 +42,7 @@ void move_rw_section(RwElfFile *rw_elf_file, RwSection *output_section, int posi
         panic("Position %d exceeds amount of sections %d", position, old_sections_list->length);
 
     // Check output_section is the last one
-    RwSection *last_output_section = old_sections_list->elements[old_sections_list->length - 1];
+    OutputSection *last_output_section = old_sections_list->elements[old_sections_list->length - 1];
     if (last_output_section != output_section)
         panic("Section %s is not the last section", output_section->name);
 
@@ -63,12 +63,12 @@ void move_rw_section(RwElfFile *rw_elf_file, RwSection *output_section, int posi
 
     free_list(old_sections_list);
 
-    rw_elf_file->sections_list = new_sections_list;
+    output_elf_file->sections_list = new_sections_list;
 }
 
 // Allocate space at the end of a section and return a pointer to it.
 // Dynamically allocate space size as needed.
-static void *allocate_in_section(RwSection *section, int size) {
+static void *allocate_in_section(OutputSection *section, int size) {
     int new_section_size = section->size + size;
     if (new_section_size > section->allocated) {
         if (!section->allocated) section->allocated = 1;
@@ -83,30 +83,30 @@ static void *allocate_in_section(RwSection *section, int size) {
 }
 
 // Copy src to the end of a section and return the offset
-int add_to_rw_section(RwSection *section, const void *src, int size) {
+int add_to_output_section(OutputSection *section, const void *src, int size) {
     char *data = allocate_in_section(section, size);
     memcpy(data, src, size);
     return data - section->data;
 }
 
 // Add size repeated characters to the section and return the offset
-int add_repeated_value_to_rw_section(RwSection *section, char value, int size) {
+int add_repeated_value_to_output_section(OutputSection *section, char value, int size) {
     char *data = allocate_in_section(section, size);
     memset(data, value, size);
     return data - section->data;
 }
 
 // Add size zeros to the section and return the offset
-int add_zeros_to_rw_section(RwSection *section, int size) {
-    return add_repeated_value_to_rw_section(section, 0, size);
+int add_zeros_to_output_section(OutputSection *section, int size) {
+    return add_repeated_value_to_output_section(section, 0, size);
 }
 
 // Add a symbol to the ELF symbol table symtab
 // This function must be called with all local symbols first, then all global symbols
-int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index) {
+int add_elf_symbol(OutputElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index) {
     // Add a string to the strtab unless name is "".
     // Empty names are all mapped to the first entry in the string table.
-    int strtab_offset = *name ? add_to_rw_section(output_elf_file->section_strtab, name, strlen(name) + 1) : 0;
+    int strtab_offset = *name ? add_to_output_section(output_elf_file->section_strtab, name, strlen(name) + 1) : 0;
 
     ElfSymbol *symbol = allocate_in_section(output_elf_file->section_symtab, sizeof(ElfSymbol));
     memset(symbol, 0, sizeof(ElfSymbol));
@@ -125,12 +125,12 @@ int add_elf_symbol(RwElfFile *output_elf_file, const char *name, long value, lon
 }
 
 // Add a special symbol with the source filename
-void add_file_symbol(RwElfFile *output_elf_file, char *filename) {
+void add_file_symbol(OutputElfFile *output_elf_file, char *filename) {
     add_elf_symbol(output_elf_file, filename, 0, 0, STB_LOCAL, STT_FILE, STV_DEFAULT, SHN_ABS);
 }
 
 // Add a relocation to the ELF rela_text section.
-void add_elf_relocation(RwElfFile *output_elf_file, RwSection *section, int type, int symbol_index, long offset, long addend) {
+void add_elf_relocation(OutputElfFile *output_elf_file, OutputSection *section, int type, int symbol_index, long offset, long addend) {
     ElfRelocation *r = allocate_in_section(section, sizeof(ElfRelocation));
 
     r->r_offset = offset;
@@ -138,9 +138,9 @@ void add_elf_relocation(RwElfFile *output_elf_file, RwSection *section, int type
     r->r_addend = addend;
 }
 
-// Create a new RwElfFile object and set some defaults
-RwElfFile *new_rw_elf_file(const char *filename, int type) {
-    RwElfFile *result = calloc(1, sizeof(RwElfFile));
+// Create a new OutputElfFile object and set some defaults
+OutputElfFile *new_output_elf_file(const char *filename, int type) {
+    OutputElfFile *result = calloc(1, sizeof(OutputElfFile));
 
     result->filename = strdup(filename);
     result->type = type;
@@ -151,7 +151,7 @@ RwElfFile *new_rw_elf_file(const char *filename, int type) {
 }
 
 // Make an ELF header
-void make_elf_headers(RwElfFile *output) {
+void make_elf_headers(OutputElfFile *output) {
     // The layout the first page as follows:
     // - ELF header
     // - Program segment headers (if an executable)
@@ -193,7 +193,7 @@ static void place_tls_sections(List *sections_list) {
     int tbss_section_index = 0;
 
     for (int i = 0; i < sections_list->length; i++) {
-        RwSection *section = sections_list->elements[i];
+        OutputSection *section = sections_list->elements[i];
         if (!strcmp(section->name, ".tdata")) tdata_section_index = i;
         if (!strcmp(section->name, ".tbss")) tbss_section_index = i;
     }
@@ -202,7 +202,7 @@ static void place_tls_sections(List *sections_list) {
 
     // Ensure the .tdata section comes first
     if (tdata_section_index > tbss_section_index) {
-        RwSection *tmp = sections_list->elements[tdata_section_index];
+        OutputSection *tmp = sections_list->elements[tdata_section_index];
         sections_list->elements[tdata_section_index] = sections_list->elements[tbss_section_index];
         sections_list->elements[tbss_section_index] = tmp;
 
@@ -211,30 +211,30 @@ static void place_tls_sections(List *sections_list) {
         tbss_section_index = tmp2;
 
         // Update the section indexes to match their new positions
-        ((RwSection *) sections_list->elements[tdata_section_index])->index = tdata_section_index;
-        ((RwSection *) sections_list->elements[tbss_section_index])->index = tbss_section_index;
+        ((OutputSection *) sections_list->elements[tdata_section_index])->index = tdata_section_index;
+        ((OutputSection *) sections_list->elements[tbss_section_index])->index = tbss_section_index;
     }
 
     // The .tdata section is now not last. Swap the next section with the .tbss section
-    RwSection *tmp = sections_list->elements[tdata_section_index + 1];
+    OutputSection *tmp = sections_list->elements[tdata_section_index + 1];
     sections_list->elements[tdata_section_index + 1] = sections_list->elements[tbss_section_index];
     sections_list->elements[tbss_section_index] = tmp;
 
     // Update the section indexes to match their new positions
-    ((RwSection *) sections_list->elements[tdata_section_index + 1])->index = tdata_section_index + 1;
-    ((RwSection *) sections_list->elements[tbss_section_index])->index = tbss_section_index;
+    ((OutputSection *) sections_list->elements[tdata_section_index + 1])->index = tdata_section_index + 1;
+    ((OutputSection *) sections_list->elements[tbss_section_index])->index = tbss_section_index;
 }
 
 // Rearrange sections list so that .symtab, .strtab and .shstrtab are last.
 // Then set the index.
-void make_section_indexes(RwElfFile *output_elf_file) {
+void make_section_indexes(OutputElfFile *output_elf_file) {
     List *sections_list = output_elf_file->sections_list;
 
     List *new_sections_list = new_list(sections_list->length);
     List *selected_sections_list = new_list(3);
 
     for (int i = 0; i < sections_list->length; i++) {
-        RwSection *section = sections_list->elements[i];
+        OutputSection *section = sections_list->elements[i];
 
         if (!strcmp(section->name, ".symtab") || !strcmp(section->name, ".strtab") || !strcmp(section->name, ".shstrtab"))
             append_to_list(selected_sections_list, section);
@@ -248,13 +248,13 @@ void make_section_indexes(RwElfFile *output_elf_file) {
 
     // Set the index on the first sections
     for (int i = 0; i < non_selected_sections_length; i++) {
-        RwSection *section = new_sections_list->elements[i];
+        OutputSection *section = new_sections_list->elements[i];
         section->index = i;
     }
 
     // Append the remaining sections
     for (int i = 0; i < selected_sections_list->length; i++) {
-        RwSection *section = selected_sections_list->elements[i];
+        OutputSection *section = selected_sections_list->elements[i];
         section->index = non_selected_sections_length + i;
         append_to_list(new_sections_list, section);
     }
@@ -266,7 +266,7 @@ void make_section_indexes(RwElfFile *output_elf_file) {
     output_elf_file->sections_list = new_sections_list;
 }
 
-uint64_t headers_size(RwElfFile *elf_file) {
+uint64_t headers_size(OutputElfFile *elf_file) {
     return
         sizeof(ElfHeader) +                              // Elf header
         elf_file->elf_program_segments_header_size +     // Program segments headers
@@ -274,8 +274,8 @@ uint64_t headers_size(RwElfFile *elf_file) {
 }
 
 // Make an ELF section header
-void make_rw_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, RwSection *section) {
-    sh->sh_name      = add_to_rw_section(output_elf_file->section_shstrtab, (char *) section->name, strlen(section->name) + 1);
+void make_output_section_header(OutputElfFile *output_elf_file, ElfSectionHeader *sh, OutputSection *section) {
+    sh->sh_name      = add_to_output_section(output_elf_file->section_shstrtab, (char *) section->name, strlen(section->name) + 1);
     sh->sh_type      = section->type;
     sh->sh_flags     = section->flags;
     sh->sh_offset    = section->offset;
@@ -287,21 +287,21 @@ void make_rw_section_header(RwElfFile *output_elf_file, ElfSectionHeader *sh, Rw
 }
 
 // Make all output section headers
-void make_rw_section_headers(RwElfFile *output_elf_file) {
+void make_output_section_headers(OutputElfFile *output_elf_file) {
     // Allocate ememory
     output_elf_file->elf_section_headers_size = sizeof(ElfSectionHeader) * output_elf_file->sections_list->length;
     output_elf_file->elf_section_headers = calloc(1, output_elf_file->elf_section_headers_size);
 
     // Loop over all headers
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
-        make_rw_section_header(output_elf_file, &output_elf_file->elf_section_headers[i], section);
+        OutputSection *section = output_elf_file->sections_list->elements[i];
+        make_output_section_header(output_elf_file, &output_elf_file->elf_section_headers[i], section);
     }
 }
 
 // Given the sizes and alignments of all output sections, determine the offsets in the final ELF file,
 // and allocate memory for the output
-void layout_rw_elf_sections(RwElfFile *output_elf_file) {
+void layout_output_elf_sections(OutputElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_headers = output_elf_file->elf_section_headers;
 
     // The layout the first page as follows:
@@ -326,7 +326,7 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
 
     // Loop over all output sections
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
 
         // Align program sections to page boundaries if it's an executable or library
         if ((output_elf_file->type == ET_EXEC || output_elf_file->type == ET_DYN) && section->type == SHT_PROGBITS)
@@ -351,11 +351,11 @@ void layout_rw_elf_sections(RwElfFile *output_elf_file) {
 }
 
 // Copy all the section data to the final positions in the ELF file.
-void copy_rw_sections_to_elf(RwElfFile *output_elf_file) {
+void copy_output_sections_to_elf(OutputElfFile *output_elf_file) {
     List *sections = output_elf_file->sections_list;
 
     for (int i = 1; i < sections->length; i++) {
-        RwSection *section = sections->elements[i];
+        OutputSection *section = sections->elements[i];
 
         if (section->type != SHT_NOBITS) {
             if (section->size && !section->data) panic("Output section data is NULL for non-zero sized section %s %p", section->name, section);
@@ -365,9 +365,9 @@ void copy_rw_sections_to_elf(RwElfFile *output_elf_file) {
 }
 
 // Write the ELF file
-void write_elf_file(RwElfFile *output_elf_file) {
+void write_elf_file(OutputElfFile *output_elf_file) {
     // Copy all the section data to the final positions in the ELF file.
-    copy_rw_sections_to_elf(output_elf_file);
+    copy_output_sections_to_elf(output_elf_file);
 
     // Write output file
     FILE *f;

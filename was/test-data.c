@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "rw-elf.h"
+#include "output-elf.h"
 
 #include "was/dwarf.h"
 #include "was/elf.h"
@@ -29,7 +29,7 @@ void test_assembly(char *input, ...) {
     init_parser();
     init_dwarf();
 
-    RwSection *section = get_rw_section(output_elf_file, ".data");
+    OutputSection *section = get_output_section(output_elf_file, ".data");
     section->size = 0;
     section->chunks = NULL;
 

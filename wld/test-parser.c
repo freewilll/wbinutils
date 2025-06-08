@@ -30,8 +30,8 @@ static void run(char *script) {
 }
 
 static uint64_t evaluate_test_node(Node *node) {
-    RwElfFile *rw_elf_file = new_rw_elf_file("", ET_EXEC);
-    Value value = evaluate_node(node, rw_elf_file);
+    OutputElfFile *output_elf_file = new_output_elf_file("", ET_EXEC);
+    Value value = evaluate_node(node, output_elf_file);
     return value.number;
 }
 
@@ -128,7 +128,7 @@ void test_sections_output() {
 
     SectionsCommandOutputItem *output_item = output_items->elements[0];
     assert_int(SECTIONS_CMD_INPUT_SECTION, output_item->type, script);
-    InputSection *input_section = &output_item->input_section;
+    ScriptInputSection *input_section = &output_item->input_section;
     assert_string("*", input_section->file_pattern, script);
     assert_int(2, input_section->section_patterns->length, script);
     assert_string(".text", input_section->section_patterns->elements[0], script);

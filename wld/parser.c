@@ -100,7 +100,7 @@ static SectionsCommandOutputItem *parse_sections_command_output_item() {
     if (cur_token == TOK_LPAREN) {
         // Input section
 
-        InputSection input_section = {0};
+        ScriptInputSection input_section = {0};
         input_section.file_pattern = identifier;
 
         // Input section pattern

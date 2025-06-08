@@ -11,12 +11,12 @@
 
 void emit_code(void) {
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         if (section->chunks) layout_section(section);
     }
 
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
-        RwSection *section = output_elf_file->sections_list->elements[i];
+        OutputSection *section = output_elf_file->sections_list->elements[i];
         if (section->chunks) emit_section_code(section);
     }
 }

@@ -37,6 +37,6 @@ typedef struct node {
 } Node;
 
 Node *parse_expression(void);
-Value evaluate_node(Node *node, RwElfFile *elf_file);
+Value evaluate_node(Node *node, OutputElfFile *elf_file);
 
 #endif

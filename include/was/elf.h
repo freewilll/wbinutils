@@ -3,9 +3,9 @@
 
 #include "elf.h"
 #include "list.h"
-#include "rw-elf.h"
+#include "output-elf.h"
 
-extern RwElfFile *output_elf_file;
+extern OutputElfFile *output_elf_file;
 
 // ELF file
 void init_elf_file(const char *output_filename);

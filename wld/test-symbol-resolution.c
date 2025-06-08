@@ -3,7 +3,7 @@
 
 #include "elf.h"
 #include "list.h"
-#include "ro-elf.h"
+#include "input-elf.h"
 
 #include "wld/symbols.h"
 
@@ -36,7 +36,7 @@ static void assert_int(int expected, int actual, const char *message) {
     }
 }
 
-static int add_string_to_strtab(ElfFile *elf_file, const char *name) {
+static int add_string_to_strtab(InputElfFile *elf_file, const char *name) {
     if (elf_file->file_offset + strlen(name) + 1 > MAX_STRTAB_SIZE) {
         printf("Out of memory in MAX_STRTAB_SIZE");
         exit(1);
@@ -50,7 +50,7 @@ static int add_string_to_strtab(ElfFile *elf_file, const char *name) {
     return offset;
 }
 
-static ElfSymbol *add_symbol(ElfFile *elf_file, const char *name, long size, int binding, int type, int section_index, int value) {
+static ElfSymbol *add_symbol(InputElfFile *elf_file, const char *name, long size, int binding, int type, int section_index, int value) {
     elf_file->symbol_count++;
     elf_file->symbol_table = realloc(elf_file->symbol_table, elf_file->symbol_count * sizeof(ElfSymbol));
 
@@ -66,8 +66,8 @@ static ElfSymbol *add_symbol(ElfFile *elf_file, const char *name, long size, int
     return symbol;
 }
 
-ElfFile *init_elf_file(void) {
-    ElfFile *elf_file = calloc(1, sizeof(ElfFile));
+InputElfFile *init_elf_file(void) {
+    InputElfFile *elf_file = calloc(1, sizeof(InputElfFile));
     elf_file->filename = "/_testing.o";
     elf_file->strtab_strings = calloc(1, MAX_STRTAB_SIZE);
     add_string_to_strtab(elf_file, "");
@@ -86,7 +86,7 @@ ElfFile *init_elf_file(void) {
 // 1 - is_library=1
 // 2 - auto: is_library=1, but run with both read_only=1 and read_only=0, like the real linker does
 static int process_one_symbol(const char *name, int size, int binding, int type, int section_index, int value, int library, int read_only) {
-    ElfFile *elf_file = init_elf_file();
+    InputElfFile *elf_file = init_elf_file();
     add_symbol(elf_file, name, size, binding, type, section_index, value);
 
     int symbol_resolutions;

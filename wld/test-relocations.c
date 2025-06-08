@@ -54,7 +54,7 @@ void assert_data(char *data, ...) {
 }
 
 void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset) {
-    RwElfFile *output_elf_file = new_rw_elf_file("", ET_EXEC);
+    OutputElfFile *output_elf_file = new_output_elf_file("", ET_EXEC);
     output_elf_file->tls_template_address = tls_template_address;
     output_elf_file->tls_template_size = tls_template_size;
 
