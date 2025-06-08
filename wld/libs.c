@@ -15,7 +15,7 @@
 
 // Try and find the library on the builtin library paths
 char *search_for_library(List *library_paths, const char *name) {
-    char *filename = malloc(strlen(name) + 5);
+    char *filename = malloc(strlen(name) + 6);
     sprintf(filename, "lib%s.a", name);
     char *path = find_file(library_paths, filename, "library");
     free(filename);
