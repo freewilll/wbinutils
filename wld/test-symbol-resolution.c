@@ -6,6 +6,7 @@
 #include "input-elf.h"
 
 #include "wld/symbols.h"
+#include "wld/wld.h"
 
 #define MAX_STRTAB_SIZE 1024
 
@@ -34,6 +35,11 @@ static void assert_int(int expected, int actual, const char *message) {
         printf("%s: expected %d, got %d\n", message, expected, actual);
         exit(1);
     }
+}
+
+static void run_init_symbols(void) {
+    OutputElfFile *output_elf_file = init_output_elf_file("dummy", OUTPUT_TYPE_STATIC);
+    init_symbols(output_elf_file);
 }
 
 static int add_string_to_strtab(InputElfFile *elf_file, const char *name) {
@@ -108,21 +114,21 @@ static void test_two_strong_symbols(void) {
     // In that case, the first symbol takes precedence
 
     // obj - obj is fail
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Two strong symbols in obj-obj");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_error("Multiple definition of foo", "Two strong symbols in obj-obj");
 
     // obj - lib is ok
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Two strong symbols in obj-lib");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
     assert_no_error("Two strong symbols in obj-lib");
 
     // lib - lib is ok
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
     assert_no_error("Two strong symbols in lib-lib");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 1, 0);
@@ -134,7 +140,7 @@ static void test_two_strong_symbols(void) {
 // The second one can be a object or lib and weak or string
 // The third is like the second
 static void _test_strong_and_weak_symbols(int binding1, int is_lib2, int binding2, int is_lib3, int binding3, int expected_value, const char *message) {
-    init_symbols();
+    run_init_symbols();
 
     // Add the first symbol. It's undefined and in an object
     process_one_symbol("foo", 4, binding1, STT_OBJECT, SHN_UNDEF, 0, 0, 0);
@@ -182,13 +188,13 @@ static void test_strong_and_weak_symbols(void) {
 
 static void test_common_symbols(void) {
     // One common symbol
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("One common");
     assert_int(1, MGGS("foo")->is_common, "One common");
 
     // Undefined, then a common symbol
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
     assert_no_error("Undef then common");
     assert_int(1, is_undefined_symbol("foo"), "Undef then common");
@@ -197,7 +203,7 @@ static void test_common_symbols(void) {
     assert_int(0, is_undefined_symbol("foo"), "Undef then common");
 
     // Defined, then a common symbol
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Defined, then common");
     assert_int(1, MGGS("foo")->src_value, "Defined, then common");
@@ -205,7 +211,7 @@ static void test_common_symbols(void) {
     assert_int(1, MGGS("foo")->src_value, "Defined, then common");
 
     // Common symbol, then defined
-    init_symbols();
+    run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("Common then defined");
     assert_int(1, MGGS("foo")->src_value, "Common then defined");
@@ -218,7 +224,7 @@ static void test_common_symbols(void) {
 // Add two undefined symbols, the first weak, the second strong. The resulting undefined symbol must be strong.
 // This caused a bug where C-ctype.o in glibc wasn't being included, leading to a crash in __ctype_init.
 static void test_two_undefined_symbols_one_weak_one_strong(void) {
-    init_symbols();
+    run_init_symbols();
 
     process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
@@ -232,7 +238,7 @@ static void test_two_undefined_symbols_one_weak_one_strong(void) {
 
 static void test_two_defined_symbols_one_weak_one_strong(void) {
     // A strong symbol in a library doesn't get it to be pulled in if a weak symbol already is present
-    init_symbols();
+    run_init_symbols();
 
     // Add an undefined symbol so that the library gets pulled in
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
@@ -251,7 +257,7 @@ static void test_two_defined_symbols_one_weak_one_strong(void) {
 
     // If an object file in a library is loaded, and has a strong symbol, it overrides an already
     // resolved weak symbol.
-    init_symbols();
+    run_init_symbols();
 
     // Add an undefined symbol so that the library gets pulled in
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);

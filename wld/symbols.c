@@ -10,6 +10,8 @@
 #include "wld/script.h"
 #include "wld/wld.h"
 
+#define SYMBOL_IS_IN_DYNSYM(symbol) (strcmp((symbol)->name, ".") && ((symbol)->binding == STB_GLOBAL || (symbol)->binding == STB_WEAK || is_undefined_symbol((symbol)->name)))
+
 static const char *SYMBOL_TYPE_NAMES[] = {
     "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
     "?", "?", "?", "?", "?", "?", "?", "?"
@@ -81,7 +83,7 @@ Symbol *get_undefined_symbol(const char *name) {
 }
 
 // Is a symbol in the undefined symbols set?
-int is_undefined_symbol(char *name) {
+int is_undefined_symbol(const char *name) {
     return get_undefined_symbol(name) != NULL;
 }
 
@@ -667,7 +669,7 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
     }
 }
 
-// Add the symbols to the ELF symbol table.
+// Add the symbols to the ELF symbol tables.
 // The values and will be updated later.
 // section indexes are also updated later unless it's an ABS section.
 void make_elf_symbols(OutputElfFile *output_elf_file) {
@@ -692,17 +694,77 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     }
 }
 
+// Add a symbol to the ELF symbol table dynsym
+// This function must be called with all local symbols first, then all global symbols
+static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index) {
+    InputSection *section_dynsym = output_elf_file->section_dynsym;
+    InputSection *section_dynstr = output_elf_file->section_dynstr;
+
+    // Add a string to the strtab unless name is "".
+    // Empty names are all mapped to the first entry in the string table.
+    int dynstr_offset = *name ? add_to_input_section(section_dynstr, name, strlen(name) + 1) : 0;
+
+    ElfSymbol *symbol = allocate_in_section(section_dynsym, sizeof(ElfSymbol));
+    memset(symbol, 0, sizeof(ElfSymbol));
+    symbol->st_name = dynstr_offset;
+    symbol->st_value = value;
+    symbol->st_size = size;
+    symbol->st_info = (binding << 4) + type;
+    symbol->st_other = visibility;
+    symbol->st_shndx = section_index;
+
+    int index = symbol - (ElfSymbol *) section_dynsym->data;
+
+    return index;
+}
+
+// For libraries, add the symbols to the ELF dynsym table
+void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+
+    InputSection *section_dynsym = output_elf_file->section_dynsym;
+    add_elf_dyn_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
+
+    int count = 0;
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+
+        if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
+
+        int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
+        section_dynsym = output_elf_file->section_dynsym;
+        symbol->dst_dynsym_index = add_elf_dyn_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
+
+        count++;
+    }
+
+    output_elf_file->dynsym_symbol_count = count;
+}
+
 // Set the symbol's value and section indexes
 void update_elf_symbols(OutputElfFile *output_elf_file) {
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         if (!strcmp(name, ".")) continue;
+
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->is_abs && !symbol->output_section) continue; // Weak symbols may not be defined
+
+        // symtab
         ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
         ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
         elf_symbol->st_value = symbol->dst_value;
         elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
+
+        // dynsym
+        if (output_elf_file->type == ET_DYN) {
+            elf_symbols = (ElfSymbol *) output_elf_file->section_dynsym->data;
+            elf_symbol = &elf_symbols[symbol->dst_dynsym_index];
+            elf_symbol->st_value = symbol->dst_value;
+            elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
+
+        }
     }
 }
 
@@ -712,12 +774,13 @@ static void add_hidden_symbol(char *name) {
     symbol->visibility = STV_HIDDEN;
 }
 
-void init_symbols(void) {
+void init_symbols(OutputElfFile *output_elf_file) {
     global_symbol_table = new_symbol_table();
     local_symbol_tables = new_strmap();
     provided_symbols = new_strmap_ordered();
 
-    add_hidden_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
+    if (output_elf_file->type == ET_EXEC)
+        add_hidden_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
 }
 
 // Create the .got section, if needed
@@ -733,7 +796,7 @@ void create_got_section(OutputElfFile *output_elf_file) {
     if (!got_entries_count) return;
 
     InputSection *extra_section = create_extra_section(output_elf_file, GOT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
-    extra_section->size = 8 * got_entries_count;;
+    extra_section->size = 8 * got_entries_count;
     extra_section->data = malloc(extra_section->size);
 }
 
@@ -885,4 +948,62 @@ void update_iplt(OutputElfFile *output_elf_file) {
     // Store the addresses, for use in the relocations code
     output_elf_file->iplt_virt_address = iplt_address;
     output_elf_file->got_iplt_virt_address = got_iplt_address;
+}
+
+// ELF hash function
+// See https://refspecs.linuxfoundation.org/elf/gabi4+/ch5.dynamic.html#hash
+static uint32_t elf_hash(const unsigned char *name) {
+    uint32_t h = 0;
+
+    while (*name) {
+        h = (h << 4) + *name++;
+        uint32_t g = h & 0xf0000000;
+        h ^= g >> 24;
+        h &= ~g;
+    }
+
+    return h;
+}
+
+// For ET_DYN files, make a hash table of the symbols
+void make_symbol_hashes(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+
+    int dynsym_size = output_elf_file->dynsym_symbol_count + 1; // Include first null entry
+
+    int bucket_count = dynsym_size / 4 + 1;
+    int chain_count = dynsym_size;
+
+    // Count symbols
+    InputSection *section_hash = output_elf_file->section_hash;
+    section_hash->size = 4 * (bucket_count + chain_count + 2);
+    section_hash->data = calloc(1, section_hash->size);
+
+    ((uint32_t *) section_hash->data)[0] = bucket_count;
+    ((uint32_t *) section_hash->data)[1] = chain_count;
+
+    uint32_t *buckets = section_hash->data + 8;
+    uint32_t *chains = buckets + bucket_count;
+
+    int i = 1;
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+
+        if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
+
+        uint32_t hash = elf_hash(name);
+        uint32_t bucket = hash % bucket_count;
+
+        if (buckets[bucket] == 0) {
+            buckets[bucket] = i;
+        }
+        else {
+            uint32_t index = buckets[bucket];
+            while (chains[index] != 0) index = chains[index];
+            chains[index] = i;
+        }
+
+        i++;
+    }
 }

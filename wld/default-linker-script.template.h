@@ -13,6 +13,7 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    . = ALIGN(CONSTANT (MAXPAGESIZE));                                      \n"
 
 #ifdef SHARED
+    "    .hash :  { *(.hash)                                                    }\n"
     "    .dynsym: { *(.dynsym)                                                  }\n"
     "    .dynstr: { *(.dynstr)                                                  }\n"
 #endif

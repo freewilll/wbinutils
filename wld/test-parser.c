@@ -7,6 +7,7 @@
 #include "wld/parser.h"
 #include "wld/script.h"
 #include "wld/symbols.h"
+#include "wld/wld.h"
 
 static List *linker_script;
 
@@ -24,7 +25,12 @@ static void assert_string(const char *expected, const char *actual, const char *
     }
 }
 
-static void run(char *script) {
+static void run_init_symbols(void) {
+    OutputElfFile *output_elf_file = init_output_elf_file("dummy", OUTPUT_TYPE_STATIC);
+    init_symbols(output_elf_file);
+}
+
+static void run_parser(char *script) {
     init_lexer_from_string(script);
     linker_script = parse();
 }
@@ -36,12 +42,12 @@ static uint64_t evaluate_test_node(Node *node) {
 }
 
 static void test_comments(void) {
-    run("/* foo */");
+    run_parser("/* foo */");
     assert_int(linker_script->length, 0, "Comments");
 }
 
 static void test_entry(void) {
-    run("ENTRY(foo)");
+    run_parser("ENTRY(foo)");
     assert_int(linker_script->length, 1, "ENTRY(foo)");
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_ENTRY, command->type, "ENTRY(foo)");
@@ -49,7 +55,7 @@ static void test_entry(void) {
 }
 
 static void test_double_entry(void) {
-    run("ENTRY(foo);ENTRY(bar)");
+    run_parser("ENTRY(foo);ENTRY(bar)");
     assert_int(2, linker_script->length, "ENTRY(foo);ENTRY(bar)");
 
     ScriptCommand *command = linker_script->elements[0];
@@ -69,7 +75,7 @@ void test_sections_assignment() {
         "    PROVIDE_HIDDEN(c = 3)\n"
         "}";
 
-    run(script);
+    run_parser(script);
     assert_int(1, linker_script->length, script);
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_SECTIONS, command->type, script);
@@ -110,7 +116,7 @@ void test_sections_output() {
         "    }\n"
         "}\n";
 
-    run(script);
+    run_parser(script);
     assert_int(1, linker_script->length, script);
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_SECTIONS, command->type, script);
@@ -191,21 +197,21 @@ void test_sections_output() {
 }
 
 static void test_parse_default_linker_script() {
-    init_symbols();
-    run(DEFAULT_LINKER_SCRIPT_STATIC);
+    run_init_symbols();
+    run_parser(DEFAULT_LINKER_SCRIPT_STATIC);
 }
 
 static void test_parse_output_format() {
-    run("OUTPUT_FORMAT(foo)");
+    run_parser("OUTPUT_FORMAT(foo)");
     assert_int(0, linker_script->length, "OUTPUT_FORMAT(foo)");
 
-    run("OUTPUT_FORMAT(foo, bar, baz)");
+    run_parser("OUTPUT_FORMAT(foo, bar, baz)");
     assert_int(0, linker_script->length, "OUTPUT_FORMAT(foo, bar, baz)");
 }
 
 static void test_parse_group() {
     char *script = "GROUP(/path/libm.a /path/libm2.a)";
-    run(script);
+    run_parser(script);
 
     assert_int(1, linker_script->length, script);
     ScriptCommand *command = linker_script->elements[0];
@@ -218,7 +224,7 @@ static void test_parse_group() {
 
     // With filenames delimited by commas
     script = "GROUP(/path/libm.a, /path/libm2.a)";
-    run(script);
+    run_parser(script);
 
     assert_int(1, linker_script->length, script);
     command = linker_script->elements[0];

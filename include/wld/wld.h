@@ -13,7 +13,7 @@
 #define MAXPAGESIZE    0x1000
 #define COMMONPAGESIZE 0x1000
 
-#define DYNAMIC_SECTION_ENTRY_COUNT 5
+#define DYNAMIC_SECTION_ENTRY_COUNT 6
 
 #define GOT_SECTION_NAME        ".got"
 #define GOT_PLT_SECTION_NAME    ".got.plt"
@@ -22,6 +22,7 @@
 #define DYNAMIC_SECTION_NAME    ".dynamic"
 #define DYNSTR_SECTION_NAME     ".dynstr"
 #define DYNSYM_SECTION_NAME     ".dynsym"
+#define HASH_SECTION_NAME       ".hash"
 
 #define DEBUG_SYMBOL_RESOLUTION 0
 #define DEBUG_RELOCATIONS 0

@@ -1,4 +1,4 @@
-# A simple executable with the smallest possible lib. No relocations.
+# A simple executable that uses a data and function symbol from a library
 
 WLD = ../../../bin/wld
 
@@ -11,11 +11,23 @@ all: test
 
 test: run-main
 
+libtest.o: libtest.c
+	${CC} -shared -c libtest.c -o libtest.o
+
 main.o: main.c
 	${CC} -c main.c -o main.o
 
-libtest.so: libtest.c
-	${CC} -shared libtest.c -o libtest.so
+libtest.so: libtest.o
+	${WLD} \
+		-shared \
+		-L/usr/lib \
+		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-o libtest.so \
+		libtest.o \
+		-lc \
+		-lgcc \
+		-lgcc_eh \
+		-lc \
 
 main: main.o libtest.so
 	@ld \

@@ -56,6 +56,29 @@ void *load_section(InputElfFile *elf_file, InputSection *section) {
     return section->data;
 }
 
+// Allocate space at the end of a section and return a pointer to it.
+// Dynamically allocate space size as needed.
+void *allocate_in_section(InputSection *section, int size) {
+    int new_section_size = section->size + size;
+    if (new_section_size > section->allocated) {
+        if (!section->allocated) section->allocated = 1;
+        while (new_section_size > section->allocated) section->allocated *= 2;
+        section->data = realloc(section->data, section->allocated);
+    }
+
+    void *result = section->data + section->size;
+    section->size = new_section_size;
+
+    return result;
+}
+
+// Copy src to the end of a section and return the offset
+int add_to_input_section(InputSection *section, const void *src, int size) {
+    void *data = allocate_in_section(section, size);
+    memcpy(data, src, size);
+    return data - section->data;
+}
+
 // Ensure the file is an x86_64 ELF object file
 static void check_file(InputElfFile *elf_file) {
     ElfHeader *elf_header = elf_file->elf_header;

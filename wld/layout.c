@@ -92,7 +92,7 @@ void remove_empty_sections(OutputElfFile *output_elf_file) {
 
         // Only include the first NULL section. The other NULL sections are artifacts of the layout and
         // are discarded here.
-        if (i == 0 || section->type == SHT_STRTAB || section->type == SHT_SYMTAB || section->type == SHT_DYNAMIC || section->keep || section->size) {
+        if (i == 0 || section->type == SHT_STRTAB || section->type == SHT_SYMTAB || section->keep || section->size) {
             append_to_list(new_section_list, section);
         }
         else {
@@ -563,7 +563,6 @@ static void reset_layout_complete(List *input_elf_files) {
             output_section->layout_complete = 0;
         }
     }
-
 }
 
 // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script.

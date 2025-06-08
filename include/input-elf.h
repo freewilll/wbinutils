@@ -11,6 +11,8 @@
 typedef struct input_section {
     char *name;                           // Section name
     int index;                            // Index in the ELF section headers table
+    int allocated;                        // Amount of bytes allocated for data, when dynamically adding to data
+    void *data;                           // Potentially loaded section, or synthetic section
     uint64_t size;                        // Size in bytes of the section in the file image. May be 0.
     uint32_t type;                        // Identifies the type of this header.
     uint64_t flags;                       // Identifies the attributes of the section
@@ -19,7 +21,6 @@ typedef struct input_section {
     uint64_t align;                       // Alignment
     int dst_offset;                       // Offset in output section
     OutputSection *output_section;        // Target Section (for WLD)
-    void *data;                           // Potentially loaded section, or synthetic section
 } InputSection;
 
 // In-memory input ELF file
@@ -41,6 +42,8 @@ InputElfFile *open_elf_file(const char *filename);
 InputElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
 void *load_section_uncached(InputElfFile *elf_file, int section_index);
 void *load_section(InputElfFile *elf_file, InputSection *section);
+void *allocate_in_section(InputSection *section, int size);
+int add_to_input_section(InputSection *section, const void *src, int size);
 void dump_symbols(InputElfFile *elf_file);
 
 #endif

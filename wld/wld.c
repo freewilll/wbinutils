@@ -156,23 +156,19 @@ static void set_entrypoint_symbol(OutputElfFile *output_elf_file, List *input_el
     }
 }
 
-// Add .dynamic section if it's a shared library
-static void create_dynamic_section(OutputElfFile *output_elf_file) {
+// Add several sections if it's a shared library
+static void create_dynamic_sections(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
 
-    InputSection *section_dynamic = get_or_create_extra_section(output_elf_file, DYNAMIC_SECTION_NAME, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE, 8);
+    InputSection *section_dynamic = create_extra_section(output_elf_file, DYNAMIC_SECTION_NAME, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE, 8);
     section_dynamic->size = DYNAMIC_SECTION_ENTRY_COUNT * sizeof(ElfDyn);
     section_dynamic->data = calloc(1, section_dynamic->size);
 
-    // TODO actually put something in .dynstr
-    InputSection *section_dynstr = get_or_create_extra_section(output_elf_file, DYNSTR_SECTION_NAME, SHT_STRTAB, SHF_ALLOC, 1);
-    section_dynstr->size = 0x100;
-    section_dynstr->data = calloc(1, section_dynstr->size);
+    output_elf_file->section_dynstr = create_extra_section(output_elf_file, DYNSTR_SECTION_NAME, SHT_STRTAB, SHF_ALLOC, 1);
+    add_to_input_section(output_elf_file->section_dynstr, "", 1);
 
-    // TODO actually put something in .dynsym
-    InputSection *section_dynsym = get_or_create_extra_section(output_elf_file, DYNSYM_SECTION_NAME, SHT_DYNSYM, SHF_ALLOC, 1);
-    section_dynsym->size = sizeof(ElfSymbol); // TODO
-    section_dynsym->data = calloc(1, section_dynsym->size);
+    output_elf_file->section_dynsym = create_extra_section(output_elf_file, DYNSYM_SECTION_NAME, SHT_DYNSYM, SHF_ALLOC, 1);
+    output_elf_file->section_hash = create_extra_section(output_elf_file, HASH_SECTION_NAME, SHT_HASH, SHF_ALLOC, 8);
 }
 
 static void set_in_dynamic_section(OutputElfFile *output_elf_file, int index, int64_t tag, uint64_t val_or_addr) {
@@ -191,29 +187,36 @@ static void update_dynamic_section(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
 
     InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
-    InputSection *section_dynstr = get_extra_section(output_elf_file, DYNSTR_SECTION_NAME);
-    InputSection *section_dynsym = get_extra_section(output_elf_file, DYNSYM_SECTION_NAME);
+    InputSection *section_dynstr = output_elf_file->section_dynstr;
+    InputSection *section_dynsym = output_elf_file->section_dynsym;
+    InputSection *section_hash = output_elf_file->section_hash;
 
     set_in_dynamic_section(output_elf_file, 0, DT_STRTAB, section_dynstr->output_section->address);
     set_in_dynamic_section(output_elf_file, 1, DT_SYMTAB, section_dynsym->output_section->address);
     set_in_dynamic_section(output_elf_file, 2, DT_STRSZ,  section_dynstr->size);
     set_in_dynamic_section(output_elf_file, 3, DT_SYMENT, sizeof(ElfSymbol));
-    set_in_dynamic_section(output_elf_file, 4, DT_NULL, 0);
+    set_in_dynamic_section(output_elf_file, 4, DT_HASH, section_hash->output_section->address);
+    set_in_dynamic_section(output_elf_file, 5, DT_NULL, 0);
 }
 
 // Associate sections using sh_info
 static void associate_sections(OutputElfFile *output_elf_file) {
     if (output_elf_file->type == ET_DYN) {
-        InputSection *section_dynstr = get_extra_section(output_elf_file, DYNSTR_SECTION_NAME);
+        InputSection *section_dynstr = output_elf_file->section_dynstr;
 
         InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
         ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_dynamic->output_section->index];
         h->sh_link = section_dynstr->output_section->index;
 
-        InputSection *section_dynsym = get_extra_section(output_elf_file, DYNSYM_SECTION_NAME);
+        InputSection *section_dynsym = output_elf_file->section_dynsym;
         h = &output_elf_file->elf_section_headers[section_dynsym->output_section->index];
         h->sh_link = section_dynstr->output_section->index;
+        h->sh_info = 1; // The first non-local index. The 0th entry is the local null symbol
         h->sh_entsize = sizeof(ElfSymbol);
+
+        InputSection *section_hash = output_elf_file->section_hash;
+        h = &output_elf_file->elf_section_headers[section_hash->output_section->index];
+        h->sh_link = section_dynsym->output_section->index;
     }
 }
 
@@ -473,14 +476,18 @@ static void copy_extra_sections_to_output(OutputElfFile *output_elf_file) {
         InputSection *input_section = strmap_ordered_get(output_elf_file->extra_sections, name);
 
         const char *section_name = input_section->name;
-        OutputSection *rw_section = input_section->output_section;
-        if (!rw_section) panic("Extra section %s did not get included in the output", section_name);
+        OutputSection *output_section = input_section->output_section;
+        if (!output_section) panic("Extra section %s did not get included in the output", section_name);
 
         // Allocate memory if not already done
-        if (!rw_section->data) rw_section->data = calloc(1, rw_section->size);
+        if (!output_section->data) output_section->data = calloc(1, output_section->size);
 
         // Copy the data
-        memcpy(rw_section->data + input_section->dst_offset, input_section->data, input_section->size);
+        if (input_section->dst_offset + input_section->size > output_section->size)
+            panic("Attempt to write beyond allocated space of output section %s: %#lx > %#lx",
+                output_section->name, input_section->dst_offset + input_section->size, output_section->size);
+
+        memcpy(output_section->data + input_section->dst_offset, input_section->data, input_section->size);
     }
 }
 
@@ -489,7 +496,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     OutputElfFile *output_elf_file = init_output_elf_file(output_filename, output_type);
 
     // Setup symbol tables
-    init_symbols();
+    init_symbols(output_elf_file);
 
     parse_linker_scripts(output_elf_file, library_paths, linker_scripts);
 
@@ -524,18 +531,26 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     process_ifuncs(output_elf_file, input_elf_files);
 
     // Add .dynamic section if it's a shared library
-    create_dynamic_section(output_elf_file);
+    create_dynamic_sections(output_elf_file);
 
     // Allocate memory for extra sections like .got.plt, .iplt and .rela.iplt
     allocate_extra_sections(output_elf_file);
 
+    // For libraries, add the symbols to the ELF dynsym table
+    make_elf_dyn_symbols(output_elf_file);
+
+    // For ET_DYN files, make a hash table of the symbols
+    make_symbol_hashes(output_elf_file);
+
     // Run through the linker script again to include extra sections
+    // At this point, input section sizes aren't allowed to change any more
     layout_input_sections(output_elf_file, input_elf_files);
 
-    // If there are any common symbols, create a bss section and allocate values the symbols
+    // If there are any common symbols, create a bss section and allocate values to the symbols
     add_common_symbols_to_bss(output_elf_file);
 
     // Run through linker script again, determine section offsets and assign addresses to symbols in the script
+    // At this point, output section sizes aren't allowed to change any more
     layout_output_sections(output_elf_file, input_elf_files);
 
     // Update values in .dynamic section

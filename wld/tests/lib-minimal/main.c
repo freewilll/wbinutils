@@ -1,3 +1,9 @@
-// It doesn't get much simpler than this
+// Use a function and data from the library
 
-int main() {}
+extern int i;
+
+int foo();
+
+int main() {
+    return foo() + i - 42;
+}
