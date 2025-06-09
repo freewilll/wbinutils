@@ -5,6 +5,10 @@
 
 #include "error.h"
 #include "list.h"
+#include "input-elf.h"
+
+#include "wld/libs.h"
+#include "wld/utils.h"
 
 const char *BUILTIN_LIBRARY_PATHS[] = {
     "/usr/local/lib/x86_64-linux-gnu",
@@ -21,9 +25,9 @@ const char *BUILTIN_LIBRARY_PATHS[] = {
     "/usr/x86_64-linux-gnu/lib",
 };
 
-// Try and find the library on the builtin library paths
-char *find_file(List *library_paths, const char *path, const char *what) {
-    int path_len = strlen(path);
+// Try and find the library on the builtin library paths. Return NULL if not found
+char *find_file(List *library_paths, const char *filename, const char *what) {
+    int path_len = strlen(filename);
 
     int found = -1;
     char *test_path;
@@ -33,7 +37,7 @@ char *find_file(List *library_paths, const char *path, const char *what) {
         char *search_path = (char *) library_paths->elements[i];
 
         test_path = malloc(strlen(search_path) + path_len + 2);
-        sprintf(test_path, "%s/%s", search_path, path);
+        sprintf(test_path, "%s/%s", search_path, filename);
 
         if (!access(test_path, F_OK)) {
             found = i;
@@ -46,7 +50,7 @@ char *find_file(List *library_paths, const char *path, const char *what) {
         int system_library_count = sizeof(BUILTIN_LIBRARY_PATHS) / sizeof(BUILTIN_LIBRARY_PATHS[0]);
         for (int i = 0; i < system_library_count; i++) {
             test_path = malloc(strlen(BUILTIN_LIBRARY_PATHS[i]) + path_len + 2);
-            sprintf(test_path, "%s/%s", BUILTIN_LIBRARY_PATHS[i], path);
+            sprintf(test_path, "%s/%s", BUILTIN_LIBRARY_PATHS[i], filename);
 
             if (!access(test_path, F_OK)) {
                 found = i;
@@ -55,9 +59,35 @@ char *find_file(List *library_paths, const char *path, const char *what) {
         }
     }
 
-    if (found == -1) error("Cannot find %s %s", what, path);
+    if (found == -1) return NULL;
 
     return test_path;
+}
+
+// Try and find the library on the builtin library paths. Fail if not present.
+char *must_find_file(List *library_paths, const char *filename, const char *what) {
+    char *path = find_file(library_paths, filename, what);
+    if (!path) error("Cannot find %s %s", what, path);
+    return path;
+}
+
+FileType identify_library_file(const char *filename) {
+    FILE *file = fopen(filename, "r");
+
+    if (!file) {
+        perror(filename);
+        exit(1);
+    }
+
+    if (file_is_archive_file(file, filename))
+        return FT_ARCHIVE;
+    else if (file_is_shared_library_file(filename))
+        return FT_SHARED_LIBRARY;
+    else if (is_gnu_linker_script_file(filename))
+        return FT_LINKER_SCRIPT;
+    else
+        return FT_UNKNOWN;
+
 }
 
 // Match a string to a pattern. The pattern may have * and ?. [] isn't implemented

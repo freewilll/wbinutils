@@ -20,7 +20,7 @@ typedef struct input_section {
     uint32_t info;                        // Contains extra information about the section, from ELF
     uint64_t align;                       // Alignment
     int dst_offset;                       // Offset in output section
-    OutputSection *output_section;        // Target Section (for WLD)
+    OutputSection *output_section;        // Target Section (for wld)
 } InputSection;
 
 // In-memory input ELF file
@@ -30,6 +30,7 @@ typedef struct input_elf_file {
     int file_offset;                    // Offset in file where the object begins, used for archives
     ElfHeader *elf_header;
     ElfSectionHeader *section_headers;  // All section headers
+    int type;                           // Set to elf_header->type
     char *section_header_strings;
     List *section_list;
     StrMap *section_map;
@@ -40,6 +41,7 @@ typedef struct input_elf_file {
 
 InputElfFile *open_elf_file(const char *filename);
 InputElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
+int file_is_shared_library_file(const char *filename);
 void *load_section_uncached(InputElfFile *elf_file, int section_index);
 void *load_section(InputElfFile *elf_file, InputSection *section);
 void *allocate_in_section(InputSection *section, int size);

@@ -56,7 +56,7 @@ extern char *cur_identifier;                // Current identifier
 extern long cur_long;                       // Current integer
 
 void free_lexer(void);
-void init_lexer(char *filename);
+void init_lexer(const char *filename);
 void init_lexer_from_string(char *string);
 void next(void);
 void expect(int token, char *what);

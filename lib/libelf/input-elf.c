@@ -29,6 +29,7 @@ static void read_header(InputElfFile *elf_file) {
     elf_file->elf_header = malloc(sizeof(ElfHeader));
     int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
     if (read != sizeof(ElfHeader)) error("Unable to read input file: %s", elf_file->filename);
+    elf_file->type = elf_file->elf_header->e_type;
 }
 
 // Read from the file into a buffer
@@ -79,15 +80,20 @@ int add_to_input_section(InputSection *section, const void *src, int size) {
     return data - section->data;
 }
 
+static int has_elf_magic(InputElfFile *elf_file) {
+    ElfHeader *elf_header = elf_file->elf_header;
+
+    return (elf_header->ei_magic0 == 0x7f &&
+        elf_header->ei_magic1 == 'E'  &&
+        elf_header->ei_magic2 == 'L'  &&
+        elf_header->ei_magic3 == 'F');
+}
+
 // Ensure the file is an x86_64 ELF object file
 static void check_file(InputElfFile *elf_file) {
     ElfHeader *elf_header = elf_file->elf_header;
 
-    // Ensure it's an elf file
-        if (elf_header->ei_magic0 != 0x7f ||
-            elf_header->ei_magic1 != 'E'  ||
-            elf_header->ei_magic2 != 'L'  ||
-            elf_header->ei_magic3 != 'F')
+    if (!has_elf_magic(elf_file))
         error("Not an elf file: %s", elf_file->filename);
 
     // 32 vs bit
@@ -108,8 +114,8 @@ static void check_file(InputElfFile *elf_file) {
     if (elf_header->ei_osabi != ELF_OSABI_NONE && elf_header->ei_osabi != ELF_OSABI_GNU)
         error("Invalid ABI version %d for file: %s", elf_header->ei_osabi, elf_file->filename);
 
-    if (elf_header->e_type != ET_REL)
-        error("ELF file isn't relocatable: %s", elf_file->filename);
+    if (elf_header->e_type != ET_REL && elf_header->e_type != ET_DYN)
+        error("ELF file isn't an object or shared-object file: %s", elf_file->filename);
 
     if (elf_header->e_machine != E_MACHINE_TYPE_X86_64)
         error("ELF file isn't for x86_64: %s", elf_file->filename);
@@ -181,8 +187,8 @@ static void read_common_file_data(InputElfFile *elf_file) {
     load_sections(elf_file);
 }
 
-// Open an object file
-InputElfFile *open_elf_file(const char *filename) {
+// Open an object file but don't do anything with it
+static InputElfFile *open_elf_file_internal(const char *filename) {
     InputElfFile *elf_file = calloc(1, sizeof(InputElfFile));
     elf_file->filename = strdup(filename);
     elf_file->file = fopen(filename, "r");
@@ -192,8 +198,13 @@ InputElfFile *open_elf_file(const char *filename) {
         exit(1);
     }
 
-    read_common_file_data(elf_file);
+    return elf_file;
+}
 
+// Open an object file
+InputElfFile *open_elf_file(const char *filename) {
+    InputElfFile *elf_file = open_elf_file_internal(filename);
+    read_common_file_data(elf_file);
     return elf_file;
 }
 
@@ -207,6 +218,13 @@ InputElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int off
     read_common_file_data(elf_file);
 
     return elf_file;
+}
+
+int file_is_shared_library_file(const char *filename) {
+    InputElfFile *elf_file = open_elf_file_internal(filename);
+    read_header(elf_file);
+    if (!has_elf_magic(elf_file)) return 0;
+    return elf_file->elf_header->e_type == ET_DYN;
 }
 
 // Print readelf compatible symbol table output

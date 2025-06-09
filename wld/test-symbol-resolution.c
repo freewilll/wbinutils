@@ -99,11 +99,11 @@ static int process_one_symbol(const char *name, int size, int binding, int type,
 
     if (library == 2) {
         // Only include the library if it resolves other symbols.
-        symbol_resolutions = process_elf_file_symbols(elf_file, 1, 1);
-        if (symbol_resolutions) process_elf_file_symbols(elf_file, 1, 0);
+        symbol_resolutions = process_elf_file_symbols(elf_file, 1, 0 ,1);
+        if (symbol_resolutions) process_elf_file_symbols(elf_file, 1, 0, 0);
     }
     else {
-        process_elf_file_symbols(elf_file, library, read_only);
+        process_elf_file_symbols(elf_file, library, 0, read_only);
     }
 
     return symbol_resolutions;

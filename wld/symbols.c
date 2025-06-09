@@ -93,22 +93,23 @@ static void remove_undefined_symbol(const char *name) {
     strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
 }
 
-static Symbol *new_symbol(const char *name, int type, int binding, int other, int size, int is_library) {
+static Symbol *new_symbol(const char *name, int type, int binding, int other, int size, int is_library, int is_shared_library) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
-    symbol->name           = strdup(name);
-    symbol->type           = type;
-    symbol->binding        = binding;
-    symbol->other          = other;
-    symbol->size           = size;
-    symbol->src_is_library = is_library;
+    symbol->name                  = strdup(name);
+    symbol->type                  = type;
+    symbol->binding               = binding;
+    symbol->other                 = other;
+    symbol->size                  = size;
+    symbol->src_is_library        = is_library;
+    symbol->src_is_shared_library = is_shared_library;
 
     return symbol;
 }
 
-static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int type, int binding, int other, int size, int is_library) {
+static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int type, int binding, int other, int size, int is_library, int is_shared_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s binding=%s\n", name, SYMBOL_BINDING_NAMES[binding]);
-    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
+    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library, is_shared_library);
     strmap_ordered_put(st->defined_symbols, name, symbol);
     return symbol;
 }
@@ -130,7 +131,7 @@ static int resolve_undefined_symbol(const char *name, int is_library, int read_o
 
 static Symbol *add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
-    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library);
+    Symbol *symbol = new_symbol(name, type, binding, other, size, is_library, 0);
     strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
     return symbol;
 }
@@ -151,13 +152,13 @@ Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment) {
         symbol = strmap_ordered_get(provided_symbols, name);
         if (symbol) return symbol;
 
-        symbol = new_symbol(name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
+        symbol = new_symbol(name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0, 0);
         strmap_ordered_put(provided_symbols, name, symbol);
         if (assignment->provide_hidden) symbol->visibility = STV_HIDDEN;
         symbol->is_abs = 1;
     }
     else {
-        symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0);
+        symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, 0, 0);
         symbol->is_abs = 1;
         resolve_undefined_symbol(name, 0, 0);
     }
@@ -185,7 +186,7 @@ static void fail(InputElfFile *elf_file, char *format, ...) {
     verror_in_file(format, ap);
 }
 
-static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int read_only, ElfSymbol *symbol) {
+static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int is_shared_library, int read_only, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
     char *name = &elf_file->strtab_strings[symbol->st_name];
 
@@ -197,7 +198,7 @@ static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol
     InputSection *input_section = elf_file->section_list->elements[symbol->st_shndx];
 
     if (!read_only) {
-        Symbol *new_symbol = add_defined_symbol(local_symbol_table, name, type, binding, other, size, is_library);
+        Symbol *new_symbol = add_defined_symbol(local_symbol_table, name, type, binding, other, size, is_library, is_shared_library);
         new_symbol->src_elf_file = elf_file;
         new_symbol->input_section = input_section;
         new_symbol->src_value = symbol->st_value;
@@ -210,7 +211,7 @@ static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol
 // The found symbol may be undefined.
 // Returns if the symbol has resolved an undefined symbol
 // Not all the cases in https://www.airs.com/blog/archives/49 are handled, just the simple ones.
-static int handle_common_symbol(InputElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+static int handle_common_symbol(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int result = 0;
 
     int strtab_offset = symbol->st_name;
@@ -255,7 +256,7 @@ static int handle_common_symbol(InputElfFile *elf_file, int is_library, int read
         // The symbol has not yet been defined
         if (!read_only) {
             // Add a new symbol
-            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
+            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library, is_shared_library);
             new_symbol->src_elf_file = elf_file;
             new_symbol->input_section = NULL;
             new_symbol->src_value = symbol->st_value;
@@ -270,7 +271,7 @@ static int handle_common_symbol(InputElfFile *elf_file, int is_library, int read
 
 // The new symbol is ABS
 // Not very much is checked here, only undefined symbols are resolved.
-static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
     char *name = &elf_file->strtab_strings[symbol->st_name];
 
@@ -289,7 +290,7 @@ static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int read_on
         // The symbol has not yet been defined
         if (!read_only) {
             // Add a new symbol
-            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
+            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library, is_shared_library);
             new_symbol->src_elf_file = elf_file;
             new_symbol->input_section = NULL;
             new_symbol->src_value = symbol->st_value;
@@ -304,7 +305,7 @@ static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int read_on
 
 // Handle a symbol where the left side is defined. Both are not common.
 // Returns if the symbol has resolved an undefined symbol
-static int handle_non_common_symbol(InputElfFile *elf_file, int is_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
+static int handle_non_common_symbol(InputElfFile *elf_file, int is_library,int is_shared_library,  int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int result = 0;
 
     int strtab_offset = symbol->st_name;
@@ -355,7 +356,7 @@ static int handle_non_common_symbol(InputElfFile *elf_file, int is_library, int 
         // The symbol has not yet been defined
         if (!read_only) {
             // Add a new symbol
-            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library);
+            Symbol *new_symbol = add_defined_symbol(global_symbol_table, name, type, binding, other, size, is_library, is_shared_library);
             new_symbol->src_elf_file = elf_file;
             new_symbol->input_section = input_section;
             new_symbol->src_value = symbol->st_value;
@@ -370,7 +371,7 @@ static int handle_non_common_symbol(InputElfFile *elf_file, int is_library, int 
 
 // Process all symbols in a file. Returns the amount of undefined symbols in
 // the symbol table that would be resolved.
-int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int read_only) {
+int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only) {
     last_error_message = NULL;
     int resolved_symbols = 0;
 
@@ -409,7 +410,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int read_on
         }
 
         if (is_local) {
-            resolved_symbols += handle_local_symbol(elf_file, local_symbol_table, is_library, read_only, symbol);
+            resolved_symbols += handle_local_symbol(elf_file, local_symbol_table, is_library, is_shared_library, read_only, symbol);
         }
         else if (is_undef) {
             // The new symbol is undefined
@@ -438,11 +439,11 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int read_on
             Symbol *found_symbol = get_defined_symbol(global_symbol_table, name);
 
             if ((found_symbol && found_symbol->is_common) || is_common)
-                resolved_symbols += handle_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
+                resolved_symbols += handle_common_symbol(elf_file, is_library, is_shared_library, read_only, found_symbol, symbol);
             else if ((found_symbol && found_symbol->is_abs) || is_abs)
-                resolved_symbols += handle_abs_symbol(elf_file, is_library, read_only, found_symbol, symbol);
+                resolved_symbols += handle_abs_symbol(elf_file, is_library, is_shared_library, read_only, found_symbol, symbol);
             else
-                resolved_symbols += handle_non_common_symbol(elf_file, is_library, read_only, found_symbol, symbol);
+                resolved_symbols += handle_non_common_symbol(elf_file, is_library, is_shared_library, read_only, found_symbol, symbol);
         }
     }
 
@@ -628,6 +629,8 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
 
+        if (symbol->src_is_shared_library) continue;
+
         if (symbol->is_abs) {
             // Do nothing, it's already resolved
         }
@@ -694,15 +697,21 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     }
 }
 
+// Add a string to the dynstr section unless name is "".
+// Empty names are all mapped to the first entry in the string table.
+int add_dynstr_string(OutputElfFile *output_elf_file, const char *name) {
+    InputSection *section_dynstr = output_elf_file->section_dynstr;
+    if (!section_dynstr) panic("section_dynstr is NULL");
+    int dynstr_offset = *name ? add_to_input_section(section_dynstr, name, strlen(name) + 1) : 0;
+    return dynstr_offset;
+}
+
 // Add a symbol to the ELF symbol table dynsym
 // This function must be called with all local symbols first, then all global symbols
 static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index) {
     InputSection *section_dynsym = output_elf_file->section_dynsym;
-    InputSection *section_dynstr = output_elf_file->section_dynstr;
 
-    // Add a string to the strtab unless name is "".
-    // Empty names are all mapped to the first entry in the string table.
-    int dynstr_offset = *name ? add_to_input_section(section_dynstr, name, strlen(name) + 1) : 0;
+    int dynstr_offset = add_dynstr_string(output_elf_file, name);
 
     ElfSymbol *symbol = allocate_in_section(section_dynsym, sizeof(ElfSymbol));
     memset(symbol, 0, sizeof(ElfSymbol));
@@ -722,10 +731,15 @@ static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, 
 void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
 
-    InputSection *section_dynsym = output_elf_file->section_dynsym;
+    output_elf_file->section_dynstr = create_extra_section(output_elf_file, DYNSTR_SECTION_NAME, SHT_STRTAB, SHF_ALLOC, 1);
+    add_to_input_section(output_elf_file->section_dynstr, "", 1);
+
+    output_elf_file->section_dynsym = create_extra_section(output_elf_file, DYNSYM_SECTION_NAME, SHT_DYNSYM, SHF_ALLOC, 1);
     add_elf_dyn_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 
-    int count = 0;
+    int dynsym_symbol_count = 0;
+    int rela_dyn_entry_count = 0;
+
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
@@ -733,13 +747,15 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
         if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
 
         int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
-        section_dynsym = output_elf_file->section_dynsym;
         symbol->dst_dynsym_index = add_elf_dyn_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
 
-        count++;
+        dynsym_symbol_count++;
+
+        if (symbol->src_is_shared_library) rela_dyn_entry_count++;
     }
 
-    output_elf_file->dynsym_symbol_count = count;
+    output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
+    output_elf_file->rela_dyn_entry_count = rela_dyn_entry_count;
 }
 
 // Set the symbol's value and section indexes
@@ -769,7 +785,7 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
 }
 
 static void add_hidden_symbol(char *name) {
-    Symbol *symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, 0, 0, 0);
+    Symbol *symbol = add_defined_symbol(global_symbol_table, name, STT_NOTYPE, STB_GLOBAL, 0, 0, 0, 0);
     symbol->is_abs = 1;
     symbol->visibility = STV_HIDDEN;
 }
@@ -805,12 +821,16 @@ void update_got_symbol_values(OutputElfFile *output_elf_file) {
     InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
     if (!section_got) return; // No GOT, do nothing
 
+    uint64_t got_value = section_got->output_section->address + section_got->dst_offset;
+
     // Set the special GOT symbol to the virtual address of the GOT
-    Symbol *got_symbol = must_get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
-    got_symbol->dst_value = section_got->output_section->address + section_got->dst_offset;
+    Symbol *got_symbol = get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
+
+    // The got symbol is only defined for statically linked executables
+    if (got_symbol) got_symbol->dst_value = got_value;
 
     // Set the address of the GOT
-    output_elf_file->got_virt_address = got_symbol->dst_value;
+    output_elf_file->got_virt_address = got_value;
 
     // Add the GOT entries
     uint64_t *got_entries = (uint64_t *) section_got->data;
@@ -1006,4 +1026,55 @@ void make_symbol_hashes(OutputElfFile *output_elf_file) {
 
         i++;
     }
+}
+
+// For ET_DYN files, allocate space for relocation entries in the GOT table
+void create_dyn_rela_section(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+    if (output_elf_file->rela_dyn_entry_count == 0) return;
+
+    output_elf_file->section_rela_dyn = create_extra_section(output_elf_file, RELA_DYN_SECTION_NAME, SHT_RELA, SHF_ALLOC, 8);
+    output_elf_file->section_rela_dyn->size = output_elf_file->rela_dyn_entry_count * sizeof(ElfRelocation);
+    output_elf_file->section_rela_dyn->data = calloc(1, output_elf_file->section_rela_dyn->size);
+}
+
+// For ET_DYN files, update the relocation entries in the GOT table
+void update_dyn_rela_section(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+    if (output_elf_file->rela_dyn_entry_count == 0) return;
+
+    InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
+    if (!section_got) panic("GOT is NULL");
+    uint64_t got_value = section_got->output_section->address + section_got->dst_offset;
+
+    InputSection *section_rela_dyn = output_elf_file->section_rela_dyn;
+    if (!section_rela_dyn) panic(".rela.dyn is NULL");
+
+    // Loop over all global symbols. If they are present in the dynsym table and came from
+    // a shared library, then they have entries in the GOT and need entries in .rela.dyn
+    // for the dynamic linker to sort out.
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+        if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
+        if (!symbol->src_is_shared_library) continue;
+
+        if (symbol->got_offset == -1) panic("Symbol %s is supposed to be in the GOT but isn't", symbol->name);
+
+        int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
+        if (i >= output_elf_file->rela_dyn_entry_count)
+            panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
+                symbol->name, i, output_elf_file->rela_dyn_entry_count);
+
+        // Populate the relocation entry in .rela.dyn
+        ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
+        r->r_info = R_X86_64_GLOB_DAT + ((uint64_t) symbol->dst_dynsym_index << 32);
+        r->r_offset = got_value + symbol->got_offset;
+        r->r_addend = 0;
+     }
+
+    ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_dyn->output_section->index];
+    h->sh_link = output_elf_file->section_dynsym->output_section->index;
+    h->sh_entsize = sizeof(ElfRelocation);
+    h->sh_flags = SHF_ALLOC;
 }

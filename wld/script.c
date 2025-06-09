@@ -23,7 +23,7 @@ void parse_linker_scripts(OutputElfFile *output_elf_file, List *library_paths, L
 
     for (int i = 0; i < linker_scripts->length; i++) {
         char *filename = linker_scripts->elements[i];
-        char *path = find_file(library_paths, filename, "linker script");
+        char *path = must_find_file(library_paths, filename, "linker script");
         init_lexer(path);
         output_elf_file->linker_script = parse();
     }

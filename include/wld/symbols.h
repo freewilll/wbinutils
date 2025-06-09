@@ -20,6 +20,7 @@ typedef struct symbol {
     int is_common;                  // The symbol is a common symbol. input_section is null.
     int visibility;                 // Used by the linker
     int src_is_library;             // 1 if the symbol was found in a library, otherwise it was found in an object file
+    int src_is_shared_library;      // 1 is the symbol is a shared library. src_is_library is also 1 in this case.
     int needs_got;                  // Set if the symbol needs an entry in the Global Offset Table (GOT)
     int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt table, for ifuncs
     uint64_t got_offset;            // Offset in the .got section, if present
@@ -56,7 +57,7 @@ Symbol *lookup_symbol(InputElfFile *elf_file, char *name);
 Symbol *get_undefined_symbol(const char *name);
 int is_undefined_symbol(const char *name);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
-int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int read_only);
+int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only);
 void finalize_symbols(OutputElfFile *output_elf_file);
 void dump_output_symbols(OutputElfFile *output_elf_file);
 void debug_print_symbol(Symbol *symbol);
@@ -64,6 +65,7 @@ void debug_summarize_symbols(void);
 int common_symbols_are_present(void);
 void layout_common_symbols_in_bss_section(OutputSection *bss_section);
 void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table);
+int add_dynstr_string(OutputElfFile *output_elf_file, const char *name);
 void make_elf_dyn_symbols(OutputElfFile *output_elf_file);
 void make_elf_symbols(OutputElfFile *output_elf_file);
 void update_elf_symbols(OutputElfFile *output_elf_file);
@@ -73,5 +75,7 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
 void allocate_extra_sections(OutputElfFile *output_elf_file);;
 void update_iplt(OutputElfFile *output_elf_file);
 void make_symbol_hashes(OutputElfFile *output_elf_file);
+void create_dyn_rela_section(OutputElfFile *output_elf_file);
+void update_dyn_rela_section(OutputElfFile *output_elf_file);
 
 #endif

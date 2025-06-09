@@ -13,9 +13,10 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    . = ALIGN(CONSTANT (MAXPAGESIZE));                                      \n"
 
 #ifdef SHARED
-    "    .hash :  { *(.hash)                                                    }\n"
-    "    .dynsym: { *(.dynsym)                                                  }\n"
-    "    .dynstr: { *(.dynstr)                                                  }\n"
+    "    .hash :     { *(.hash)                                                 }\n"
+    "    .dynsym :   { *(.dynsym)                                               }\n"
+    "    .dynstr :   { *(.dynstr)                                               }\n"
+    "    .rela.dyn : { *(.rela.dyn)                                             }\n"
 #endif
     "    .rela.plt : {                                                           \n"
     "        *(.rela.plt)                                                        \n"

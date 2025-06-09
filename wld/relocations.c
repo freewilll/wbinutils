@@ -138,6 +138,8 @@ int apply_relocation(OutputElfFile *output_elf_file, void *output_pointer,
         ElfRelocation *relocation, uint64_t value,
         int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset) {
 
+    int is_shared = output_elf_file->type == ET_DYN;
+
     uint32_t output_virtual_address = rw_section_address + output_offset;
 
     output_pointer += output_offset;
@@ -218,7 +220,9 @@ int apply_relocation(OutputElfFile *output_elf_file, void *output_pointer,
             uint8_t *popcode = (uint8_t *) (output_pointer - 2);
             uint8_t opcode = *popcode;
 
-            if (opcode != 0xc7 && opcode != 0x81) {
+            if (is_shared || (opcode != 0xc7 && opcode != 0x81)) {
+                // The symbol has an entry in the GOT or IPLT
+
                 if (value_got_offset == -1 && value_got_iplt_offset == -1) panic("Expected a value in the GOT, but no entry is present");
 
                 if (value_got_offset != -1)
@@ -332,7 +336,7 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 // SCAN_RELOCATION_OK        if OK
 // SCAN_RELOCATION_ERROR     if an error
 // SCAN_RELOCATION_NEEDS_GOT if the symbol requires a GOT entry
-int scan_relocation(void *input_data, ElfRelocation *relocation) {
+int scan_relocation(void *input_data, int is_shared, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
     int offset = relocation->r_offset;
     input_data += offset;
@@ -354,6 +358,8 @@ int scan_relocation(void *input_data, ElfRelocation *relocation) {
             return SCAN_RELOCATION_OK;
 
         case R_X86_64_GOTPCRELX: {
+            if (is_shared) return SCAN_RELOCATION_NEEDS_GOT;
+
             // Relax instructions to not use the GOT
 
             uint32_t *output = (uint32_t *) input_data;
@@ -388,6 +394,8 @@ int scan_relocation(void *input_data, ElfRelocation *relocation) {
 
         case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
+            if (is_shared) return SCAN_RELOCATION_NEEDS_GOT;
+
             // Relax instructions to not use the GOT
 
             uint8_t *pprefix = (uint8_t *) (input_data - 3);
@@ -417,8 +425,7 @@ int scan_relocation(void *input_data, ElfRelocation *relocation) {
 
         default: {
             const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-            if (VERBOSE_ERROR_LIST)
-                printf("Unhandled relocation type %s\n", relocation_name);
+            printf("Unhandled relocation type %s\n", relocation_name);
             return SCAN_RELOCATION_ERROR;
         }
     }
@@ -426,10 +433,10 @@ int scan_relocation(void *input_data, ElfRelocation *relocation) {
     return SCAN_RELOCATION_OK;
 }
 
-static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, InputSection *input_section, int is_shared, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
-    int result = scan_relocation(input_section->data, relocation);
+    int result = scan_relocation(input_section->data, is_shared, relocation);
     if (result != SCAN_RELOCATION_NEEDS_GOT) return result; // Return the number of errors, 0 or 1
 
     // Implicit else: A GOT entry is needed
@@ -461,9 +468,9 @@ static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, Input
 }
 
 void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, int phase) {
-    // While in development, collect all problems, report them and bail.
-    // This way I know what lies ahead until the executable can be run.
     int failed_relocations = 0;
+
+    int is_shared = output_elf_file ? output_elf_file->type == ET_DYN : 0;
 
     if (DEBUG_RELOCATIONS) printf("\nRelocations:\n");
 
@@ -488,7 +495,7 @@ void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, in
 
             while (relocation < end) {
                 if (phase == RELOCATION_PHASE_SCAN)
-                    failed_relocations += scan_relocation_in_input_elf_file(input_elf_file, input_section, relocation);
+                    failed_relocations += scan_relocation_in_input_elf_file(input_elf_file, input_section, is_shared, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
                     failed_relocations += apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, relocation);
                 relocation++;

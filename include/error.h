@@ -3,7 +3,7 @@
 
 #include <stdarg.h>
 
-void set_error_filename(char *filename);
+void set_error_filename(const char *filename);
 void set_error_line(int line);
 
 void panic(char *format, ...);

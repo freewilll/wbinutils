@@ -50,6 +50,7 @@ typedef struct output_elf  {
     struct input_section *section_dynsym;                   // Used by wld
     struct input_section *section_dynstr;                   // Used by wld
     struct input_section *section_hash;                     // Used by wld
+    struct input_section *section_rela_dyn;                 // Used by wld
     int local_symbol_end;                                   // Index of last local symbol
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
@@ -66,6 +67,8 @@ typedef struct output_elf  {
     List *linker_script;                                    // Used by wld
     StrMap *global_symbols_in_use;                          // Used by wld
     int dynsym_symbol_count;                                // Used by wld
+    int rela_dyn_entry_count;                               // Used by wld
+    List *shared_libraries;                                 // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

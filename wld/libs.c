@@ -13,13 +13,27 @@
 #include "wld/utils.h"
 #include "wld/wld.h"
 
-// Try and find the library on the builtin library paths
-char *search_for_library(List *library_paths, const char *name) {
-    char *filename = malloc(strlen(name) + 6);
+// Try and find a .a or .so on the builtin library paths. Fails if not found. Outputs is_shared.
+char *search_for_library(List *library_paths, const char *name, int *is_shared) {
+    char *filename = malloc(strlen(name) + 10);
+
+    // Try to find a .a file
     sprintf(filename, "lib%s.a", name);
     char *path = find_file(library_paths, filename, "library");
-    free(filename);
-    return path;
+    if (path) {
+        *is_shared = 0;
+        free(filename);
+        return path;
+    }
+
+    // Try to find an .so file
+    sprintf(filename, "lib%s.so", name);
+    path = find_file(library_paths, filename, "library");
+    if (path) {
+        *is_shared = 1;
+        free(filename);
+        return path;
+    }
 }
 
 // Loop over all files in the archive,
@@ -123,6 +137,17 @@ int is_gnu_linker_script_file(const char *filename) {
     return result;
 }
 
+// Check if an open file has the magic .a header
+int file_is_archive_file(FILE *file, const char *filename) {
+    // Check the magic string
+    char magic[AR_MAGIC_LEN];
+    if (fread(magic, 1, AR_MAGIC_LEN, file) != AR_MAGIC_LEN)
+        error("Unable to read file: %s", filename);
+
+    return !memcmp(magic, AR_MAGIC, AR_MAGIC_LEN);
+}
+
+// Opens an .a file. If it turns out not to be one, return NULL.
 ArchiveFile *open_archive_file(const char *filename) {
     ArchiveFile *ar_file = malloc(sizeof(ArchiveFile));
 
@@ -135,12 +160,7 @@ ArchiveFile *open_archive_file(const char *filename) {
         exit(1);
     }
 
-    // Check the magic string
-    char magic[AR_MAGIC_LEN];
-    if (fread(magic, 1, AR_MAGIC_LEN, ar_file->file) != AR_MAGIC_LEN)
-        error("Unable to read archive file: %s", filename);
-
-    if (memcmp(magic, AR_MAGIC, AR_MAGIC_LEN))
+    if (!(file_is_archive_file(ar_file->file, filename)))
         error("Not an archive file: %s", filename);
 
     index_archive_file(ar_file);
@@ -172,11 +192,11 @@ int process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
 
             InputElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
             if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s in archive %s\n", elf_file->filename, ar_file->filename);
-            int resolved_symbols = process_elf_file_symbols(elf_file, 1, 1);
+            int resolved_symbols = process_elf_file_symbols(elf_file, 1, 0, 1);
             if (resolved_symbols) {
                 // Use the object file
                 if (!strmap_get(included_objects_map, obj->filename)) {
-                    process_elf_file_symbols(elf_file, 1, 0);
+                    process_elf_file_symbols(elf_file, 1, 0, 0);
                     strmap_put(included_objects_map, obj->filename, elf_file);
                     append_to_list(included_objects_list, elf_file);
                     objects_added++;

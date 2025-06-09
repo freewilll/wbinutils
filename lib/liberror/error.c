@@ -11,11 +11,11 @@
 #define RESET "\e[0m"    // Reset
 
 // For error reporting
-static char *error_filename;
+static const char *error_filename;
 static int error_line;
 
 // Set the filename used for error reporting
-void set_error_filename(char *filename) {
+void set_error_filename(const char *filename) {
     error_filename = filename;
 }
 

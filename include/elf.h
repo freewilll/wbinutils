@@ -111,7 +111,8 @@
 #define R_X86_64_PC32            2   // PC relative 32 bit signed     S + A - P
 #define R_X86_64_GOT32           3   // 32 bit GOT entry              G + A
 #define R_X86_64_PLT32           4   // 32 bit PLT address            L + A - P
-#define R_X86_64_GOTPCREL        9	 // 32 bit signed PC relative offset to GOT
+#define R_X86_64_GLOB_DAT        6   // 32 bit GOT entry for .so      G + A
+#define R_X86_64_GOTPCREL        9   // 32 bit signed PC relative offset to GOT
 #define R_X86_64_32             10   // Direct 8 bit                  S + A
 #define R_X86_64_32S            11   // Direct 8 bit sign extended    S + A
 #define R_X86_64_16             12   // Direct 8 bit                  S + A

@@ -12,7 +12,7 @@ static char *input;             // Input file data
 static char *input_end;         // Input file data
 static char *ip;                // Input pointer to currently lexed char.
 
-char *cur_filename;
+const char *cur_filename;
 int cur_line;                       // Current line
 
 int cur_token;                      // Current token
@@ -36,7 +36,7 @@ static void start_lexer(void) {
     next();
 }
 
-void init_lexer(char *filename) {
+void init_lexer(const char *filename) {
     cur_filename = filename;
     set_error_filename(filename);
 

@@ -66,7 +66,7 @@ void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls
     uint64_t rw_section_address = output_virtual_address - output_offset;
     uint64_t rw_section_offset = rw_section_address - 0x400000;
 
-    int result = scan_relocation(output_data, &relocation);
+    int result = scan_relocation(output_data, 0, &relocation);
     if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);
     result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, &relocation, value, is_tls_value, value_got_offset, value_iplt_offset, value_got_iplt_offset);
     if (result) panic("Relocation apply failed");
