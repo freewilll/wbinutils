@@ -102,7 +102,7 @@ int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_f
                 if (elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC) {
                     char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
                     Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
-                    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry %s\n", symbol_name);
+                    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry in make_global_symbols_in_use: %s\n", symbol_name);
                     if (!strmap_get(global_symbols_in_use, symbol->name)) strmap_put(global_symbols_in_use, symbol->name, (void *) 1);
                 }
 
@@ -460,7 +460,7 @@ static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, Input
     // Lookup the symbol in the symbol table
     char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
     Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
-    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry %s\n", symbol_name);
+    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry in scan_relocation_in_input_elf_file: %s\n", symbol_name);
 
     symbol->needs_got = 1;
 

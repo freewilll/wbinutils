@@ -59,7 +59,7 @@ static void assert_sections(OutputElfFile *elf_file, ...) {
         append_to_list(expected_sections, section);
     }
 
-    // The executable has 4 extra sections: null, symtab, strtab and shstrdtab
+    // The executable has 4 extra sections: null, symtab, strtab and shstrtab
     if (elf_file->sections_list->length - 4 != expected_sections->length) {
         printf("Sections lengths mismatch: expected %d, got %d\n", elf_file->sections_list->length - 4, expected_sections->length);
         fail_sections(elf_file, expected_sections);
@@ -148,13 +148,8 @@ static void assert_program_segments(OutputElfFile *elf_file, ...) {
     }
 }
 
-static void assert_symbols(OutputElfFile *elf_file, ...) {
-    OutputSection *section = elf_file->section_symtab;
-
-    va_list ap;
-    va_start(ap, elf_file);
-
-    int pos = 1 * sizeof(ElfSymbol); // Skip null symbol
+static void assert_symbol_table(OutputElfFile *elf_file, OutputSection *section, va_list ap) {
+    int pos = sizeof(ElfSymbol); // Skip null symbol
 
     while (1) {
         int expected_value = va_arg(ap, int);
@@ -181,6 +176,9 @@ static void assert_symbols(OutputElfFile *elf_file, ...) {
         }
         else if (!strcmp(expected_section_name, "COM")) {
             expected_section_index = SHN_COMMON;
+        }
+        else if (!strcmp(expected_section_name, "UND")) {
+            expected_section_index = SHN_UNDEF;
         }
         else {
             OutputSection *expected_section = get_output_section(elf_file, expected_section_name);
@@ -224,9 +222,12 @@ static void assert_symbols(OutputElfFile *elf_file, ...) {
                 expected_section_index != got_index ||
                 !name_matches) {
             debug_summarize_symbols();
-            panic("Symbols mismatch\n"
-                "expected value=%#08lx  size=%#08lx type=%d binding=%d visiblility=%d index=%5d name=%s\n"
-                "got      value=%#08lx  size=%#08lx type=%d binding=%d visiblility=%d index=%5d name=%s",
+
+            printf("%s mismatch\n"
+                "expected value=%#08x  size=%#08x type=%d binding=%d visiblility=%d index=%5d name=%s\n"
+                "got      value=%#08x  size=%#08x type=%d binding=%d visiblility=%d index=%5d name=%s\n",
+                section->name,
+
                 expected_value,
                 expected_size,
                 expected_type,
@@ -243,10 +244,154 @@ static void assert_symbols(OutputElfFile *elf_file, ...) {
                 got_index,
                 got_name ? got_name : "null"
             );
+
+            exit(1);
         }
 
         pos += sizeof(ElfSymbol);
     }
+}
+
+static void assert_symtab(OutputElfFile *elf_file, ...) {
+    OutputSection *section = elf_file->section_symtab;
+
+    va_list ap;
+    va_start(ap, elf_file);
+
+    assert_symbol_table(elf_file, section, ap);
+}
+
+static void assert_dynsym(OutputElfFile *elf_file, ...) {
+    OutputSection *section = elf_file->section_dynsym->output_section;
+    if (!section) panic("Expected a dynsym section");
+
+    va_list ap;
+    va_start(ap, elf_file);
+
+    assert_symbol_table(elf_file, section, ap);
+}
+
+static void assert_dynamic(OutputElfFile *elf_file, ...) {
+    OutputSection *dynamic_section = get_output_section(elf_file, DYNAMIC_SECTION_NAME);
+    if (!dynamic_section) panic("No .dynamic section");
+
+        OutputSection *dynstr_section = get_output_section(elf_file, DYNSTR_SECTION_NAME);
+    if (!dynstr_section) panic("No .dynstr section");
+
+    uint64_t length = dynamic_section->size / sizeof(ElfDyn);
+    int pos = 0;
+
+    va_list ap;
+    va_start(ap, elf_file);
+
+    while (1) {
+        int expected_tag = va_arg(ap, int);
+        int expected_value = va_arg(ap, int);
+        char *expected_dynstr = va_arg(ap, char *);
+
+        ElfDyn *dyn = &((ElfDyn *) dynamic_section->data)[pos];
+        uint64_t got_tag = dyn->d_tag & 0xffffffff;
+        uint64_t got_value = dyn->d_un.d_val;
+
+        char *got_dynstr = NULL;
+        if (expected_dynstr) {
+            got_dynstr = &dynstr_section->data[got_value];
+        }
+
+        const char *expected_tag_name = DYNAMIC_SECTION_TYPE_NAMES[expected_tag];
+        const char *got_tag_name = DYNAMIC_SECTION_TYPE_NAMES[got_tag];
+
+        if (expected_tag != got_tag || expected_value != got_value || (expected_dynstr && strcmp(expected_dynstr, got_dynstr))) {
+            dump_dynamic_section(elf_file);
+            printf("Mismatch at position %d\n"
+                "Expected tag:   %3d, got tag:   %#lx\n"
+                "Expected value: %3d, got value: %#lx\n"
+                "Expected dynstr: %s, got dynstr: %s\n",
+                pos,
+                expected_tag, got_tag,
+                expected_value, got_value,
+                expected_dynstr, got_dynstr);
+            exit(1);
+        }
+
+        if (expected_tag == DT_NULL) {
+            if (pos != length - 1) {
+                dump_dynamic_section(elf_file);
+                panic("Unexpected data at position %d", pos);
+            }
+
+            return; // Success
+        }
+
+        pos++;
+    }
+}
+
+
+void assert_relocations(OutputElfFile *elf_file, OutputSection *section, va_list ap) {
+    if (!section) panic("Assert section on a NULL");
+
+    int pos = 0;
+
+    while (1) {
+        int expected_type           = va_arg(ap, int);
+        int expected_symbol_index   = va_arg(ap, int);
+        int expected_offset         = va_arg(ap, int);
+        int expected_addend         = va_arg(ap, int);
+
+        if (expected_type == END) {
+            if (pos != section->size) {
+                dump_relocations(section);
+                panic("Unexpected data at position %d", pos / sizeof(ElfRelocation));
+            }
+
+            return; // Success
+        }
+
+        ElfRelocation *r = (ElfRelocation *) &section->data[pos];
+
+        int got_type         = r->r_info & -1;
+        int got_symbol_index = r->r_info >> 32;
+        int got_offset       = r->r_offset;
+        int got_addend       = r->r_addend;
+
+        if (pos == section->size) {
+            dump_relocations(section);
+            panic("Expected extra data at position %d", pos / sizeof(ElfRelocation));
+        }
+
+        if (
+                expected_type != got_type ||
+                expected_symbol_index != got_symbol_index ||
+                expected_offset != got_offset ||
+                expected_addend != got_addend) {
+
+            dump_relocations(section);
+            panic("Relocations mismatch at position %d: expected %#x, %d, %#x, %d, got %#x, %d, %#x, %ld",
+                pos / sizeof(ElfRelocation),
+                expected_type,
+                expected_symbol_index,
+                expected_offset,
+                expected_addend,
+                got_type,
+                got_symbol_index,
+                got_offset,
+                got_addend
+            );
+        }
+
+        pos += sizeof(ElfRelocation);
+    }
+}
+
+void assert_rela_dyn_relocations(OutputElfFile *elf_file, ...) {
+    OutputSection *section = get_output_section(elf_file, RELA_DYN_SECTION_NAME);
+    if (!section) panic("No .rela.dyn section\n");
+
+    va_list ap;
+    va_start(ap, elf_file);
+
+    assert_relocations(elf_file, section, ap);
 }
 
 static char *run_was(char *assembly) {
@@ -276,28 +421,55 @@ static char *run_was(char *assembly) {
     return strdup(object_path);
 }
 
-static OutputElfFile *run_wld(List *input_filenames, char **poutput_path, int run_executable, char *test_name) {
+static OutputElfFile *run_wld(List *input_filenames, int output_type, char **poutput_lib_name, int run_executable, char *test_name) {
     // Make list of InputFile from the input filenames
     List *input_files = new_list(input_filenames->length);
     for (int i = 0; i < input_filenames->length; i++) {
         char *filename = input_filenames->elements[i];
         InputFile *input_file = malloc(sizeof(InputFile));
-        input_file->filename = filename;
-        input_file->is_library = 0;
+
+        int is_library = 0;
+        if (filename[0] == '*') {
+            filename++;
+            is_library = 1;
+        }
+
+        input_file->filename = strdup(filename);
+        input_file->is_library = is_library;
         append_to_list(input_files, input_file);
     }
 
-    // Make the output filename path
-    char output_path[] = "/tmp/executable_XXXXXX";
-    int fd = mkstemp(output_path);
-    if (fd == -1) { perror("mkstemp"); exit(1); }
-    *poutput_path = strdup(output_path);
+    char template[] = "XXXXXX";
+    int fd = mkstemp(template);
+    if (fd == -1) {
+        perror("mkstemp");
+        exit(1);
+    }
     close(fd);
+    unlink(template);
 
-    List *library_paths = new_list(0);
+    char *output_path;
+    if (output_type == OUTPUT_TYPE_SHARED) {
+        // Append .so
+        output_path = malloc(strlen(template) + 32);
+        sprintf(output_path, "/tmp/libwld%s.so", template);
+
+        if (!poutput_lib_name) panic("Need to set poutput_lib_name");
+        char *output_lib_name = malloc(strlen(template) + 32);
+        sprintf(output_lib_name, "*wld%s", template); // The leading * tells run_wld it's a library
+        *poutput_lib_name = output_lib_name;
+    }
+    else {
+        output_path = malloc(strlen(template) + 32);
+        sprintf(output_path, "/tmp/wld%s", template);
+    }
+
     List *linker_scripts = new_list(0);
 
-    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, OUTPUT_TYPE_STATIC);
+    List *library_paths = new_list(0);
+    append_to_list(library_paths, "/tmp");
+
+    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, output_type);
 
     if (run_executable) {
         // Run the executable and assert an exit code of zero
@@ -329,8 +501,7 @@ static void test_sanity() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -346,7 +517,7 @@ static void test_sanity() {
         END
     );
 
-    assert_symbols(elf_file,
+    assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
@@ -375,8 +546,7 @@ void test_segments_are_page_aligned() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -426,8 +596,7 @@ static void test_orphan_sections_no_rearrangement(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -482,8 +651,7 @@ static void test_orphan_sections_rearrangement(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -521,8 +689,7 @@ static void test_tls() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "tls");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "tls");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                            Align
@@ -564,8 +731,7 @@ static void test_two_bss_sections(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -608,8 +774,7 @@ static void test_data_and_two_bss_sections(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -644,8 +809,7 @@ static void test_etext_undefined() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "undefined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "undefined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -659,7 +823,7 @@ static void test_etext_undefined() {
         END
     );
 
-    assert_symbols(elf_file,
+    assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility    Section  Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
@@ -686,8 +850,7 @@ static void test_defined_etext() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "defined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "defined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size     Flags                      Align
@@ -703,7 +866,7 @@ static void test_defined_etext() {
         END
     );
 
-    assert_symbols(elf_file,
+    assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
@@ -728,8 +891,7 @@ static void test_unused_etext() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "unused etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "unused etext");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -745,7 +907,7 @@ static void test_unused_etext() {
         END
     );
 
-    assert_symbols(elf_file,
+    assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
@@ -770,8 +932,7 @@ static void test_automatic_start_stop_symbols() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "__start_ and __end_ symbols");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -787,12 +948,155 @@ static void test_automatic_start_stop_symbols() {
         END
     );
 
-    assert_symbols(elf_file,
+    assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__start_foo",
         0x402004,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__stop_foo",
+        END);
+}
+
+// Test a library with no relocations, only some objects in .data and .bss.
+static void test_library_no_dependencies() {
+    char *object_path = run_was(
+        ".globl i;"
+        ".globl j;"
+        ".data;"
+        "    i: .long 1;"
+        "    j: .long 2;"
+        ".comm k, 4, 4;"
+        ".comm l, 4, 4;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "test_library_no_dependencies");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                   Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x24,  SHF_ALLOC,              8,
+        ".dynsym",         SHT_DYNSYM,     0x1024,   0x1024, 0x78,  SHF_ALLOC,              1,
+        ".dynstr",         SHT_STRTAB,     0x109c,   0x109c, 0x09,  SHF_ALLOC,              1,
+        ".dynamic",        SHT_DYNAMIC,    0x2000,   0x2000, 0x60,  SHF_ALLOC | SHF_WRITE,  8,
+        ".data",           SHT_PROGBITS,   0x2060,   0x2060, 0x08,  SHF_ALLOC | SHF_WRITE,  4,
+        ".bss",            SHT_NOBITS,     0x2068,   0x2068, 0x08,  SHF_ALLOC | SHF_WRITE,  4,
+        NULL
+    );
+
+    assert_program_segments(elf_file, //
+        // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x1000,  0x00a5,  0x00a5, PF_R,         0x1000,
+        PT_LOAD,          0x2000,  0x2000,  0x0068,  0x0070, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x2000,  0x2000,  0x0060,  0x0060, PF_R,         0x0008,
+        END
+    );
+
+    assert_dynamic(elf_file,
+        DT_STRTAB, 0x109c, NULL,
+        DT_SYMTAB, 0x1024, NULL,
+        DT_STRSZ,  0x9,    NULL,
+        DT_SYMENT, 0x18,   NULL,
+        DT_HASH,   0x1000, NULL,
+        DT_NULL,   0,      NULL
+    );
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x2064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
+        0x2068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
+        0x206c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        END);
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x2064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
+        0x2068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
+        0x206c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        END);
+}
+
+static void test_two_libs() {
+    // Make a lib with two ints
+    char *object_path = run_was(
+        ".globl i;"
+        ".globl j;"
+        ".data;"
+        "    i: .long 1;"
+        "    j: .long 2;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    // Make a second lib that uses the two ints from the first
+    object_path = run_was(".text; mov i@GOTPCREL(%rip), %eax; mov j@GOTPCREL(%rip), %eax;");
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x15,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1078,   0x1078, 0x30,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x30a0,   0x30a0, 0x10,  SHF_ALLOC | SHF_WRITE,     8,
+        NULL
+    );
+
+    assert_program_segments(elf_file, //
+        // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x1000,  0x00a8,  0x00a8, PF_R,         0x1000,
+        PT_LOAD,          0x2000,  0x2000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x3000,  0x3000,  0x00b0,  0x00b0, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x00a0,  0x00a0, PF_R,         0x0008,
+        END
+    );
+
+    assert_dynamic(elf_file,
+        DT_NEEDED,      5,          lib_filename,
+        DT_STRTAB,      0x1060,     NULL,
+        DT_SYMTAB,      0x1018,     NULL,
+        DT_STRSZ,       0x15,       NULL,
+        DT_SYMENT,      0x18,       NULL,
+        DT_HASH,        0x1000,     NULL,
+        DT_RELA,        0x1078,     NULL,
+        DT_RELASZ,      0x30,       NULL,
+        DT_RELAENT,     0x18,       NULL,
+        DT_NULL,        0,          NULL
+    );
+
+    assert_symtab(elf_file,
+    //  Value  Size   Type        Binding     Visibility   Section  Name
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "i",
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "j",
+        END);
+
+    assert_dynsym(elf_file,
+    //  Value  Size   Type        Binding     Visibility   Section  Name
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "i",
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "j",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_GLOB_DAT, 1,                0x30a0,  0,
+        R_X86_64_GLOB_DAT, 2,                0x30a8,  0,
         END);
 }
 
@@ -817,8 +1121,7 @@ static void test_dwarf() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    char *output_path;
-    OutputElfFile *elf_file = run_wld(input_paths, &output_path, 1, "dwarf lines");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "dwarf lines");
 
     // Ensure that the .debug_abbrev has address zero. This is required by DWARF.
     // No alloc sections must have address zero.
@@ -845,5 +1148,7 @@ int main() {
     test_defined_etext();
     test_unused_etext();
     test_automatic_start_stop_symbols();
+    test_library_no_dependencies();
+    test_two_libs();
     test_dwarf();
 }

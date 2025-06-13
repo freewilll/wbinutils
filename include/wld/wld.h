@@ -41,9 +41,13 @@ typedef struct input_file {
     int is_library;       // On the command line with -l
 } InputFile;
 
+extern const char *DYNAMIC_SECTION_TYPE_NAMES[];
+
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type);
 InputSection *get_extra_section(OutputElfFile *output_elf_file, char *name);
 InputSection *create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align);
+void dump_dynamic_section(OutputElfFile *output_elf_file);
+void dump_relocations(OutputSection* section);
 void dump_sections(OutputElfFile *output_elf_file);
 void dump_program_segments(OutputElfFile *output_elf_file);
 OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type);

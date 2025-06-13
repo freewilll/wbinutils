@@ -34,6 +34,8 @@ char *search_for_library(List *library_paths, const char *name, int *is_shared) 
         free(filename);
         return path;
     }
+
+    error("Unable to find file: %s", name);
 }
 
 // Loop over all files in the archive,

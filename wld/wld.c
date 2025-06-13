@@ -44,6 +44,44 @@ static const char *SECTION_TYPE_NAMES[] = {
 
 static const char *PROGRAM_SEGMENT_TYPE_NAMES[] = { "NULL", "LOAD", "DYNAMIC", "INTERP", "NOTE", "SHLIB", "PHDR", "TLS", "NUM" };
 
+const char *DYNAMIC_SECTION_TYPE_NAMES[] = {
+    "NULL",
+    "NEEDED",
+    "PLTRELSZ",
+    "PLTGOT",
+    "HASH",
+    "STRTAB",
+    "SYMTAB",
+    "RELA",
+    "RELASZ",
+    "RELAENT",
+    "STRSZ",
+    "SYMENT",
+    "INIT",
+    "FINI",
+    "SONAME",
+    "RPATH",
+    "SYMBOLIC",
+    "REL",
+    "RELSZ",
+    "RELENT",
+    "PLTREL",
+    "DEBUG",
+    "TEXTREL",
+    "JMPREL",
+    "BIND_NOW",
+    "INIT_ARRAY",
+    "FINI_ARRAY",
+    "INIT_ARRAYSZ",
+    "FINI_ARRAYSZ",
+    "RUNPATH",
+    "FLAGS",
+    "ENCODING",
+    "PREINIT_ARRAY",
+    "PREINIT_ARRAYSZ",
+    "SYMTAB_SHNDX",
+};
+
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type) {
     int elf_output_type = output_type == OUTPUT_TYPE_STATIC ? ET_EXEC : ET_DYN;
 
@@ -193,7 +231,50 @@ static void make_shared_libraries_list(OutputElfFile *output_elf_file, List *inp
     }
 }
 
-int make_dynamic_section_entry_count(OutputElfFile *output_elf_file) {
+// Print .dynamic section in a format similar to readelf's output
+void dump_dynamic_section(OutputElfFile *output_elf_file) {
+    InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+    if (!section_dynamic) panic("Expected a dynamic section in dump_dynamic_section");
+    if (!section_dynamic->output_section) panic("Expected a dynamic section with output");
+
+    InputSection *section_dynstr = get_extra_section(output_elf_file, DYNSTR_SECTION_NAME);
+    if (!section_dynstr) panic("Expected a dynstr in dump_dynamic_section");
+    if (!section_dynstr->output_section) panic("Expected a dynstr section with output");
+
+    uint64_t offset = section_dynamic->output_section->offset + section_dynamic->src_offset;
+    uint64_t length = section_dynamic->size / sizeof(ElfDyn);
+    printf("Dynamic section at offset %#lx contains %ld entries:\n", offset, length);
+    printf("[Nr] Type                Name/Value\n");
+
+    for (int i = 0; i < length; i++) {
+        ElfDyn *dyn = &((ElfDyn *) section_dynamic->data)[i];
+        uint64_t tag = dyn->d_tag & 0xffffffff;
+        uint64_t val = dyn->d_un.d_val;
+
+        const char *tag_name = DYNAMIC_SECTION_TYPE_NAMES[tag];
+
+        if (tag == DT_NEEDED) {
+            char *symbol_name = &((char *) section_dynstr->data)[val];
+            printf("%3d %-20s Shared library: %s\n", i, tag_name, symbol_name);
+        } else {
+            printf("%3d %-20s %#-10lx\n", i, tag_name, val);
+        }
+    }
+}
+
+void dump_relocations(OutputSection* section) {
+    printf("Relocations:\n");
+    printf("info          offset   addend\n");
+    ElfRelocation *relocations = (ElfRelocation *) section->data;
+
+    int count = section->size / sizeof(ElfRelocation);
+    for (int i = 0; i < count; i++) {
+        ElfRelocation *r = &relocations[i];
+        printf("%#8lx %#8lx %8ld\n", r->r_info, r->r_offset, r->r_addend);
+    }
+}
+
+static int make_dynamic_section_entry_count(OutputElfFile *output_elf_file) {
     int dynamic_section_entry_count = BASE_DYNAMIC_SECTION_ENTRY_COUNT + output_elf_file->shared_libraries->length;
     if (output_elf_file->rela_dyn_entry_count > 0) dynamic_section_entry_count += 3;
     return dynamic_section_entry_count;
@@ -285,7 +366,7 @@ static void associate_sections(OutputElfFile *output_elf_file) {
     }
 }
 
-void allocate_elf_output_memory(OutputElfFile *output_elf_file) {
+static void allocate_elf_output_memory(OutputElfFile *output_elf_file) {
     output_elf_file->data = calloc(1, output_elf_file->size);
 }
 
