@@ -706,8 +706,8 @@ static void test_defined_etext() {
     assert_symbols(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
-        0x403010,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",  "etext",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x403010,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",  "etext",
         END);
 }
 

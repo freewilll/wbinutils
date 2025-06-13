@@ -4,24 +4,24 @@
 #include "elf.h"
 
 #include "was/elf.h"
-#include "was/strmap.h"
+#include "strmap-ordered.h"
 #include "was/symbols.h"
 
 // The naming is dubious: this covers both symbols and sections
 
-StrMap *symbols;
+StrMapOrdered *symbols;
 
 Symbol builtin_dot_symbol = { ".", 0, STB_LOCAL, STT_NOTYPE };
 
 void init_symbols(void) {
-    symbols = new_strmap();
+    symbols = new_strmap_ordered();
 }
 
 // Get a symbol from the symbol table. Returns NULL if not present.
 Symbol *get_symbol(char *name) {
     if (name[0] == '.' && !name[1]) return &builtin_dot_symbol;
 
-    return (Symbol *) strmap_get(symbols, name);
+    return (Symbol *) strmap_ordered_get(symbols, name);
 }
 
 Symbol *add_symbol(char *name) {
@@ -31,7 +31,7 @@ Symbol *add_symbol(char *name) {
     symbol->type    = STT_NOTYPE;
     symbol->binding = STB_LOCAL;
 
-    strmap_put(symbols, name, symbol);
+    strmap_ordered_put(symbols, name, symbol);
 
     return symbol;
 }
@@ -52,7 +52,7 @@ OutputSection *add_section(char *name, int type, int flags, int align) {
 
     // Add a symbol unless it's the null section
     if (name[0]) {
-        Symbol *symbol = strmap_get(symbols, name);
+        Symbol *symbol = strmap_ordered_get(symbols, name);
 
         // A symbol might already be defined before the section is created
         if (!symbol) {
@@ -70,9 +70,9 @@ OutputSection *add_section(char *name, int type, int flags, int align) {
 // Add non-global, then global symbols to the symtab section
 void make_symbols_section(void) {
     // Add non-global symbols
-    for (StrMapIterator it = strmap_iterator(symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(symbols, name);
+    for (StrMapOrderedIterator it = strmap_ordered_iterator(symbols); !strmap_ordered_iterator_finished(&it); strmap_ordered_iterator_next(&it)) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(symbols, name);
 
         if (symbol->section) symbol->section_index = symbol->section->index;
 
@@ -93,9 +93,9 @@ void make_symbols_section(void) {
     }
 
     // Add global symbols
-    for (StrMapIterator it = strmap_iterator(symbols); !strmap_iterator_finished(&it); strmap_iterator_next(&it)) {
-        const char *name = strmap_iterator_key(&it);
-        Symbol *symbol = strmap_get(symbols, name);
+    for (StrMapOrderedIterator it = strmap_ordered_iterator(symbols); !strmap_ordered_iterator_finished(&it); strmap_ordered_iterator_next(&it)) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(symbols, name);
 
         if (symbol->section) symbol->section_index = symbol->section->index;
 

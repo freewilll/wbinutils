@@ -8,6 +8,7 @@ HEADERS = \
 	list.h \
 	output-elf.h \
 	strmap.h \
+	strmap-ordered.h \
 	was/base128.h \
 	was/branches.h \
 	was/dwarf.h \
@@ -15,11 +16,9 @@ HEADERS = \
 	was/expr.h \
 	was/instr.h \
 	was/lexer.h \
-	was/list.h \
 	was/opcodes.h \
 	was/parser.h \
 	was/relocations.h \
-	was/strmap.h \
 	was/symbols.h \
 	was/utils.h \
 	was/was.h \
@@ -45,6 +44,7 @@ LIBS = \
 	error \
 	list \
 	strmap \
+	strmap_ordered \
 
 HEADERS_PATH := ${HEADERS:%=../include/%}
 

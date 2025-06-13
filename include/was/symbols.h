@@ -2,7 +2,7 @@
 #define _SYMBOLS_H
 
 #include "output-elf.h"
-#include "strmap.h"
+#include "strmap-ordered.h"
 
 typedef struct symbol {
     char *name;             // Name
@@ -15,7 +15,7 @@ typedef struct symbol {
     int value;              // Offset or alignment
 } Symbol;
 
-extern StrMap *symbols;
+extern StrMapOrdered *symbols;
 
 void init_symbols(void);
 Symbol *get_symbol(char *name);

@@ -15,7 +15,6 @@
 #include "was/list.h"
 #include "was/parser.h"
 #include "was/relocations.h"
-#include "was/strmap.h"
 #include "was/symbols.h"
 #include "was/utils.h"
 #include "was/was.h"

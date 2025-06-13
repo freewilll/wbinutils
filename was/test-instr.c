@@ -1313,8 +1313,8 @@ void test_symbol_types_and_binding(void) {
         ".local foo3; .comm foo3, 4, 8",
         END);
     assert_symbols(
+        0,  8, STT_OBJECT, STB_LOCAL, bss_index, "foo1",
         8,  4, STT_OBJECT, STB_LOCAL, bss_index, "foo2",
-        0,  8, STT_OBJECT, STB_LOCAL, bss_index, "foo1", // The odd order is due to the strmap_iterator
         12, 4, STT_OBJECT, STB_LOCAL, bss_index, "foo3",
         END);
 
@@ -1343,8 +1343,8 @@ static void test_size_difference(void) {
         0x90, 0x90, END);
 
     assert_symbols(
-        0, 0, STT_NOTYPE, STB_LOCAL,  text_index, "foo",
         1, 0, STT_NOTYPE, STB_LOCAL,  text_index, "bar",
+        0, 0, STT_NOTYPE, STB_LOCAL,  text_index, "foo",
         0, 1, STT_NOTYPE, STB_GLOBAL, SHN_UNDEF,  "obj", // Size of nop instruction
         END);
 
