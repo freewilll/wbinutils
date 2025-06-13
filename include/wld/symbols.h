@@ -22,9 +22,12 @@ typedef struct symbol {
     int src_is_library;             // 1 if the symbol was found in a library, otherwise it was found in an object file
     int src_is_shared_library;      // 1 is the symbol is a shared library. src_is_library is also 1 in this case.
     int needs_got;                  // Set if the symbol needs an entry in the Global Offset Table (GOT)
+    int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt table
     int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt table, for ifuncs
     uint64_t got_offset;            // Offset in the .got section, if present
+    uint64_t got_plt_offset;        // Offset in the .got.plt section, if present
     uint64_t got_iplt_offset;       // Offset in the .got.iplt section, if present
+    uint64_t plt_offset;            // Offset in the .plt section, if present
     uint64_t iplt_offset;           // Offset in the .iplt section, if present
     uint64_t rela_iplt_offset;      // Offset in the .rela.iplt section, if present
     InputElfFile *src_elf_file;     // File symbol is defined in. NULL if undefined.
@@ -69,8 +72,9 @@ int add_dynstr_string(OutputElfFile *output_elf_file, const char *name);
 void make_elf_dyn_symbols(OutputElfFile *output_elf_file);
 void make_elf_symbols(OutputElfFile *output_elf_file);
 void update_elf_symbols(OutputElfFile *output_elf_file);
-void create_got_section(OutputElfFile *output_elf_file);
-void update_got_symbol_values(OutputElfFile *output_elf_file);
+void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file);
+void update_got_values(OutputElfFile *output_elf_file);
+void update_dynamic_relocatable_values(OutputElfFile *output_elf_file);
 void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table);
 void allocate_extra_sections(OutputElfFile *output_elf_file);;
 void update_iplt(OutputElfFile *output_elf_file);

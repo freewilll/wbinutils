@@ -75,7 +75,7 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    .dynamic :  { *(.dynamic)                                              }\n"
 #endif
     "    .got :      { *(.got)                                                  }\n"
-    "    .got.plt:   { *(.got.plt)                                              }\n"
+    "    .got.plt:   { *(.got.plt) *(.got.iplt)                                 }\n"
     "    .data :     { *(.data .data.*)                                         }\n"
     "    .bss :      { *(.bss .bss.*) *(COMMON)                                 }\n"
     "                                                                            \n"

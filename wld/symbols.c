@@ -751,7 +751,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
         dynsym_symbol_count++;
 
-        if (symbol->src_is_shared_library) rela_dyn_entry_count++;
+        if (symbol->src_is_shared_library && symbol->needs_got) rela_dyn_entry_count++;
     }
 
     output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
@@ -799,27 +799,52 @@ void init_symbols(OutputElfFile *output_elf_file) {
         add_hidden_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
 }
 
-// Create the .got section, if needed
-void create_got_section(OutputElfFile *output_elf_file) {
+// Create the .got, .got.plt, .plt, .rela.plt sections, as needed
+void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
     // Scan the symbol table and count the amount of GOT entries
     int got_entries_count = 0;
+    int got_plt_entries_count = 0;
+
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (symbol->needs_got) got_entries_count++;
+        if (symbol->needs_got_plt) got_plt_entries_count++;
     }
 
-    if (!got_entries_count) return;
+    output_elf_file->got_plt_entries_count= got_plt_entries_count;
 
-    InputSection *extra_section = create_extra_section(output_elf_file, GOT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
-    extra_section->size = 8 * got_entries_count;
-    extra_section->data = malloc(extra_section->size);
+    if (got_entries_count) {
+        // Create .got section
+        InputSection *extra_section = create_extra_section(output_elf_file, GOT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+        extra_section->size = 8 * got_entries_count;
+        extra_section->data = malloc(extra_section->size);
+    }
+
+    if (got_plt_entries_count) {
+        // Create .got.plt section
+        InputSection *extra_section = create_extra_section(output_elf_file, GOT_PLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+        extra_section->size = 8 * (got_plt_entries_count + 3); // The first three entries of the .got.plt are reserved
+        extra_section->data = malloc(extra_section->size);
+        output_elf_file->section_got_plt = extra_section;
+
+        // Create .plt section
+        extra_section = create_extra_section(output_elf_file, PLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_EXECINSTR, 8);
+        extra_section->size = 16 * (got_plt_entries_count + 1); // Each entry has 16 bytes. The first entry is reserved.
+        extra_section->data = malloc(extra_section->size);
+
+        // Create .rela.plt section
+        extra_section = create_extra_section(output_elf_file, RELA_PLT_SECTION_NAME, SHT_RELA, SHF_ALLOC | SHF_INFO_LINK, 8);
+        extra_section->size = got_plt_entries_count * sizeof(ElfRelocation);
+        extra_section->data = malloc(extra_section->size);
+        output_elf_file->section_rela_plt = extra_section;
+    }
 }
 
-// Set the symbol values in the GOT (if present)
-void update_got_symbol_values(OutputElfFile *output_elf_file) {
+// Set the symbol values in the .got
+void update_got_values(OutputElfFile *output_elf_file) {
     InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
-    if (!section_got) return; // No GOT, do nothing
+    if (!section_got) return;
 
     uint64_t got_value = section_got->output_section->address + section_got->dst_offset;
 
@@ -832,20 +857,131 @@ void update_got_symbol_values(OutputElfFile *output_elf_file) {
     // Set the address of the GOT
     output_elf_file->got_virt_address = got_value;
 
-    // Add the GOT entries
     uint64_t *got_entries = (uint64_t *) section_got->data;
 
-    int i = 0;
+    // Add the .got entries
+    int got_index = 0;
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->needs_got) continue;
 
-        if (i * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in the GOT");
-        got_entries[i] = symbol->dst_value;
-        symbol->got_offset = i * 8;
+        if (got_index * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in .got");
+        got_entries[got_index] = symbol->dst_value;
+        symbol->got_offset = got_index * 8;
+        got_index++;
+    }
+}
 
-        i++;
+// Update values in:
+// .plt:        This executable section contains pushes and jumps using the addresses in .got.plt
+// .got.plt     This contains function addresses. Set here initially and by the program linker during runtime.
+// .rela.plt    Relocations in .got.plt
+void update_dynamic_relocatable_values(OutputElfFile *output_elf_file) {
+    InputSection *section_got_plt = output_elf_file->section_got_plt;
+    if (!section_got_plt) return;
+
+    InputSection *section_plt = get_extra_section(output_elf_file, PLT_SECTION_NAME);
+    if (!section_plt) panic("section_plt NULL in update_dynamic_relocatable_values");
+
+    InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+    if (!section_dynamic) panic("section_dynamic NULL in update_dynamic_relocatable_values");
+
+    InputSection *section_rela_plt = output_elf_file->section_rela_plt;
+    if (!section_rela_plt) panic("section_rela_plt NULL in update_dynamic_relocatable_values");
+
+    char *rela_plt_data = section_rela_plt ? section_rela_plt->data : NULL;
+
+    InputSection *section_dynsym = get_extra_section(output_elf_file, DYNSYM_SECTION_NAME);
+    if (!section_dynsym) panic("section_dynsym NULL in update_dynamic_relocatable_values");
+
+    uint64_t *got_plt_entries = (uint64_t *) NULL;
+    got_plt_entries = (uint64_t *) section_got_plt->data;
+
+    // The first address in .got.plt has to be the address of the .dynamic section
+    got_plt_entries[0] =section_dynamic->output_section->offset + section_dynamic->dst_offset;
+
+    // Set plt_offset, used in relocation
+    output_elf_file->plt_offset = section_plt->output_section->offset + section_plt->dst_offset;
+
+    // Write the .PLT0 code
+    char *plt_data = section_plt->data;
+    uint64_t plt_offset = section_plt->output_section->offset + section_plt->dst_offset;
+    uint64_t got_plt_offset = section_got_plt->output_section->offset + section_got_plt->dst_offset;
+
+    // pushq .got.plt+8(%rip)
+    plt_data[0] = 0xff;
+    plt_data[1] = 0x35;
+    *((uint32_t *) &plt_data[2]) = got_plt_offset - plt_offset + 8 - 6;
+
+    // jmpq .got.plt+16(%rip)
+    plt_data[6] = 0xff;
+    plt_data[7] = 0x25;
+    *((uint32_t *) &plt_data[8]) = got_plt_offset - plt_offset + 16 - 12;
+
+    // nopl 0x0(%rax)
+    plt_data[12] = 0x0f;
+    plt_data[13] = 0x1f;
+    plt_data[14] = 0x40;
+
+    // Setup the section header for .rela.plt
+    // This has to be done in the ELF headers, which have already been made from the output sections.
+    section_rela_plt->output_section->link = section_got_plt->index;
+    ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_plt->output_section->index];
+    h->sh_link = section_dynsym->output_section->index;
+    h->sh_info = section_got_plt->output_section->index;
+    h->sh_entsize = sizeof(ElfRelocation);
+
+    // Add .plt, .got.plt and .rela.plt entries
+    int plt_index = 1; // The first entry has special .plt0 jump code
+    int got_plt_index = 3; // The first 3 entries are used by the dynamic linker
+    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const char *name = strmap_ordered_iterator_key(&it);
+        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+        if (!symbol->needs_got_plt) continue;
+
+        symbol->plt_offset = plt_index * 16;
+
+        symbol->got_plt_offset = got_plt_index * 8;
+        if (symbol->got_plt_offset >= section_got_plt ->size) panic("Trying to write beyond the allocated space in .got.plt");
+
+        // Add instructions to the .plt. The first entry has the .PLT0 stub.
+        char *plt_entry_data = section_plt->data + symbol->plt_offset;
+
+        uint64_t plt_offset = section_plt->output_section->offset + section_plt->dst_offset + symbol->plt_offset;
+        uint64_t got_plt_offset = section_got_plt->output_section->offset + section_got_plt->dst_offset;
+
+        // Set the .got entry to point to the PLT address + 6, i.e. the address of the pushq instruction.
+        // At runtime, the program linker patches this up to point at the actual function.
+        got_plt_entries[got_plt_index] = plt_offset + 6;
+
+        // Add instructions to the PLT entry
+
+        int dyn_rela_index = plt_index - 1;
+
+        // jmpq *0x...(%rip)
+        // 6 is the size of the instruction, 8 is the offset in the .got.plt table.
+        plt_entry_data[0] = 0xff;
+        plt_entry_data[1] = 0x25;
+        *((uint64_t *) &plt_entry_data[2]) = got_plt_offset + symbol->got_plt_offset - plt_offset - 6;
+
+        // pushq $rela_dyn_index
+        plt_entry_data[6] = 0x68;
+        *((uint32_t *) &plt_entry_data[7]) = dyn_rela_index;
+
+        // jmpq .plt0
+        plt_entry_data[11] = 0xe9;
+        *((uint32_t *) &plt_entry_data[12]) = -plt_index * 16 - 16;
+
+        // Add a relocation in .rela.iplt
+        if (!rela_plt_data) panic("NULL rela_plt_data in update_got_symbol_values");
+        ElfRelocation *r = &((ElfRelocation *) rela_plt_data)[dyn_rela_index];
+        r->r_info = R_X86_64_JUMP_SLOT | ((uint64_t) symbol->dst_dynsym_index << 32);
+        r->r_offset = got_plt_offset + got_plt_index * 8;
+        r->r_addend = 0;
+
+        plt_index++;
+        got_plt_index++;
     }
 }
 
@@ -854,7 +990,7 @@ void update_got_symbol_values(OutputElfFile *output_elf_file) {
 // - Create .iplt
 // - Create .rela.iplt
 void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table) {
-    InputSection *section_got_iplt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    InputSection *section_got_iplt = get_extra_section(output_elf_file, GOT_IPLT_SECTION_NAME);
     InputSection *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
     InputSection *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
 
@@ -870,7 +1006,7 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
             symbol->needs_got_iplt = 1;
 
             if (!section_got_iplt) {
-                section_got_iplt = create_extra_section(output_elf_file, GOT_PLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
+                section_got_iplt = create_extra_section(output_elf_file, GOT_IPLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
                 section_got_iplt->size = 8;
             }
 
@@ -894,7 +1030,7 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
 
 // Allocate memory for extra sections like .got.plt and .iplt, .rela.iplt
 void allocate_extra_sections(OutputElfFile *output_elf_file) {
-    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_IPLT_SECTION_NAME);
     if (section_got_plt && section_got_plt->size)
         section_got_plt->data = calloc(1, section_got_plt->size);
 
@@ -912,7 +1048,7 @@ void allocate_extra_sections(OutputElfFile *output_elf_file) {
 // Note: the calls to the ifunc code aren't rewritten, the loader does that, using the relocations
 // added in .rela.iplt.
 void update_iplt(OutputElfFile *output_elf_file) {
-    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_IPLT_SECTION_NAME);
     InputSection *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
     InputSection *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
 
@@ -920,14 +1056,14 @@ void update_iplt(OutputElfFile *output_elf_file) {
 
     // Check all sections exist
     if (!section_iplt || !section_got_plt)
-        panic("Got a %s section without a matching %s section", IPLT_SECTION_NAME, GOT_PLT_SECTION_NAME);
+        panic("Got a %s section without a matching %s section", IPLT_SECTION_NAME, GOT_IPLT_SECTION_NAME);
 
     if (!section_rela_iplt)
-        panic("Got a %s section without a matching %s section", GOT_PLT_SECTION_NAME, RELA_IPLT_SECTION_NAME);
+        panic("Got a %s section without a matching %s section", GOT_IPLT_SECTION_NAME, RELA_IPLT_SECTION_NAME);
 
     // The entries in .plt and .got.plt correspond 1:1. .got.plt has a NULL header and .iplt doesn't.
 
-    if (!section_got_plt->output_section) panic("No address for %s", GOT_PLT_SECTION_NAME);
+    if (!section_got_plt->output_section) panic("No address for %s", GOT_IPLT_SECTION_NAME);
     if (!section_iplt->output_section) panic("No address for %s", IPLT_SECTION_NAME);
 
     uint64_t got_iplt_address = section_got_plt->output_section->address + section_got_plt->dst_offset;
@@ -1059,18 +1195,18 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
         if (!symbol->src_is_shared_library) continue;
 
-        if (symbol->got_offset == -1) panic("Symbol %s is supposed to be in the GOT but isn't", symbol->name);
+        if (symbol->needs_got) {
+            int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
+            if (i >= output_elf_file->rela_dyn_entry_count)
+                panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
+                    symbol->name, i, output_elf_file->rela_dyn_entry_count);
 
-        int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
-        if (i >= output_elf_file->rela_dyn_entry_count)
-            panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
-                symbol->name, i, output_elf_file->rela_dyn_entry_count);
-
-        // Populate the relocation entry in .rela.dyn
-        ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
-        r->r_info = R_X86_64_GLOB_DAT + ((uint64_t) symbol->dst_dynsym_index << 32);
-        r->r_offset = got_value + symbol->got_offset;
-        r->r_addend = 0;
+            // Populate the relocation entry in .rela.dyn
+            ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
+            r->r_info = R_X86_64_GLOB_DAT + ((uint64_t) symbol->dst_dynsym_index << 32);
+            r->r_offset = got_value + symbol->got_offset;
+            r->r_addend = 0;
+        }
      }
 
     ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_dyn->output_section->index];

@@ -17,7 +17,10 @@
 
 #define GOT_SECTION_NAME        ".got"
 #define GOT_PLT_SECTION_NAME    ".got.plt"
+#define GOT_IPLT_SECTION_NAME   ".got.iplt"
+#define PLT_SECTION_NAME        ".plt"
 #define IPLT_SECTION_NAME       ".iplt"
+#define RELA_PLT_SECTION_NAME   ".rela.plt"
 #define RELA_IPLT_SECTION_NAME  ".rela.iplt"
 #define RELA_DYN_SECTION_NAME   ".rela.dyn"
 #define DYNAMIC_SECTION_NAME    ".dynamic"

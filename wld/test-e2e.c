@@ -19,6 +19,13 @@ static void assert_int(int expected, int actual, const char *message) {
     }
 }
 
+static void assert_uint64_t(uint64_t expected, uint64_t actual, const char *message) {
+    if (expected != actual) {
+        printf("%s: expected %lx, got %lx\n", message, expected, actual);
+        exit(1);
+    }
+}
+
 static void fail_sections(OutputElfFile *elf_file, List *expected_sections) {
     printf("Got sections:\n");
     dump_sections(elf_file);
@@ -301,12 +308,16 @@ static void assert_dynamic(OutputElfFile *elf_file, ...) {
         const char *expected_tag_name = DYNAMIC_SECTION_TYPE_NAMES[expected_tag];
         const char *got_tag_name = DYNAMIC_SECTION_TYPE_NAMES[got_tag];
 
-        if (expected_tag != got_tag || expected_value != got_value || (expected_dynstr && strcmp(expected_dynstr, got_dynstr))) {
+        int value_matches = expected_dynstr
+            ? expected_dynstr && !strcmp(expected_dynstr, got_dynstr)
+            : expected_value == got_value;
+
+        if (expected_tag != got_tag || !value_matches) {
             dump_dynamic_section(elf_file);
             printf("Mismatch at position %d\n"
-                "Expected tag:   %3d, got tag:   %#lx\n"
-                "Expected value: %3d, got value: %#lx\n"
-                "Expected dynstr: %s, got dynstr: %s\n",
+                "Expected tag:   %3d,  got tag:   %#lx\n"
+                "Expected value: %#x,  got value: %#lx\n"
+                "Expected dynstr: %s,  got dynstr: %s\n",
                 pos,
                 expected_tag, got_tag,
                 expected_value, got_value,
@@ -326,7 +337,6 @@ static void assert_dynamic(OutputElfFile *elf_file, ...) {
         pos++;
     }
 }
-
 
 void assert_relocations(OutputElfFile *elf_file, OutputSection *section, va_list ap) {
     if (!section) panic("Assert section on a NULL");
@@ -392,6 +402,69 @@ void assert_rela_dyn_relocations(OutputElfFile *elf_file, ...) {
     va_start(ap, elf_file);
 
     assert_relocations(elf_file, section, ap);
+}
+
+void assert_rela_plt_relocations(OutputElfFile *elf_file, ...) {
+    OutputSection *section = get_output_section(elf_file, RELA_PLT_SECTION_NAME);
+    if (!section) panic("No .rela.plt section\n");
+
+    va_list ap;
+    va_start(ap, elf_file);
+
+    assert_relocations(elf_file, section, ap);
+}
+
+// Print hex bytes
+static int hexdump(char *data, int size) {
+    for (int i = 0; i < size; i++) {
+        if (i != 0) printf(", ");
+        printf("0x%02x", (unsigned char) data[i]);
+    }
+    printf("\n");
+}
+
+static void vassert_data(char *data, int size, va_list ap) {
+    int pos = 0;
+
+    while (1) {
+        unsigned int expected = va_arg(ap, unsigned int);
+
+        if (expected == END) {
+            if (pos != size) {
+                hexdump(data, size);
+                panic("Unexpected data at position %d", pos);
+            }
+
+            return; // Success
+        }
+
+        if (pos == size) {
+            hexdump(data, size);
+            panic("Expected extra data at position %d: %#02x", pos, expected & 0xff);
+        }
+
+        if ((expected & 0xff) != (data[pos] & 0xff)) {
+            hexdump(data, size);
+            panic("Mismatch at position %d: expected %#02x, got %#02x", pos, (uint8_t) expected & 0xff, data[pos] & 0xff);
+        }
+
+        pos++;
+    }
+}
+
+static void vassert_section_data(OutputSection* section, va_list ap) {
+    if (!section) panic("Assert section on a NULL");
+    vassert_data(section->data, section->size, ap);
+}
+
+static void assert_section_data(OutputElfFile *elf_file, const char *section_name, ...) {
+    va_list ap;
+    va_start(ap, section_name);
+
+    OutputSection* output_section = get_output_section(elf_file, section_name);
+    if (!output_section) panic("Did not find %s", section_name);
+    vassert_section_data(output_section, ap);
+    va_end(ap);
 }
 
 static char *run_was(char *assembly) {
@@ -817,7 +890,7 @@ static void test_etext_undefined() {
         NULL
     );
 
-    assert_program_segments(elf_file, //
+    assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x13,    0x13,   PF_R | PF_X,  0x1000,
         END
@@ -859,7 +932,7 @@ static void test_defined_etext() {
         NULL
     );
 
-    assert_program_segments(elf_file, //
+    assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x0013,  0x0013, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x1014,  0x1014, PF_R | PF_W,  0x1000,
@@ -900,7 +973,7 @@ static void test_unused_etext() {
         NULL
     );
 
-    assert_program_segments(elf_file, //
+    assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x0004,  0x0004, PF_R | PF_W,  0x1000,
@@ -941,7 +1014,7 @@ static void test_automatic_start_stop_symbols() {
         NULL
     );
 
-    assert_program_segments(elf_file, //
+    assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x401000,  0x001a,  0x001a, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x0004,  0x0004, PF_R | PF_W,  0x1000,
@@ -957,7 +1030,7 @@ static void test_automatic_start_stop_symbols() {
         END);
 }
 
-// Test a library with no relocations, only some objects in .data and .bss.
+// Test a library with no relocations, only two objects in .data and .bss. and two functions
 static void test_library_no_dependencies() {
     char *object_path = run_was(
         ".globl i;"
@@ -967,6 +1040,11 @@ static void test_library_no_dependencies() {
         "    j: .long 2;"
         ".comm k, 4, 4;"
         ".comm l, 4, 4;"
+        ".globl f1;"
+        ".globl f2;"
+        ".text;"
+        "    f1: nop;"
+        "    f2: nop;"
     );
 
     List *input_paths = new_list(1);
@@ -976,28 +1054,30 @@ static void test_library_no_dependencies() {
     OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "test_library_no_dependencies");
 
     assert_sections(elf_file,
-        // Name            Type            Address   Offset  Size   Flags                   Align
-        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x24,  SHF_ALLOC,              8,
-        ".dynsym",         SHT_DYNSYM,     0x1024,   0x1024, 0x78,  SHF_ALLOC,              1,
-        ".dynstr",         SHT_STRTAB,     0x109c,   0x109c, 0x09,  SHF_ALLOC,              1,
-        ".dynamic",        SHT_DYNAMIC,    0x2000,   0x2000, 0x60,  SHF_ALLOC | SHF_WRITE,  8,
-        ".data",           SHT_PROGBITS,   0x2060,   0x2060, 0x08,  SHF_ALLOC | SHF_WRITE,  4,
-        ".bss",            SHT_NOBITS,     0x2068,   0x2068, 0x08,  SHF_ALLOC | SHF_WRITE,  4,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x2c,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x102c,   0x102c, 0xa8,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x10d4,   0x10d4, 0x0f,  SHF_ALLOC,                 1,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x02,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x60,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x3060,   0x3060, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".bss",            SHT_NOBITS,     0x3068,   0x3068, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
-    assert_program_segments(elf_file, //
+    assert_program_segments(elf_file,
         // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
-        PT_LOAD,          0x1000,  0x1000,  0x00a5,  0x00a5, PF_R,         0x1000,
-        PT_LOAD,          0x2000,  0x2000,  0x0068,  0x0070, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x2000,  0x2000,  0x0060,  0x0060, PF_R,         0x0008,
+        PT_LOAD,          0x1000,  0x1000,  0x00e3,  0x00e3, PF_R,         0x1000,
+        PT_LOAD,          0x2000,  0x2000,  0x0002,  0x0002, PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x3000,  0x3000,  0x0068,  0x0070, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x0060,  0x0060, PF_R,         0x0008,
         END
     );
 
     assert_dynamic(elf_file,
-        DT_STRTAB, 0x109c, NULL,
-        DT_SYMTAB, 0x1024, NULL,
-        DT_STRSZ,  0x9,    NULL,
+        DT_STRTAB, 0x10d4, NULL,
+        DT_SYMTAB, 0x102c, NULL,
+        DT_STRSZ,  0xf,    NULL,
         DT_SYMENT, 0x18,   NULL,
         DT_HASH,   0x1000, NULL,
         DT_NULL,   0,      NULL
@@ -1005,22 +1085,26 @@ static void test_library_no_dependencies() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
-        0x2064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
-        0x2068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
-        0x206c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
+        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
+        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
+        0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
         END);
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
-        0x2064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
-        0x2068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
-        0x206c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
+        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
+        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
+        0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
         END);
 }
 
-static void test_two_libs() {
+static void test_two_libs_with_data() {
     // Make a lib with two ints
     char *object_path = run_was(
         ".globl i;"
@@ -1039,7 +1123,11 @@ static void test_two_libs() {
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
     // Make a second lib that uses the two ints from the first
-    object_path = run_was(".text; mov i@GOTPCREL(%rip), %eax; mov j@GOTPCREL(%rip), %eax;");
+    object_path = run_was(
+        ".text;"
+        "mov i@GOTPCREL(%rip), %eax;"
+        "mov j@GOTPCREL(%rip), %eax;"
+    );
 
     input_paths = new_list(1);
     append_to_list(input_paths, object_path);
@@ -1059,7 +1147,7 @@ static void test_two_libs() {
         NULL
     );
 
-    assert_program_segments(elf_file, //
+    assert_program_segments(elf_file,
         // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
         PT_LOAD,          0x1000,  0x1000,  0x00a8,  0x00a8, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
@@ -1069,7 +1157,7 @@ static void test_two_libs() {
     );
 
     assert_dynamic(elf_file,
-        DT_NEEDED,      5,          lib_filename,
+        DT_NEEDED,      0,          lib_filename,
         DT_STRTAB,      0x1060,     NULL,
         DT_SYMTAB,      0x1018,     NULL,
         DT_STRSZ,       0x15,       NULL,
@@ -1098,6 +1186,123 @@ static void test_two_libs() {
         R_X86_64_GLOB_DAT, 1,                0x30a0,  0,
         R_X86_64_GLOB_DAT, 2,                0x30a8,  0,
         END);
+}
+
+static void test_two_libs_with_functions() {
+    // Make a lib with two functions
+    char *object_path = run_was(
+        ".globl f1;"
+        ".globl f2;"
+        ".text;"
+        "    f1: nop;"
+        "    f2: nop;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    // Make a second lib that uses the two functions from the first
+    object_path = run_was(
+        ".text;"
+        "callq f1@PLT;"
+        "callq f2@PLT;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x17,  SHF_ALLOC,                 1,
+        ".rela.plt",       SHT_RELA,       0x2000,   0x2000, 0x30,  SHF_ALLOC | SHF_INFO_LINK, 8,
+        ".plt",            SHT_PROGBITS,   0x3000,   0x3000, 0x30,  SHF_ALLOC | SHF_EXECINSTR, 8,
+        ".text",           SHT_PROGBITS,   0x3030,   0x3030, 0x0a,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,   0x40b0,   0x40b0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
+        NULL
+    );
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x1000,  0x0077,  0x0077, PF_R,         0x1000,
+        PT_LOAD,          0x2000,  0x2000,  0x0030,  0x0030, PF_R,         0x1000,
+        PT_LOAD,          0x3000,  0x3000,  0x003a,  0x003a, PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x4000,  0x4000,  0x00d8,  0x00d8, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x4000,  0x4000,  0x00b0,  0x00b0, PF_R,         0x0008,
+        END
+    );
+
+    assert_dynamic(elf_file,
+        DT_NEEDED,      0,          lib_filename,
+        DT_STRTAB,      0x1060,     NULL,
+        DT_SYMTAB,      0x1018,     NULL,
+        DT_STRSZ,       0x17,       NULL,
+        DT_SYMENT,      0x18,       NULL,
+        DT_HASH,        0x1000,     NULL,
+        DT_PLTGOT,      0x40b0,     NULL,
+        DT_PLTRELSZ,    0x30,       NULL,
+        DT_PLTREL,      0x07,       NULL,
+        DT_JMPREL,      0x2000,     NULL,
+        DT_NULL,        0,          NULL
+    );
+
+    assert_symtab(elf_file,
+    //  Value  Size   Type        Binding     Visibility   Section  Name
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "f1",
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "f2",
+        END);
+
+    assert_dynsym(elf_file,
+    //  Value  Size   Type        Binding     Visibility   Section  Name
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "f1",
+        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "f2",
+        END);
+
+    assert_rela_plt_relocations(elf_file,
+        // Tag              Dyn symtab index  Address  Offset
+        R_X86_64_JUMP_SLOT, 1,                0x40c8,  0,
+        R_X86_64_JUMP_SLOT, 2,                0x40d0,  0,
+        END);
+
+    // .rela.plt must have 3 entries. A The plt0 code + code for f1 and f2.
+    assert_section_data(elf_file, PLT_SECTION_NAME,
+        // PLT entry 0
+        0xff, 0x35, 0xb2, 0x10, 0x00, 0x00, // pushq .got.plt+8(%rip)
+        0xff, 0x25, 0xb4, 0x10, 0x00, 0x00, // jmpq .got.plt+16(%rip)
+        0x0f, 0x1f, 0x40, 0x00,             // nopl 0x0(%rax)
+
+        // PLT entry 1
+        0xff, 0x25, 0xb2, 0x10, 0x00, 0x00, // jmpq *.got.plt+...(%rip)
+        0x68, 0x00, 0x00, 0x00, 0x00,       // pushq $rela_dyn_index
+        0xe9, 0xe0, 0xff, 0xff, 0xff,       // jmpq .plt0
+
+        // PLT entry 1
+        0xff, 0x25, 0xaa, 0x10, 0x00, 0x00,
+        0x68, 0x01, 0x00, 0x00, 0x00,
+        0xe9, 0xd0, 0xff, 0xff, 0xff,
+
+        END);
+
+    // .got.plt must have 5 entries
+    InputSection *got_plt = get_extra_section(elf_file, GOT_PLT_SECTION_NAME);
+    if (!got_plt) panic("Could not find .got.plt");
+    uint64_t *got_plt_data = got_plt->data;
+
+    assert_uint64_t(0x4000, got_plt_data[0], ".got.plt[0]"); // The address of the .dynamic section
+    assert_uint64_t(0x0000, got_plt_data[1], ".got.plt[1]"); // Used by program linker
+    assert_uint64_t(0x0000, got_plt_data[2], ".got.plt[2]"); // Used by program linker
+    assert_uint64_t(0x3016, got_plt_data[3], ".got.plt[3]"); // .plt1 + 6, the address of the pushq instruction
+    assert_uint64_t(0x3026, got_plt_data[4], ".got.plt[4]"); // .plt2 + 6
 }
 
 // Ensure the relocation to .debug_abbrev is correct and the address is zero.
@@ -1149,6 +1354,7 @@ int main() {
     test_unused_etext();
     test_automatic_start_stop_symbols();
     test_library_no_dependencies();
-    test_two_libs();
+    test_two_libs_with_data();
+    test_two_libs_with_functions();
     test_dwarf();
 }

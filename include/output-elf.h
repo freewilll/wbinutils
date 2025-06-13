@@ -51,6 +51,8 @@ typedef struct output_elf  {
     struct input_section *section_dynstr;                   // Used by wld
     struct input_section *section_hash;                     // Used by wld
     struct input_section *section_rela_dyn;                 // Used by wld
+    struct input_section *section_rela_plt;                 // Used by wld
+    struct input_section *section_got_plt;                  // Used by wld
     int local_symbol_end;                                   // Index of last local symbol
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
@@ -60,6 +62,7 @@ typedef struct output_elf  {
     uint64_t tls_template_address;                          // Virtual address of the TLS template
     uint64_t got_virt_address;                              // Virtual address of the GOT
     uint64_t got_iplt_virt_address;                         // Virtual address of .got.iplt
+    uint64_t plt_offset;                                    // Offset of .plt
     uint64_t iplt_virt_address;                             // Virtual address of the .iplt section
     List *program_segments_list;                            // Used by wld
     StrMapOrdered *extra_sections;                          // Used by wld
@@ -68,6 +71,7 @@ typedef struct output_elf  {
     StrMap *global_symbols_in_use;                          // Used by wld
     int dynsym_symbol_count;                                // Used by wld
     int rela_dyn_entry_count;                               // Used by wld
+    int got_plt_entries_count;                              // Used by wld
     List *shared_libraries;                                 // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     int elf_program_segments_header_size;                   // ELF: Size of the program segment headers

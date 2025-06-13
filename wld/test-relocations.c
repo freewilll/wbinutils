@@ -53,8 +53,8 @@ void assert_data(char *data, ...) {
     va_end(ap);
 }
 
-void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset) {
-    OutputElfFile *output_elf_file = new_output_elf_file("", ET_EXEC);
+void run_full_relocation(int output_type, void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset, uint64_t value_plt_offset) {
+    OutputElfFile *output_elf_file = new_output_elf_file("", output_type);
     output_elf_file->tls_template_address = tls_template_address;
     output_elf_file->tls_template_size = tls_template_size;
 
@@ -63,33 +63,47 @@ void run_full_relocation(void *output_data, uint64_t output_offset, uint64_t tls
     output_elf_file->got_virt_address = 0x500000;
     output_elf_file->iplt_virt_address = 0x600000;
     output_elf_file->got_iplt_virt_address = 0x700000;
+    output_elf_file->plt_offset = 0x8000;
     uint64_t rw_section_address = output_virtual_address - output_offset;
     uint64_t rw_section_offset = rw_section_address - 0x400000;
 
     int result = scan_relocation(output_data, 0, &relocation);
     if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);
-    result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, &relocation, value, is_tls_value, value_got_offset, value_iplt_offset, value_got_iplt_offset);
+
+    result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, &relocation,
+        is_tls_value,
+        value,
+        value_plt_offset,
+        value_iplt_offset,
+        value_got_offset,
+        value_got_iplt_offset
+);
     if (result) panic("Relocation apply failed");
 }
 
 // Runs a relocation with TLS args
 void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value) {
-    run_full_relocation(output_data, output_offset, tls_template_address, tls_template_size, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1);
+    run_full_relocation(ET_EXEC, output_data, output_offset, tls_template_address, tls_template_size, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1, -1);
 }
 
 // Runs a relocation with a GOT value
 void run_got_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_got_offset) {
-    run_full_relocation(output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, value_got_offset, -1, -1);
+    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, value_got_offset, -1, -1, -1);
 }
 
 // Runs a relocation with a .got.iplt value
 void run_got_iplt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_got_iplt_offset) {
-    run_full_relocation(output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -1, -1, value_got_iplt_offset);
+    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -1, -1, value_got_iplt_offset, -1);
 }
 
 // Runs a relocation with an .iplt value
 void run_iplt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_iplt_offset) {
-    run_full_relocation(output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, value_iplt_offset, -1);
+    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, value_iplt_offset, -1, -1);
+}
+
+// Runs a relocation with an .plt value
+void run_plt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_plt_offset) {
+    run_full_relocation(ET_DYN, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, -1, -1, value_plt_offset);
 }
 
 // Runs a regular relocation
@@ -195,7 +209,7 @@ void test_R_X86_64_GOTPCREL_with_GOT_iplt_entry() {
     assert_data(output_data, 0x48, 0x83, 0x3d, 0xf8, 0x20, 0x00, 0x30, 0x00, END); // 0x700000 - 0x400000 + 0x20 = 0x00100020
 }
 
-void test_R_X86_64_PLT32(void) {
+void test_R_X86_64_PLT32_in_static(void) {
     // For entries not in the PLT, R_X86_64_PLT32 behaves like a R_X86_64_PC32
     uint32_t output_data[4]; memset(output_data, -1, 16);
     run_relocation(output_data, 8, R_X86_64_PLT32, 0x10, 0x400000, 0x401000);
@@ -209,6 +223,13 @@ void test_R_X86_64_PLT32(void) {
     assert_data(output_data2, 0xe8, 0x20, 0x00, 0x20, 0x00, END); // 0x600000 - 0x400000 + 0x20 = 0x00200020
 }
 
+void test_R_X86_64_PLT32_in_shared(void) {
+    // The symbol value is in the .plt section
+    uint8_t output_data2[] = {0xe8, 0x00, 0x00, 0x00, 0x00};      // callq foo@PLT and callq foo
+    run_plt_relocation(output_data2, 1, R_X86_64_PLT32, 0, 0x0, 0x10, 0x20);
+    assert_data(output_data2, 0xe8, 0x20, 0x80, 0x00, 0x00, END); // S(0x8020) = plt_offset(0x8000) + value_plt_offset(0x20) + A(0) - P(0);
+}
+
 int main() {
     test_R_X86_64_64();
     test_R_X86_64_PC32();
@@ -219,5 +240,6 @@ int main() {
     test_R_X86_64_TPOFF32();
     test_R_X86_64_GOTPCREL_with_GOT_entry();
     test_R_X86_64_GOTPCREL_with_GOT_iplt_entry();
-    test_R_X86_64_PLT32();
+    test_R_X86_64_PLT32_in_static();
+    test_R_X86_64_PLT32_in_shared();
 }

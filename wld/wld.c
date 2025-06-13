@@ -277,6 +277,7 @@ void dump_relocations(OutputSection* section) {
 static int make_dynamic_section_entry_count(OutputElfFile *output_elf_file) {
     int dynamic_section_entry_count = BASE_DYNAMIC_SECTION_ENTRY_COUNT + output_elf_file->shared_libraries->length;
     if (output_elf_file->rela_dyn_entry_count > 0) dynamic_section_entry_count += 3;
+    if (output_elf_file->got_plt_entries_count > 0) dynamic_section_entry_count += 4;
     return dynamic_section_entry_count;
 }
 
@@ -324,6 +325,8 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
     InputSection *section_dynsym = output_elf_file->section_dynsym;
     InputSection *section_hash = output_elf_file->section_hash;
     InputSection *section_rela_dyn = output_elf_file->section_rela_dyn;
+    InputSection *section_rela_plt = output_elf_file->section_rela_plt;
+    InputSection *section_got_plt = output_elf_file->section_got_plt;
 
     int pos = output_elf_file->shared_libraries->length;
 
@@ -333,9 +336,17 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
     set_in_dynamic_section(output_elf_file, pos++, DT_SYMENT, sizeof(ElfSymbol));
     set_in_dynamic_section(output_elf_file, pos++, DT_HASH, section_hash->output_section->address);
 
+
+    if (output_elf_file->got_plt_entries_count > 0) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_PLTGOT,   section_got_plt->output_section->address);
+        set_in_dynamic_section(output_elf_file, pos++, DT_PLTRELSZ, section_rela_plt->output_section->size);
+        set_in_dynamic_section(output_elf_file, pos++, DT_PLTREL,   DT_RELA);
+        set_in_dynamic_section(output_elf_file, pos++, DT_JMPREL,   section_rela_plt->output_section->address);
+    }
+
     if (output_elf_file->rela_dyn_entry_count > 0) {
         if (!section_rela_dyn) panic("section_rela_dyn NULL");
-        if (!section_rela_dyn->output_section) panic("section_rela_dyn->output_section is  NULL");
+        if (!section_rela_dyn->output_section) panic("section_rela_dyn->output_section is NULL");
 
         set_in_dynamic_section(output_elf_file, pos++, DT_RELA,    section_rela_dyn->output_section->address);
         set_in_dynamic_section(output_elf_file, pos++, DT_RELASZ,  section_rela_dyn->output_section->size);
@@ -670,8 +681,8 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Relax instructions where possible and determine which symbols need to be in the GOT
     apply_relocations(input_elf_files, output_elf_file, RELOCATION_PHASE_SCAN);
 
-    // Create the .got section, if needed
-    create_got_section(output_elf_file);
+    // Create the .got, .got.plt, .plt, .rela.plt sections, as needed
+    create_got_plt_and_rela_sections(output_elf_file);
 
     // Process IFUNCs and create .got.plt, .iplt and .rela.iplt if required
     process_ifuncs(output_elf_file, input_elf_files);
@@ -735,8 +746,14 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Assign values to symbols in the linker script
     make_output_section_command_assignments_symbol_values(output_elf_file);
 
-    // Update the GOT (if there is one)
-    update_got_symbol_values(output_elf_file);
+    // Set the symbol values in the .got
+    update_got_values(output_elf_file);
+
+    // Set the symbol values in the .got
+    update_got_values(output_elf_file);
+
+    // FOr ET_DYN files, update .plt, .got.plt and .rela.plt sections
+    update_dynamic_relocatable_values(output_elf_file);;
 
     // For ET_DYN files, update the relocation entries in the GOT table
     update_dyn_rela_section(output_elf_file);
