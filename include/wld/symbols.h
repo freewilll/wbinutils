@@ -15,7 +15,7 @@ typedef struct symbol {
     int binding;                    // Binding, e.g. local or global
     int type;                       // Type, e.g. function or object
     int other;                      // Visibility
-    int size;
+    uint64_t size;
     int is_abs;                     // The src value is an absolute address
     int is_common;                  // The symbol is a common symbol. input_section is null.
     int visibility;                 // Used by the linker
@@ -33,8 +33,8 @@ typedef struct symbol {
     InputElfFile *src_elf_file;     // File symbol is defined in. NULL if undefined.
     InputSection *input_section;    // Section the symbol is defined in. NULL if the symbol is undefined or common.
     OutputSection *output_section;
-    int src_value;                  // Value in the original ELF section
-    int dst_value;                  // Value in the final ELF section
+    uint64_t src_value;             // Value in the original ELF section
+    uint64_t dst_value;             // Value in the final ELF section
     int dst_index;                  // Index in the final ELF symbol table
     int dst_dynsym_index;           // Index in the final ELF dynsyn table (for libraries)
 } Symbol;

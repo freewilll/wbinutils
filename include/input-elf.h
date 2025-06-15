@@ -19,7 +19,7 @@ typedef struct input_section {
     uint64_t src_offset;                  // Offset of the section in the file image
     uint32_t info;                        // Contains extra information about the section, from ELF
     uint64_t align;                       // Alignment
-    int dst_offset;                       // Offset in output section
+    uint64_t dst_offset;                  // Offset in output section
     OutputSection *output_section;        // Target Section (for wld)
 } InputSection;
 

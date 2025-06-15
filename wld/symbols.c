@@ -93,7 +93,7 @@ static void remove_undefined_symbol(const char *name) {
     strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
 }
 
-static Symbol *new_symbol(const char *name, int type, int binding, int other, int size, int is_library, int is_shared_library) {
+static Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t size, int is_library, int is_shared_library) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
     symbol->name                  = strdup(name);
@@ -107,7 +107,7 @@ static Symbol *new_symbol(const char *name, int type, int binding, int other, in
     return symbol;
 }
 
-static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int type, int binding, int other, int size, int is_library, int is_shared_library) {
+static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int type, int binding, int other, uint64_t size, int is_library, int is_shared_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s binding=%s\n", name, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library, is_shared_library);
     strmap_ordered_put(st->defined_symbols, name, symbol);
@@ -129,7 +129,7 @@ static int resolve_undefined_symbol(const char *name, int is_library, int read_o
     return 1;
 }
 
-static Symbol *add_undefined_symbol(char *name, int type, int binding, int other, int size, int is_library) {
+static Symbol *add_undefined_symbol(char *name, int type, int binding, int other, uint64_t size, int is_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library, 0);
     strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
@@ -192,7 +192,7 @@ static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
-    int size = symbol->st_size;
+    uint64_t size = symbol->st_size;
     int other = symbol->st_other;
 
     InputSection *input_section = elf_file->section_list->elements[symbol->st_shndx];
@@ -219,7 +219,7 @@ static int handle_common_symbol(InputElfFile *elf_file, int is_library, int is_s
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
-    int size = symbol->st_size;
+    uint64_t size = symbol->st_size;
     int other = symbol->st_other;
 
     int is_common = symbol->st_shndx == SHN_COMMON;
@@ -277,7 +277,7 @@ static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int is_shar
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
-    int size = symbol->st_size;
+    uint64_t size = symbol->st_size;
     int other = symbol->st_other;
     int value = symbol->st_value;
 
@@ -313,7 +313,7 @@ static int handle_non_common_symbol(InputElfFile *elf_file, int is_library,int i
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
-    int size = symbol->st_size;
+    uint64_t size = symbol->st_size;
     int other = symbol->st_other;
 
     InputSection *input_section = elf_file->section_list->elements[symbol->st_shndx];
@@ -384,7 +384,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shar
 
         char binding = (symbol->st_info >> 4) & 0xf;
         char type = symbol->st_info & 0xf;
-        int size = symbol->st_size;
+        uint64_t size = symbol->st_size;
         int other = symbol->st_other;
 
         if (!symbol->st_name) continue;
@@ -552,7 +552,7 @@ void debug_print_symbol(Symbol *symbol) {
     const char *binding_name = SYMBOL_BINDING_NAMES[binding];
     const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
-    printf("%016x  %4x %-8s%-7s%-7s  ", symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
+    printf("%016lx  %4lx %-8s%-7s%-7s  ", symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
     print_section_string(symbol);
     printf(" %s\n", symbol->name);
 }
@@ -573,7 +573,7 @@ void debug_summarize_symbols(void) {
         const char *binding_name = SYMBOL_BINDING_NAMES[binding];
         const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
-        printf("%6d: %016x  %4x %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
+        printf("%6d: %016lx  %4lx %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
         print_section_string(symbol);
         printf(" %s\n", name);
 
@@ -602,7 +602,7 @@ int common_symbols_are_present(void) {
 
 // Returns 1 if any defined symbols are common
 void layout_common_symbols_in_bss_section(OutputSection *bss_section) {
-    int offset = bss_section->size;
+    uint64_t offset = bss_section->size;
     int section_align = 1;
 
     strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
@@ -661,10 +661,10 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
             }
 
             if (DEBUG_RELOCATIONS) {
-                printf("%-60s %-60s value=%08x  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
+                printf("%-60s %-60s value=%08lx  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK)
-                    printf("dst sec off %#0x sec off %#08x\n", symbol->input_section->output_section->offset, symbol->input_section->dst_offset);
+                    printf("dst sec off %#0lx sec off %#08lx\n", symbol->input_section->output_section->offset, symbol->input_section->dst_offset);
                 else
                     printf("\n");
             }
@@ -1125,7 +1125,7 @@ static uint32_t elf_hash(const unsigned char *name) {
 void make_symbol_hashes(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
 
-    int dynsym_size = output_elf_file->dynsym_symbol_count + 1; // Include first null entry
+    uint64_t dynsym_size = output_elf_file->dynsym_symbol_count + 1; // Include first null entry
 
     int bucket_count = dynsym_size / 4 + 1;
     int chain_count = dynsym_size;

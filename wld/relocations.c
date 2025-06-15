@@ -359,7 +359,7 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 // SCAN_RELOCATION_NEEDS_GOT if the symbol requires a GOT entry
 int scan_relocation(void *input_data, int is_shared, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
-    int offset = relocation->r_offset;
+    uint64_t offset = relocation->r_offset;
     input_data += offset;
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32

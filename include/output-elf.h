@@ -22,11 +22,11 @@ typedef struct output_section  {
     int info;                            // Contains extra information about the section.
     char *data;                          // Contents of the section
     int allocated;                       // Amount of bytes allocated for data
-    int size;                            // Size in bytes
-    int offset;                          // Offset in the file
-    int address;                         // Address in the executable
-    long entsize;                        // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
-    long symtab_index;                   // Index in the symbol table for this section
+    uint64_t size;                       // Size in bytes
+    uint64_t offset;                     // Offset in the file
+    uint64_t address;                    // Address in the executable
+    uint64_t entsize;                    // Contains the size, in bytes, of each entry, for sections that contain fixed-size entries. Otherwise, this field contains zero.
+    uint64_t symtab_index;               // Index in the symbol table for this section
     struct output_section *rela_section; // Optional related relocation section
     int is_orphan;                       // Use by wld
     List *chunks;                        // Used by was
@@ -74,13 +74,13 @@ typedef struct output_elf  {
     int got_plt_entries_count;                              // Used by wld
     List *shared_libraries;                                 // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
-    int elf_program_segments_header_size;                   // ELF: Size of the program segment headers
+    uint64_t elf_program_segments_header_size;              // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers
-    int elf_section_headers_size;                           // ELF: The size of the section headers
+    uint64_t elf_section_headers_size;                      // ELF: The size of the section headers
     ElfSectionHeader *elf_section_headers;                  // ELF: The section headers
-    int elf_program_segments_offset;                        // ELF: Offset in the ELF file of the program segments
-    int elf_section_headers_offset;                         // ELF: Offset in the ELF file of the section headers
-    int size;                                               // ELF: size of the output
+    uint64_t elf_program_segments_offset;                   // ELF: Offset in the ELF file of the program segments
+    uint64_t elf_section_headers_offset;                    // ELF: Offset in the ELF file of the section headers
+    uint64_t size;                                          // ELF: size of the output
     uint8_t *data;                                          // ELF: contents of the output
 } OutputElfFile;
 

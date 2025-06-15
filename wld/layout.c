@@ -66,7 +66,7 @@ static void add_input_to_output_section(OutputSection *output_section, InputSect
         input_and_output_sections_match(output_section, input_section, 1, maybe_elf_file);
 
     // Align the offset according to the input section alignment
-    int offset = ALIGN_UP(output_section->size, input_section->align);
+    uint64_t offset = ALIGN_UP(output_section->size, input_section->align);
     input_section->dst_offset = offset;
 
     // Configure the output section
@@ -76,7 +76,7 @@ static void add_input_to_output_section(OutputSection *output_section, InputSect
     output_section->align = MAX(output_section->align, input_section->align);
 
     if ((DEBUG_LAYOUT || DEBUG_RELOCATIONS) && input_section->size)
-        printf("  File %-50s section %-20s size %#08lx is at offset %#08x new size=%#08x in target section %s\n",
+        printf("  File %-50s section %-20s size %#08lx is at offset %#08lx new size=%#08lx in target section %s\n",
             maybe_elf_file ? maybe_elf_file->filename :  "-",
             input_section->name, input_section->size, offset, output_section->size, output_section->name);
 }
@@ -434,7 +434,7 @@ void make_elf_section_headers(OutputElfFile *output_elf_file) {
     output_elf_file->size = offset;
 
     if (DEBUG_LAYOUT)
-        printf("ELF file size: %#x\n", output_elf_file->size);
+        printf("ELF file size: %#lx\n", output_elf_file->size);
 }
 
 // Make an ELF program segment header
@@ -496,7 +496,7 @@ static void layout_one_section_in_executable(OutputElfFile *output_elf_file, Out
     }
 
     if (DEBUG_LAYOUT)
-        printf("Adding %-20s of size %#08x at          %#x  offset %#lx\n",
+        printf("Adding %-20s of size %#08lx at          %#lx  offset %#lx\n",
             section->name, section->size, dot_symbol->dst_value, *poffset);
 
     // Set the section offset and address
@@ -753,7 +753,7 @@ void layout_program_segments(OutputElfFile *output_elf_file) {
             append_to_list(output_elf_file->program_segments_list, current_segment);
 
             if (DEBUG_LAYOUT)
-                printf("\nCreating new segment using type %#04x and flags %#04x at   %#x  offset %#x\n",
+                printf("\nCreating new segment using type %#04x and flags %#04x at   %#lx  offset %#lx\n",
                     section->type, section->flags, section->address, section->offset);
 
             // Set the program segment offset and address
@@ -767,7 +767,7 @@ void layout_program_segments(OutputElfFile *output_elf_file) {
         }
 
         if (DEBUG_LAYOUT)
-            printf("Adding %-20s of size %#08x at          %#x  offset %#x\n",
+            printf("Adding %-20s of size %#08lx at          %#lx  offset %#lx\n",
                 section->name, section->size, section->address, section->offset);
 
         // The increase in segment size consists of the difference in alignment + the section size
