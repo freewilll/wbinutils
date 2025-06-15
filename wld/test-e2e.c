@@ -574,7 +574,7 @@ static void test_sanity() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC, NULL, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -595,6 +595,29 @@ static void test_sanity() {
         0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         END);
+}
+
+// Test a silly edge case where an object file could be empty
+static void test_empty_object_file() {
+    char *object1_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start: nop;"
+    );
+
+    char *object2_path = run_was("");
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object1_path);
+    append_to_list(input_paths, object2_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC, NULL, 0, "sanity");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x10,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        NULL
+    );
 }
 
 // Test an orphan section with different flags after a data section.
@@ -1343,6 +1366,7 @@ static void test_dwarf() {
 
 int main() {
     test_sanity();
+    test_empty_object_file();
     test_segments_are_page_aligned();
     test_orphan_sections_rearrangement();
     test_orphan_sections_no_rearrangement();
