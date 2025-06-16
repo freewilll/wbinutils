@@ -75,7 +75,7 @@ libtest-archive-loading-long.a: test-archive-loading.o
 	cp test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
 	ar rcs libtest-archive-loading-long.a test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
 
-test-archive-loading: libwld.a test-archive-loading.o
+test-archive-loading: libwld.a test-archive-loading.o libtest-archive-loading-long.a
 	ar rcs libtest-archive-loading.a test-archive-loading.o
 	gcc -g -Werror -I . -I ../include test-archive-loading.o libwld.a  -o test-archive-loading
 

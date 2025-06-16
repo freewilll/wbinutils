@@ -188,7 +188,7 @@ static void fail(InputElfFile *elf_file, char *format, ...) {
 
 static int handle_local_symbol(InputElfFile *elf_file, SymbolTable *local_symbol_table, int is_library, int is_shared_library, int read_only, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
-    char *name = &elf_file->strtab_strings[symbol->st_name];
+    char *name = &elf_file->symbol_table_strings[symbol->st_name];
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
@@ -215,7 +215,7 @@ static int handle_common_symbol(InputElfFile *elf_file, int is_library, int is_s
     int result = 0;
 
     int strtab_offset = symbol->st_name;
-    char *name = &elf_file->strtab_strings[symbol->st_name];
+    char *name = &elf_file->symbol_table_strings[symbol->st_name];
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
@@ -273,7 +273,7 @@ static int handle_common_symbol(InputElfFile *elf_file, int is_library, int is_s
 // Not very much is checked here, only undefined symbols are resolved.
 static int handle_abs_symbol(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only, Symbol *found_symbol, ElfSymbol *symbol) {
     int strtab_offset = symbol->st_name;
-    char *name = &elf_file->strtab_strings[symbol->st_name];
+    char *name = &elf_file->symbol_table_strings[symbol->st_name];
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
@@ -309,7 +309,7 @@ static int handle_non_common_symbol(InputElfFile *elf_file, int is_library,int i
     int result = 0;
 
     int strtab_offset = symbol->st_name;
-    char *name = &elf_file->strtab_strings[symbol->st_name];
+    char *name = &elf_file->symbol_table_strings[symbol->st_name];
 
     char binding = (symbol->st_info >> 4) & 0xf;
     char type = symbol->st_info & 0xf;
@@ -389,7 +389,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shar
 
         if (!symbol->st_name) continue;
         int strtab_offset = symbol->st_name;
-        char *name = &elf_file->strtab_strings[symbol->st_name];
+        char *name = &elf_file->symbol_table_strings[symbol->st_name];
 
         int is_local = binding == STB_LOCAL;
 
@@ -681,6 +681,9 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
     output_elf_file->section_symtab->info = output_elf_file->sections_list->length; // Index of the first global symbol
 
+    // .so files don't have a symtab
+    if (output_elf_file->type == ET_DYN) return;
+
     add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
@@ -767,19 +770,20 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
         Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->is_abs && !symbol->output_section) continue; // Weak symbols may not be defined
 
-        // symtab
-        ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
-        ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
-        elf_symbol->st_value = symbol->dst_value;
-        elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
 
-        // dynsym
         if (output_elf_file->type == ET_DYN) {
-            elf_symbols = (ElfSymbol *) output_elf_file->section_dynsym->data;
-            elf_symbol = &elf_symbols[symbol->dst_dynsym_index];
+            // dynsym
+            ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_dynsym->data;
+            ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_dynsym_index];
             elf_symbol->st_value = symbol->dst_value;
             elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
-
+        }
+        else {
+            // symtab
+            ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+            ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
+            elf_symbol->st_value = symbol->dst_value;
+            elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
         }
     }
 }

@@ -50,7 +50,7 @@ static int add_string_to_strtab(InputElfFile *elf_file, const char *name) {
 
     // Abuse file_offset to mean size of strtab strings
     int offset = elf_file->file_offset;
-    memcpy(&elf_file->strtab_strings[elf_file->file_offset], name, strlen(name));
+    memcpy(&elf_file->symbol_table_strings[elf_file->file_offset], name, strlen(name));
     elf_file->file_offset += strlen(name) + 1;
 
     return offset;
@@ -75,7 +75,7 @@ static ElfSymbol *add_symbol(InputElfFile *elf_file, const char *name, long size
 InputElfFile *init_elf_file(void) {
     InputElfFile *elf_file = calloc(1, sizeof(InputElfFile));
     elf_file->filename = "/_testing.o";
-    elf_file->strtab_strings = calloc(1, MAX_STRTAB_SIZE);
+    elf_file->symbol_table_strings = calloc(1, MAX_STRTAB_SIZE);
     add_string_to_strtab(elf_file, "");
 
     // Create two sections without data

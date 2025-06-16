@@ -155,6 +155,7 @@ static void load_sections(InputElfFile *elf_file) {
         section->type = elf_section_header->sh_type;
         section->flags = elf_section_header->sh_flags;
         section->info = elf_section_header->sh_info;
+        section->link = elf_section_header->sh_link;
         section->align = elf_section_header->sh_addralign;
         section->src_offset = elf_section_header->sh_offset;
 
@@ -162,22 +163,25 @@ static void load_sections(InputElfFile *elf_file) {
         strmap_put(elf_file->section_map, strdup(name), section);
     }
 
-    // Look up string table
-    InputSection *strtab_section = get_input_section(elf_file, ".strtab");
-    if (!strtab_section)
-        elf_file->strtab_strings = NULL;
-    else
-        elf_file->strtab_strings = load_section_uncached(elf_file, strtab_section->index);
-
-    // Look up symbol table
+    // Look up symbol table.
+    // If a .dynsym exists, which is the case for .so files, use that. Otherwise,
+    // fall back to .symtab, if present.
+    InputSection *dynsym_section = get_input_section(elf_file, ".dynsym");
     InputSection *symtab_section = get_input_section(elf_file, ".symtab");
-    if (!symtab_section) {
-        elf_file->symbol_table = NULL;
-        elf_file->symbol_count = 0;
+    InputSection *symbols_section = dynsym_section ? dynsym_section : (symtab_section ? symtab_section : NULL);
+
+    if (symbols_section) {
+        elf_file->symbol_table = load_section_uncached(elf_file, symbols_section->index);
+        elf_file->symbol_count = symbols_section->size / sizeof(ElfSymbol);
+
+        InputSection *strings_section = elf_file->section_list->elements[symbols_section->link];
+        char *strings = load_section(elf_file, strings_section);
+        elf_file->symbol_table_strings = strings;
     }
     else {
-        elf_file->symbol_table = load_section_uncached(elf_file, symtab_section->index);
-        elf_file->symbol_count = symtab_section->size / sizeof(ElfSymbol);
+        elf_file->symbol_table = NULL;
+        elf_file->symbol_count = 0;
+        elf_file->symbol_table_strings = NULL;
     }
 }
 
@@ -257,7 +261,7 @@ void dump_symbols(InputElfFile *elf_file) {
 
         int strtab_offset = symbol->st_name;
         if (strtab_offset)
-            printf(" %s\n", &elf_file->strtab_strings[strtab_offset]);
+            printf(" %s\n", &elf_file->symbol_table_strings[strtab_offset]);
         else
             printf("\n");
     }

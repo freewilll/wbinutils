@@ -375,7 +375,8 @@ static void associate_sections(OutputElfFile *output_elf_file) {
 
         InputSection *section_dynsym = output_elf_file->section_dynsym;
         h = &output_elf_file->elf_section_headers[section_dynsym->output_section->index];
-        h->sh_link = section_dynstr->output_section->index;
+        section_dynsym->output_section->link = section_dynstr->output_section->index;
+        h->sh_link = section_dynsym->output_section->link;
         h->sh_info = 1; // The first non-local index. The 0th entry is the local null symbol
         h->sh_entsize = sizeof(ElfSymbol);
 

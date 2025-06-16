@@ -18,6 +18,7 @@ typedef struct input_section {
     uint64_t flags;                       // Identifies the attributes of the section
     uint64_t src_offset;                  // Offset of the section in the file image
     uint32_t info;                        // Contains extra information about the section, from ELF
+    uint32_t link;                        // Associated section
     uint64_t align;                       // Alignment
     uint64_t dst_offset;                  // Offset in output section
     OutputSection *output_section;        // Target Section (for wld)
@@ -34,7 +35,7 @@ typedef struct input_elf_file {
     char *section_header_strings;
     List *section_list;
     StrMap *section_map;
-    char *strtab_strings;
+    char *symbol_table_strings;
     ElfSymbol *symbol_table;
     int symbol_count;
 } InputElfFile;

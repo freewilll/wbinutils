@@ -86,6 +86,13 @@ int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_f
             int target_section_index = rela_input_section->info;
             InputSection *input_section  = (InputSection *) input_elf_file->section_list->elements[target_section_index];
 
+            int link = rela_input_section->link;
+            InputSection *symbol_section = input_elf_file->section_list->elements[rela_input_section->link];
+            load_section(input_elf_file, symbol_section);
+
+            InputSection *str_section = input_elf_file->section_list->elements[symbol_section->link];
+            char *strings = load_section(input_elf_file, str_section);
+
             // Loop over all relocations
             ElfRelocation *relocations = load_section_uncached(input_elf_file, j);
             ElfRelocation *relocation = relocations;
@@ -95,15 +102,21 @@ int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_f
                 int type = relocation->r_info & 0xffffffff;
                 int symbol_index = relocation->r_info >> 32;
 
+                // Ignore relocations that don't refer to symbols
+                if (type == R_X86_64_RELATIVE) {
+                    relocation++;
+                    continue;
+                }
+
                 // Get the symbol
-                ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+                ElfSymbol *elf_symbol = &((ElfSymbol *) symbol_section->data)[symbol_index];
                 int elf_symbol_type = elf_symbol->st_info & 0xf;
 
                 if (elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC) {
-                    char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
+                    char *symbol_name = &strings[elf_symbol->st_name];
                     Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
-                    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry in make_global_symbols_in_use: %s\n", symbol_name);
-                    if (!strmap_get(global_symbols_in_use, symbol->name)) strmap_put(global_symbols_in_use, symbol->name, (void *) 1);
+                    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry in make_global_symbols_in_use: %s", symbol_name);
+                    if (!strmap_get(global_symbols_in_use, symbol_name)) strmap_put(global_symbols_in_use, symbol_name, (void *) 1);
                 }
 
                 relocation++;
@@ -314,7 +327,7 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
     else {
         // Handle a relocation to a non-section symbol
 
-        symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
+        symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
 
         Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
         if (!symbol) {
@@ -488,7 +501,7 @@ static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, Input
             }
 
             // Lookup the symbol in the symbol table
-            char *symbol_name = &input_elf_file->strtab_strings[elf_symbol->st_name];
+            char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
             Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
             if (!symbol) panic("Unexpectedly got undefined symbol in a .got.* entry in scan_relocation_in_input_elf_file: %s\n", symbol_name);
 
@@ -517,6 +530,9 @@ void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, in
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
         InputElfFile *input_elf_file = input_elf_files->elements[i];
+
+        // .so files don't get modified. The dynamic linker does that.
+        if (input_elf_file->type == ET_DYN) continue;
 
         if (DEBUG_RELOCATIONS) printf("%s\n", input_elf_file->filename);
 

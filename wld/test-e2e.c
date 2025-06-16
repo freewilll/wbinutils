@@ -216,7 +216,10 @@ static void assert_symbol_table(OutputElfFile *elf_file, OutputSection *section,
         char got_binding = (symbol->st_info >> 4) & 0xf;
         char got_visibility = symbol->st_other & 3;
         unsigned short got_index = symbol->st_shndx;
-        char *got_name = symbol->st_name ? &elf_file->section_strtab->data[symbol->st_name] : 0;
+
+        OutputSection *str_section = elf_file->sections_list->elements[section->link];
+        char *strings = str_section->data;
+        char *got_name = symbol->st_name ? &strings[symbol->st_name] : NULL;
 
         int name_matches = ((!got_name && !expected_name) || (expected_name && !strcmp(expected_name, got_name)));
 
@@ -261,6 +264,7 @@ static void assert_symbol_table(OutputElfFile *elf_file, OutputSection *section,
 
 static void assert_symtab(OutputElfFile *elf_file, ...) {
     OutputSection *section = elf_file->section_symtab;
+    if (!section) panic("Expected a symtab section");
 
     va_list ap;
     va_start(ap, elf_file);
@@ -1113,16 +1117,6 @@ static void test_library_no_dependencies() {
         DT_NULL,   0,      NULL
     );
 
-    assert_symtab(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
-        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
-        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
-        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
-        0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
-        END);
-
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
         0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
@@ -1198,12 +1192,6 @@ static void test_two_libs_with_data() {
         DT_RELAENT,     0x18,       NULL,
         DT_NULL,        0,          NULL
     );
-
-    assert_symtab(elf_file,
-    //  Value  Size   Type        Binding     Visibility   Section  Name
-        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "i",
-        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "j",
-        END);
 
     assert_dynsym(elf_file,
     //  Value  Size   Type        Binding     Visibility   Section  Name
@@ -1285,12 +1273,6 @@ static void test_two_libs_with_functions() {
         DT_JMPREL,      0x2000,     NULL,
         DT_NULL,        0,          NULL
     );
-
-    assert_symtab(elf_file,
-    //  Value  Size   Type        Binding     Visibility   Section  Name
-        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "f1",
-        0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "f2",
-        END);
 
     assert_dynsym(elf_file,
     //  Value  Size   Type        Binding     Visibility   Section  Name
