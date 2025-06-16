@@ -467,6 +467,14 @@ static void assert_section_data(OutputElfFile *elf_file, const char *section_nam
     va_end(ap);
 }
 
+static void *write_file(const char *filename, const char *contents) {
+    FILE *f = fopen(filename, "w");
+    if (!f) panic("Could not write %s\n", filename);
+    // Write the string to the file
+    fprintf(f, "%s", contents);
+    fclose(f);
+}
+
 static char *run_was(char *assembly) {
     // Write out assembly to a temp file
     char source_path[] = "/tmp/asm_XXXXXX";
@@ -888,7 +896,6 @@ static void test_data_and_two_bss_sections(void) {
         END
     );
 }
-
 
 // Test reading etext without defining it. The linker adds it.
 static void test_etext_undefined() {
@@ -1364,6 +1371,57 @@ static void test_dwarf() {
     assert_int(0, *offset, ".debug_info pointer inside .debug_abbrev is zero");
 }
 
+// Test statically linking an executable to an archive file via a GNU ld script
+static void test_gnu_ld_script_archive() {
+    char *object_path1 = run_was(
+        ".text;"
+        ".globl _start;"
+
+        "_start:;"
+        "    movl $1, %eax;"
+        "    lea code(%rip), %rdi;"
+        "    mov (%rdi), %ebx;"
+        "    subq $42, %ebx;"
+        "    int $0x80;"
+    );
+
+    char *object_path2 = run_was(
+        ".globl code;"
+        ".data;"
+        "    code: .long 42;"
+    );
+
+    // Make an library file from the second object file
+    char command[1024];
+    sprintf(command, "ar rcs /tmp/test.a %s\n", object_path2);
+    int result = system(command);
+    if (result) {
+        printf("Ar failed with exit code %d\n", result >> 8);
+        exit(1);
+    }
+
+    // Write a GNU script referencing the library
+    write_file("/tmp/libgnuldscript.a",
+        "/* GNU ld script\n"
+        "*/\n"
+        "OUTPUT_FORMAT(elf64-x86-64)\n"
+        "GROUP(/tmp/test.a)\n"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+    append_to_list(input_paths, "*gnuldscript");
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "linking to a GNU ld script archive");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x20,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".data",          SHT_PROGBITS,   0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -1381,4 +1439,5 @@ int main() {
     test_two_libs_with_data();
     test_two_libs_with_functions();
     test_dwarf();
+    test_gnu_ld_script_archive();
 }
