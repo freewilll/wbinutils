@@ -34,7 +34,7 @@ typedef struct archive_file {
 
 extern const char *BUILTIN_LIBRARY_PATHS[];
 
-char *search_for_library(List *library_paths, const char *input_filename, int *is_shared);
+char *search_for_library(int output_type, List *library_paths, const char *input_filename);
 int is_gnu_linker_script_file(const char *filename);
 int file_is_archive_file(FILE *file, const char *filename);
 ArchiveFile *open_archive_file(const char *filename);

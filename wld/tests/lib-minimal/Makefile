@@ -17,7 +17,7 @@ libtest.o: libtest.c
 main.o: main.c
 	${CC} -c main.c -o main.o
 
-libtest.so: libtest.o
+libtest.so: libtest.o ${WLD}
 	${WLD} \
 		-shared \
 		-L/usr/lib \

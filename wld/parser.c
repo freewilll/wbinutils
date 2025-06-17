@@ -223,19 +223,35 @@ static void parse_sections(void) {
     consume(TOK_RCURLY, "}");
 }
 
+static void parse_group_item_filename(List *input_group_items, int as_needed) {
+    InputGroupItem *input_group_item = malloc(sizeof(InputGroupItem));
+    input_group_item->filename = strdup(cur_identifier);
+    input_group_item->as_needed = as_needed;
+    append_to_list(input_group_items, input_group_item);
+}
+
 static void parse_group(void) {
     next();
     consume(TOK_LPAREN, "(");
 
-    List *filenames = new_list(8);
+    List *input_group_items = new_list(8);
 
     while (1) {
         if (cur_token == TOK_RPAREN || cur_token == TOK_EOF) break;
 
-        if (cur_token == TOK_FILENAME)
-            append_to_list(filenames, strdup(cur_identifier));
+        if (cur_token == TOK_AS_NEEDED) {
+            next();
+            consume(TOK_LPAREN, "(");
+            expect(TOK_FILENAME, "filename");
+            parse_group_item_filename(input_group_items, 1);
+            next();
+            consume(TOK_RPAREN, ")");
+        }
 
-        consume(TOK_FILENAME, "filename");
+        else if (cur_token == TOK_FILENAME) {
+            parse_group_item_filename(input_group_items, 0);
+            consume(TOK_FILENAME, "filename");
+        }
 
         while (cur_token == TOK_COMMA) next();
     }
@@ -244,7 +260,7 @@ static void parse_group(void) {
 
     ScriptCommand *command = malloc(sizeof(ScriptCommand));
     command->type = CMD_GROUP;
-    command->group.filenames = filenames;
+    command->group.input_group_items = input_group_items;
     append_to_list(current_linker_script, command);
 }
 

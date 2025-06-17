@@ -82,6 +82,8 @@ const char *DYNAMIC_SECTION_TYPE_NAMES[] = {
     "SYMTAB_SHNDX",
 };
 
+static void run_archive_file_linker_script(const char *path, List *input_elf_files);
+
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type) {
     int elf_output_type = output_type == OUTPUT_TYPE_STATIC ? ET_EXEC : ET_DYN;
 
@@ -120,6 +122,41 @@ static InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file,
     return create_extra_section(output_elf_file, name, type, flags, align);
 }
 
+// Go down all input files which are either object files or libraries
+static void read_object_file(List *input_elf_files, const char *path, int is_shared_library) {
+    InputElfFile *elf_file = open_elf_file(path);
+    process_elf_file_symbols(elf_file, 0, is_shared_library, 0);
+    append_to_list(input_elf_files, elf_file);
+}
+
+// Identify the filetype and load the file
+static int read_library(const char *path, List *input_elf_files) {
+    int objects_added = 0;
+
+    FileType type = identify_library_file(path);
+
+    switch (type) {
+        case FT_LINKER_SCRIPT:
+            run_archive_file_linker_script(path, input_elf_files);
+            break;
+
+        case FT_ARCHIVE: {
+            ArchiveFile *ar_file = open_archive_file(path);
+            objects_added = process_library_symbols(ar_file, input_elf_files);
+            break;
+        }
+
+        case FT_SHARED_LIBRARY:
+            read_object_file(input_elf_files, path, 1);
+            break;
+
+        default:
+            panic("Unhandled library type");
+    }
+
+    return objects_added;
+}
+
 // Static libraries subh as libm.a can consist of a linker script that looks something like:
 // /* GNU ld script
 // */
@@ -139,12 +176,11 @@ static void run_archive_file_linker_script(const char *path, List *input_elf_fil
         while (1) {
             int objects_added = 0;
 
-            List *filenames = command->group.filenames;
-            for (int j = 0; j < filenames->length; j++) {
-                char *path = filenames->elements[j];
-
-                ArchiveFile *ar_file = open_archive_file(path);
-                objects_added += process_library_symbols(ar_file, input_elf_files);
+            List *input_group_items = command->group.input_group_items;
+            for (int j = 0; j < input_group_items->length; j++) {
+                InputGroupItem *input_group_item = input_group_items->elements[j];
+                char *path = input_group_item->filename;
+                objects_added += read_library(path, input_elf_files);
             }
 
             if (!objects_added) break;
@@ -153,14 +189,7 @@ static void run_archive_file_linker_script(const char *path, List *input_elf_fil
 }
 
 // Go down all input files which are either object files or libraries
-static void read_object_file(List *input_elf_files, const char *path, int is_shared_library) {
-    InputElfFile *elf_file = open_elf_file(path);
-    process_elf_file_symbols(elf_file, 0, is_shared_library, 0);
-    append_to_list(input_elf_files, elf_file);
-}
-
-// Go down all input files which are either object files or libraries
-static List *read_input_files(List *library_paths, List *input_files) {
+static List *read_input_files(List *library_paths, List *input_files, int output_type) {
     List *input_elf_files = new_list(32);
 
     for (int i = 0; i < input_files->length; i++) {
@@ -169,29 +198,8 @@ static List *read_input_files(List *library_paths, List *input_files) {
         if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s\n", input_filename);
 
         if (input_file->is_library) {
-            int is_shared;
-            const char *path = search_for_library(library_paths, input_filename, &is_shared);
-            FileType type = identify_library_file(path);
-
-            switch (type) {
-                case FT_LINKER_SCRIPT:
-                    run_archive_file_linker_script(path, input_elf_files);
-                    break;
-
-                case FT_ARCHIVE: {
-                    ArchiveFile *ar_file = open_archive_file(path);
-                    process_library_symbols(ar_file, input_elf_files);
-                    break;
-                }
-
-                case FT_SHARED_LIBRARY:
-                    read_object_file(input_elf_files, path, 1);
-                    break;
-
-                default:
-                    panic("Unhandled library type");
-
-            }
+            const char *path = search_for_library(output_type, library_paths, input_filename);
+            read_library(path, input_elf_files);
         }
         else {
             // It's an object file
@@ -658,7 +666,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     parse_linker_scripts(output_elf_file, library_paths, linker_scripts);
 
     // Read input file
-    List *input_elf_files = read_input_files(library_paths, input_files);
+    List *input_elf_files = read_input_files(library_paths, input_files, output_type);
 
     // Add some sections that are always present in output ELF file, e.g. .symtab.
     create_default_sections(output_elf_file);

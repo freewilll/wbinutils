@@ -74,8 +74,13 @@ typedef struct script_command_section {
     List *commands;
 } ScriptCommandSections;
 
+typedef struct input_group_item {
+    char *filename;
+    int as_needed;
+} InputGroupItem;
+
 typedef struct script_command_group {
-    List *filenames;
+    List *input_group_items;
 } ScriptCommandGroup;
 
 typedef struct script_command {

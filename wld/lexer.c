@@ -166,24 +166,12 @@ static void lex_integer(void) {
 static void lex_group(void) {
     skip_whitespace();
 
-    if (*ip == ')') {
-        cur_token = TOK_RPAREN;
-        *ip++;
-        in_group = 0;
-        return;
-    }
+    int left = input_end - ip;
 
-    else if (*ip == '(') {
-        cur_token = TOK_LPAREN;
-        *ip++;
-        return;
-    }
-
-    else if (*ip == ',') {
-        cur_token = TOK_COMMA;
-        *ip++;
-        return;
-    }
+        if (*ip == ')')  { cur_token = TOK_RPAREN; ip++; in_group = 0; return; }
+    else if (*ip == '(') { cur_token = TOK_LPAREN; ip++; return; }
+    else if (*ip == ',') { cur_token = TOK_COMMA;  ip++; return; }
+    else if (left >= 9 && !memcmp(ip, "AS_NEEDED", 9)) { cur_token = TOK_AS_NEEDED; ip += 9; return; }
 
     // Lex filename
     cur_token = TOK_FILENAME;
@@ -286,6 +274,7 @@ void next(void) {
                  if (!strcmp(cur_identifier, "ENTRY"          )) { cur_token = TOK_ENTRY; }
             else if (!strcmp(cur_identifier, "OUTPUT_FORMAT"  )) { cur_token = TOK_OUTPUT_FORMAT; }
             else if (!strcmp(cur_identifier, "GROUP"          )) { cur_token = TOK_GROUP; }
+            else if (!strcmp(cur_identifier, "AS_NEEDED"      )) { cur_token = TOK_AS_NEEDED; }
             else if (!strcmp(cur_identifier, "SECTIONS"       )) { cur_token = TOK_SECTIONS; }
             else if (!strcmp(cur_identifier, "CONSTANT"       )) { cur_token = TOK_CONSTANT; }
             else if (!strcmp(cur_identifier, "MAXPAGESIZE"    )) { cur_token = TOK_MAXPAGESIZE; }

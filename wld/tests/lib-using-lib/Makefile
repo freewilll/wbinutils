@@ -22,7 +22,7 @@ libtest2.o: libtest2.c
 main.o: main.c
 	${CC} -c main.c -o main.o
 
-libtest1.so: libtest1.o libtest2.so
+libtest1.so: libtest1.o libtest2.so ${WLD}
 	@${WLD} \
 		-shared \
 		-L/usr/lib \
@@ -36,7 +36,7 @@ libtest1.so: libtest1.o libtest2.so
 		-lgcc_eh \
 		-lc \
 
-libtest2.so: libtest2.o
+libtest2.so: libtest2.o ${WLD}
 	@${WLD} \
 		-shared \
 		-L/usr/lib \

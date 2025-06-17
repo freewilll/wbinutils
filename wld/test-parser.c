@@ -25,6 +25,13 @@ static void assert_string(const char *expected, const char *actual, const char *
     }
 }
 
+static void assert_input_group_item(const char *expected_filename, int expected_as_needed, InputGroupItem *input_group_item, const char *message) {
+    if (strcmp(expected_filename, input_group_item->filename) || expected_as_needed != input_group_item->as_needed) {
+        printf("%s: expected %s/%d, got %s/%d\n", message, expected_filename, expected_as_needed, input_group_item->filename, input_group_item->as_needed);
+        exit(1);
+    }
+}
+
 static void run_init_symbols(void) {
     OutputElfFile *output_elf_file = init_output_elf_file("dummy", OUTPUT_TYPE_STATIC);
     init_symbols(output_elf_file);
@@ -210,17 +217,19 @@ static void test_parse_output_format() {
 }
 
 static void test_parse_group() {
-    char *script = "GROUP(/path/libm.a /path/libm2.a)";
+    // char *script = "GROUP(/path/libm.a /path/libm2.a)";
+    char *script = "GROUP(/path/libm.a /path/libm2.a AS_NEEDED(/path/libm3.a))";
     run_parser(script);
 
     assert_int(1, linker_script->length, script);
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_GROUP, command->type, script);
 
-    List *filenames = command->group.filenames;
-    assert_int(2, filenames->length, script);
-    assert_string("/path/libm.a", (char *) filenames->elements[0], script);
-    assert_string("/path/libm2.a", (char *) filenames->elements[1], script);
+    List *input_group_items = command->group.input_group_items;
+    assert_int(3, input_group_items->length, script);
+    assert_input_group_item("/path/libm.a",  0, input_group_items->elements[0], script);
+    assert_input_group_item("/path/libm2.a", 0, input_group_items->elements[1], script);
+    assert_input_group_item("/path/libm3.a", 1, input_group_items->elements[2], script);
 
     // With filenames delimited by commas
     script = "GROUP(/path/libm.a, /path/libm2.a)";
@@ -230,10 +239,10 @@ static void test_parse_group() {
     command = linker_script->elements[0];
     assert_int(CMD_GROUP, command->type, script);
 
-    filenames = command->group.filenames;
-    assert_int(2, filenames->length, script);
-    assert_string("/path/libm.a", (char *) filenames->elements[0], script);
-    assert_string("/path/libm2.a", (char *) filenames->elements[1], script);
+    input_group_items = command->group.input_group_items;
+    assert_int(2, input_group_items->length, script);
+    assert_input_group_item("/path/libm.a",  0, input_group_items->elements[0], script);
+    assert_input_group_item("/path/libm2.a", 0, input_group_items->elements[1], script);
 }
 
 int main() {
