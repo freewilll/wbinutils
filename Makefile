@@ -3,6 +3,7 @@ LIBS = \
 	lib/liblist.a \
 	lib/libstrmap.a \
 	lib/libstrmap_ordered.a \
+	lib/libmap_ordered.a \
 	lib/liberror.a \
 
 all: ${LIBS} bin/was bin/wld
@@ -18,6 +19,10 @@ lib/libstrmap.a:
 .PHONY: lib/libstrmap_ordered.a
 lib/libstrmap_ordered.a:
 	@make -C lib/libstrmap_ordered
+
+.PHONY: lib/libmap_ordered.a
+lib/libmap_ordered.a:
+	@make -C lib/libmap_ordered
 
 .PHONY: lib/liberror.a
 lib/liberror.a:
@@ -40,11 +45,13 @@ test: bin/was bin/wld lib/liblist.a lib/libstrmap.a lib/libstrmap_ordered.a
 	@make -C lib/liblist test
 	@make -C lib/libstrmap test
 	@make -C lib/libstrmap_ordered test
+	@make -C lib/libmap_ordered test
 
 clean:
 	@make -C lib/liblist clean
 	@make -C lib/libstrmap clean
 	@make -C lib/libstrmap_ordered clean
+	@make -C lib/libmap_ordered clean
 	@make -C lib/liberror clean
 	@make -C lib/libelf clean
 	@make -C was clean

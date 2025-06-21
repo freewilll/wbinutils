@@ -3,3 +3,4 @@ liberror.a
 liblist.a
 libstrmap.a
 libstrmap_ordered.a
+libmap_ordered.a
