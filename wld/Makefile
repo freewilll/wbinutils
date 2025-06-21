@@ -4,6 +4,7 @@ all: ${TARGET}
 
 HEADERS = \
 	list.h \
+	map-ordered.h \
 	strmap.h \
 	strmap-ordered.h \
 	elf.h \
@@ -38,6 +39,7 @@ LIBS = \
 	elf \
 	error \
 	list \
+	map_ordered \
 	strmap \
 	strmap_ordered \
 

@@ -3,12 +3,29 @@
 #include <string.h>
 
 #include "error.h"
+#include "map-ordered.h"
 #include "strmap.h"
 #include "strmap-ordered.h"
 
 #include "wld/symbols.h"
 #include "wld/script.h"
 #include "wld/wld.h"
+
+unsigned int symbol_nv_hash(const void *ptr) {
+    const SymbolNV *key = ptr;
+    unsigned int hash = 2166136261u;
+    for (const char *p = key->name; *p; p++)
+        hash = (hash ^ (unsigned char)*p) * 16777619;
+    return (hash ^ key->version_index) * 16777619;
+}
+
+int symbol_nv_compare(const void *a, const void *b) {
+    const SymbolNV *snva = a;
+    const SymbolNV *snvb = b;
+    int cmp = strcmp(snva->name, snvb->name);
+    if (cmp) return cmp;
+    return (snva->version_index - snvb->version_index);
+}
 
 #define SYMBOL_IS_IN_DYNSYM(symbol) (strcmp((symbol)->name, ".") && ((symbol)->binding == STB_GLOBAL || (symbol)->binding == STB_WEAK || is_undefined_symbol((symbol)->name)))
 
@@ -32,17 +49,33 @@ StrMapOrdered *provided_symbols; // symbols from linker script PROVIDE() and PRO
 
 char *last_error_message;
 
+static SymbolNV make_symbolnv(const char *name, int version_index) {
+    SymbolNV snv;
+    snv.name = name;
+    snv.version_index = version_index;
+
+    return snv;
+}
+
+static SymbolNV *new_symbolnv(const char *name, int version_index) {
+    SymbolNV *snv = malloc(sizeof(SymbolNV));
+    snv->name = strdup(name);
+    snv->version_index = version_index;
+}
+
 SymbolTable *new_symbol_table(void) {
     SymbolTable *st = malloc(sizeof(SymbolTable));
-    st->defined_symbols = new_strmap_ordered();
-    st->undefined_symbols = new_strmap_ordered();
+    st->defined_symbols = new_map_ordered(symbol_nv_hash, symbol_nv_compare);
+    st->undefined_symbols = new_map_ordered(symbol_nv_hash, symbol_nv_compare);
 
     return st;
 }
 
 // Get a symbol from the defined symbol table. Returns NULL if not present.
 Symbol *get_defined_symbol(SymbolTable *st, char *name) {
-    return (Symbol *) strmap_ordered_get(st->defined_symbols, name);
+    int version_index = 0; // TODO
+    SymbolNV snv = make_symbolnv(name, version_index);
+    return (Symbol *) map_ordered_get(st->defined_symbols, &snv);
 }
 
 // Get a symbol from the global defined symbol table. Returns NULL if not present.
@@ -78,19 +111,22 @@ Symbol *lookup_symbol(InputElfFile *elf_file, char *name) {
 }
 
 // Get an undefined symbol. Returns NULL if not present.
-Symbol *get_undefined_symbol(const char *name) {
-    return strmap_ordered_get(global_symbol_table->undefined_symbols, name);
+Symbol *get_undefined_symbol(const char *name, int version_index) {
+    SymbolNV snv = make_symbolnv(name, version_index);
+    return map_ordered_get(global_symbol_table->undefined_symbols, &snv);
 }
 
 // Is a symbol in the undefined symbols set?
 int is_undefined_symbol(const char *name) {
-    return get_undefined_symbol(name) != NULL;
+    int version_index = 0; // TODO
+    return get_undefined_symbol(name, version_index) != NULL;
 }
 
 // Remove a symbol from the undefined symbols set
-static void remove_undefined_symbol(const char *name) {
+static void remove_undefined_symbol(const char *name, int version_index) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s\n", name);
-    strmap_ordered_delete(global_symbol_table->undefined_symbols, name);
+    SymbolNV snv = make_symbolnv(name, version_index);
+    map_ordered_delete(global_symbol_table->undefined_symbols, &snv);
 }
 
 static Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t size, int is_library, int is_shared_library) {
@@ -110,18 +146,22 @@ static Symbol *new_symbol(const char *name, int type, int binding, int other, ui
 static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int type, int binding, int other, uint64_t size, int is_library, int is_shared_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s binding=%s\n", name, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library, is_shared_library);
-    strmap_ordered_put(st->defined_symbols, name, symbol);
+    int symbol_version = 0; // TODO
+    SymbolNV *snv = new_symbolnv(name, symbol_version);
+    map_ordered_put(st->defined_symbols, snv, symbol);
+
     return symbol;
 }
 
 // Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
 // Returns 1 if an undefined symbol has been resolved.
 static int resolve_undefined_symbol(const char *name, int is_library, int read_only) {
-    Symbol *undefined_symbol = get_undefined_symbol(name);
+    int version_index = 0; // TODO
+    Symbol *undefined_symbol = get_undefined_symbol(name, version_index);
     if (!undefined_symbol) return 0;
 
     // Resolve the undefined symbol.
-    if (!read_only) remove_undefined_symbol(name);
+    if (!read_only) remove_undefined_symbol(name, version_index);
 
     // Weak undefined symbols don't get resolved if also found in a library.
     if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
@@ -129,10 +169,12 @@ static int resolve_undefined_symbol(const char *name, int is_library, int read_o
     return 1;
 }
 
-static Symbol *add_undefined_symbol(char *name, int type, int binding, int other, uint64_t size, int is_library) {
+static Symbol *add_undefined_symbol(char *name, int version_index, int type, int binding, int other, uint64_t size, int is_library) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, is_library, 0);
-    strmap_ordered_put(global_symbol_table->undefined_symbols, name, symbol);
+    SymbolNV *snv = new_symbolnv(name, version_index);
+    map_ordered_put(global_symbol_table->undefined_symbols, snv, symbol);
+
     return symbol;
 }
 
@@ -390,6 +432,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shar
         if (!symbol->st_name) continue;
         int strtab_offset = symbol->st_name;
         char *name = &elf_file->symbol_table_strings[symbol->st_name];
+        int version_index = 0; // TODO
 
         int is_local = binding == STB_LOCAL;
 
@@ -418,10 +461,10 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shar
             Symbol *found_symbol = get_defined_symbol(global_symbol_table, name);
             if (!found_symbol && !read_only) {
                 // Add an undefined symbol unless it already exists
-                Symbol *undefined_symbol = get_undefined_symbol(name);
+                Symbol *undefined_symbol = get_undefined_symbol(name, version_index);
 
                 if (!undefined_symbol) {
-                    add_undefined_symbol(name, type, binding, other, size, is_library);
+                    add_undefined_symbol(name, version_index, type, binding, other, size, is_library);
                 }
                 else {
                     // Upgrade the undefined symbol from weak to strong
@@ -458,26 +501,29 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
     strmap_ordered_foreach(provided_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *provided_symbol = strmap_ordered_get(provided_symbols, name);
-        Symbol *symbol = get_undefined_symbol(name);
+        int version_index = 0;
+        SymbolNV *snv = new_symbolnv(name, version_index);
+        Symbol *symbol = get_undefined_symbol(name, version_index);
         if (symbol) {
             resolve_undefined_symbol(name, 0, 0);
-            strmap_ordered_put(global_symbol_table->defined_symbols, name, provided_symbol);
+            map_ordered_put(global_symbol_table->defined_symbols, snv, provided_symbol);
         }
     }
 
     // Make a count of undefined unused unreferenced symbols
     StrMap *global_symbols_in_use = output_elf_file->global_symbols_in_use;
-    strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
+    map_ordered_foreach(global_symbol_table->undefined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->undefined_symbols, snv);
 
         // Weak undefined symbols become defined with value zero
         if (symbol->binding == STB_WEAK) {
             symbol->dst_value = 0;
-            strmap_ordered_put(global_symbol_table->defined_symbols, name, symbol);
+            SymbolNV *new_snv = new_symbolnv(snv->name, snv->version_index);
+            map_ordered_put(global_symbol_table->defined_symbols, new_snv, symbol);
         }
-        else if (!strmap_get(global_symbols_in_use, name))  {
-            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring unused undefined symbol %s\n", name);
+        else if (!strmap_get(global_symbols_in_use, snv->name))  {
+            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring unused undefined symbol %s\n", snv->name);
             continue;
         }
         else
@@ -487,12 +533,12 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
     if (!count) return; // All symbols are defined
 
     printf("Undefined symbols:\n");
-    strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
+    map_ordered_foreach(global_symbol_table->undefined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->undefined_symbols, snv);
         if (symbol->binding == STB_WEAK) continue;
 
-        printf("  %s\n", name);
+        printf("  %s\n", snv->name);
     }
 
     error("Unable to resolve undefined references");
@@ -562,9 +608,9 @@ void debug_summarize_symbols(void) {
     printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
 
     int i = 0;
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
 
         char binding = symbol->binding;
         char type = symbol->type;
@@ -575,15 +621,15 @@ void debug_summarize_symbols(void) {
 
         printf("%6d: %016lx  %4lx %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
         print_section_string(symbol);
-        printf(" %s\n", name);
+        printf(" %s\n", snv->name);
 
         i++;
     }
 
     printf("Undefined symbols:\n");
-    strmap_ordered_foreach(global_symbol_table->undefined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->undefined_symbols, name);
+    map_ordered_foreach(global_symbol_table->undefined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->undefined_symbols, snv);
         if (symbol->binding == STB_WEAK) continue; // It's ok for unresolved symbols to be weak
         debug_print_symbol(symbol);
     }
@@ -591,9 +637,9 @@ void debug_summarize_symbols(void) {
 
 // Returns 1 if any defined symbols are common
 int common_symbols_are_present(void) {
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (symbol->is_common) return 1;
     }
 
@@ -605,9 +651,9 @@ void layout_common_symbols_in_bss_section(OutputSection *bss_section) {
     uint64_t offset = bss_section->size;
     int section_align = 1;
 
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol->is_common) continue;
 
         int symbol_align = symbol->src_value;
@@ -625,9 +671,9 @@ void layout_common_symbols_in_bss_section(OutputSection *bss_section) {
 
 // Assign final values to all symbols
 void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table) {
-    strmap_ordered_foreach(symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
+    map_ordered_foreach(symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
 
         if (symbol->src_is_shared_library) continue;
 
@@ -646,13 +692,13 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
                 if (!symbol->input_section->output_section) panic("Unexpectedly got null output_section for %s from %s\n", symbol->name, symbol->input_section->name);
 
                 OutputSection *rw_section = symbol->input_section->output_section;
-                if (!rw_section) panic("Unexpected empty output section for %s", name);
+                if (!rw_section) panic("Unexpected empty output section for %s", snv->name);
                 symbol->output_section = rw_section;
 
                 if (!symbol->input_section)
-                    panic("Unexpected null symbol->input_section for %s", name);
+                    panic("Unexpected null symbol->input_section for %s", snv->name);
                 if (!symbol->input_section->output_section)
-                    panic("Unexpected null symbol->input_section->output_section for symbol %s in section %s", name, symbol->input_section->name);
+                    panic("Unexpected null symbol->input_section->output_section for symbol %s in section %s", snv->name, symbol->input_section->name);
 
                 if (symbol->type == STT_TLS)
                     symbol->dst_value = symbol->input_section->output_section->offset + symbol->input_section->dst_offset + symbol->src_value - output_elf_file->tls_template_offset;
@@ -691,10 +737,10 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
         add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, STV_DEFAULT, i);
     }
 
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        if (!strcmp(name, ".")) continue;
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (!strcmp(snv->name, ".")) continue;
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
     }
@@ -743,9 +789,9 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
     int dynsym_symbol_count = 0;
     int rela_dyn_entry_count = 0;
 
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
 
         if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
 
@@ -763,13 +809,12 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
 // Set the symbol's value and section indexes
 void update_elf_symbols(OutputElfFile *output_elf_file) {
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        if (!strcmp(name, ".")) continue;
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (!strcmp(snv->name, ".")) continue;
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
 
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
         if (!symbol->is_abs && !symbol->output_section) continue; // Weak symbols may not be defined
-
 
         if (output_elf_file->type == ET_DYN) {
             // dynsym
@@ -809,9 +854,9 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
     int got_entries_count = 0;
     int got_plt_entries_count = 0;
 
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (symbol->needs_got) got_entries_count++;
         if (symbol->needs_got_plt) got_plt_entries_count++;
     }
@@ -865,9 +910,9 @@ void update_got_values(OutputElfFile *output_elf_file) {
 
     // Add the .got entries
     int got_index = 0;
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol->needs_got) continue;
 
         if (got_index * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in .got");
@@ -939,9 +984,9 @@ void update_dynamic_relocatable_values(OutputElfFile *output_elf_file) {
     // Add .plt, .got.plt and .rela.plt entries
     int plt_index = 1; // The first entry has special .plt0 jump code
     int got_plt_index = 3; // The first 3 entries are used by the dynamic linker
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol->needs_got_plt) continue;
 
         symbol->plt_offset = plt_index * 16;
@@ -998,9 +1043,9 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
     InputSection *section_iplt = get_extra_section(output_elf_file, IPLT_SECTION_NAME);
     InputSection *section_rela_iplt = get_extra_section(output_elf_file, RELA_IPLT_SECTION_NAME);
 
-     strmap_ordered_foreach(symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(symbol_table->defined_symbols, name);
+    map_ordered_foreach(symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
 
         if (symbol->type == STT_GNU_IFUNC) {
             // The index in the list corresponds to the index in the sections below.
@@ -1146,13 +1191,13 @@ void make_symbol_hashes(OutputElfFile *output_elf_file) {
     uint32_t *chains = buckets + bucket_count;
 
     int i = 1;
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
 
         if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
 
-        uint32_t hash = elf_hash(name);
+        uint32_t hash = elf_hash(snv->name);
         uint32_t bucket = hash % bucket_count;
 
         if (buckets[bucket] == 0) {
@@ -1193,9 +1238,9 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     // Loop over all global symbols. If they are present in the dynsym table and came from
     // a shared library, then they have entries in the GOT and need entries in .rela.dyn
     // for the dynamic linker to sort out.
-    strmap_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const char *name = strmap_ordered_iterator_key(&it);
-        Symbol *symbol = strmap_ordered_get(global_symbol_table->defined_symbols, name);
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!SYMBOL_IS_IN_DYNSYM(symbol)) continue;
         if (!symbol->src_is_shared_library) continue;
 

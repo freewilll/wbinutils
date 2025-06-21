@@ -39,7 +39,7 @@ bin/wld: ${LIBS}
 	@make -C wld
 
 .PHONY: test
-test: bin/was bin/wld lib/liblist.a lib/libstrmap.a lib/libstrmap_ordered.a
+test: bin/was bin/wld lib/liblist.a lib/libstrmap.a lib/libstrmap_ordered.a lib/libmap_ordered.a
 	@make -C was test
 	@make -C wld test
 	@make -C lib/liblist test

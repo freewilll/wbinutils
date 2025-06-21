@@ -3,6 +3,7 @@
 
 #include "input-elf.h"
 #include "output-elf.h"
+#include "map-ordered.h"
 #include "strmap.h"
 #include "strmap-ordered.h"
 
@@ -10,8 +11,15 @@
 
 #define GLOBAL_OFFSET_TABLE_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
 
+// Symbol name & version
+typedef struct symbol_nv {
+    const char *name;
+    uint16_t version_index;
+} SymbolNV;
+
 typedef struct symbol {
     char *name;                     // Name
+    int version;                    // Version
     int binding;                    // Binding, e.g. local or global
     int type;                       // Type, e.g. function or object
     int other;                      // Visibility
@@ -40,8 +48,8 @@ typedef struct symbol {
 } Symbol;
 
 typedef struct symbol_table {
-    StrMapOrdered *defined_symbols;
-    StrMapOrdered *undefined_symbols;
+    MapOrdered *defined_symbols;
+    MapOrdered *undefined_symbols;
 } SymbolTable;
 
 extern SymbolTable *global_symbol_table;
@@ -57,7 +65,7 @@ Symbol *must_get_defined_symbol(SymbolTable *st, char *name);
 Symbol *must_get_global_defined_symbol(char *name);
 SymbolTable *get_local_symbol_table(InputElfFile *elf_file);
 Symbol *lookup_symbol(InputElfFile *elf_file, char *name);
-Symbol *get_undefined_symbol(const char *name);
+Symbol *get_undefined_symbol(const char *name, int version_index);
 int is_undefined_symbol(const char *name);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
 int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only);

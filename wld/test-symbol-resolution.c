@@ -229,7 +229,8 @@ static void test_two_undefined_symbols_one_weak_one_strong(void) {
     process_one_symbol("foo", 4, STB_WEAK, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
 
-    Symbol *undefined_symbol = get_undefined_symbol("foo");
+    int version_index = 0;
+    Symbol *undefined_symbol = get_undefined_symbol("foo", version_index);
     if (undefined_symbol->binding != STB_GLOBAL) {
         printf("Expected a weak binding to be upgraded to a strong one\n");
         exit(1);

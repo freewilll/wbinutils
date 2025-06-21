@@ -1,4 +1,4 @@
-TARGET = ../../lib/libstr_uint16_map_ordered.a
+TARGET = ../../lib/libmap_ordered.a
 
 all: ${TARGET}
 
