@@ -255,4 +255,19 @@ typedef struct elf_dyn {
     } d_un;
 } ElfDyn;
 
+typedef struct elf_verdef {
+  uint16_t  vd_version; // Version revision
+  uint16_t  vd_flags;   // Version information
+  uint16_t  vd_ndx;     // Version Index
+  uint16_t  vd_cnt;     // Number of associated aux entries
+  uint32_t  vd_hash;    // Version name hash value
+  uint32_t  vd_aux;     // Offset in bytes to verdaux array
+  uint32_t  vd_next;    // Offset in bytes to next verd
+} ElfVerdef;
+
+typedef struct elf_verdaux {
+  uint32_t  vda_name;   // Version or dependency names
+  uint32_t  vda_next;   // Offset in bytes to next verdaux
+} ElfVerdaux;
+
 #endif

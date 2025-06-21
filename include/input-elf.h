@@ -38,8 +38,10 @@ typedef struct input_elf_file {
     char *symbol_table_strings;
     ElfSymbol *symbol_table;
     int symbol_count;
+    uint16_t *symbol_table_version_indexes; // Indexed by symbol index, the version index of the symbol
 } InputElfFile;
 
+InputSection *get_input_section(InputElfFile *elf_file, char *name);
 InputElfFile *open_elf_file(const char *filename);
 InputElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
 int file_is_shared_library_file(const char *filename);

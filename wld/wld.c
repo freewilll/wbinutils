@@ -580,7 +580,7 @@ static void set_entrypoint(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_EXEC) return;
 
     if (!entrypoint_symbol_name) entrypoint_symbol_name = DEFAULT_ENTRYPOINT_SYMBOL_NAME;
-    Symbol *symbol = get_defined_symbol(global_symbol_table, entrypoint_symbol_name);
+    Symbol *symbol = get_defined_symbol(global_symbol_table, entrypoint_symbol_name, 0);
     if (!symbol) error("Missing %s symbol", entrypoint_symbol_name);
     output_elf_file->entrypoint = symbol->dst_value;
 }

@@ -84,6 +84,8 @@ InputElfFile *init_elf_file(void) {
     append_to_list(elf_file->section_list, NULL);
     append_to_list(elf_file->section_list, NULL);
 
+    elf_file->section_map = new_strmap();
+
     return elf_file;
 }
 
@@ -155,11 +157,11 @@ static void _test_strong_and_weak_symbols(int binding1, int is_lib2, int binding
 
     if (expected_value != 0) {
         // By convention in this test, the value must be defined
-        assert_int(expected_value, MGGS("foo")->src_value, message);
+        assert_int(expected_value, MGGS("foo", 0)->src_value, message);
     }
     else {
         // By convention in this test, an expected_value of zero means the variable must be be undefined
-        assert_int(1, is_undefined_symbol("foo"), message);
+        assert_int(1, is_undefined_symbol("foo", 0), message);
     }
 }
 
@@ -191,34 +193,34 @@ static void test_common_symbols(void) {
     run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("One common");
-    assert_int(1, MGGS("foo")->is_common, "One common");
+    assert_int(1, MGGS("foo", 0)->is_common, "One common");
 
     // Undefined, then a common symbol
     run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_UNDEF, 1, 0, 0);
     assert_no_error("Undef then common");
-    assert_int(1, is_undefined_symbol("foo"), "Undef then common");
+    assert_int(1, is_undefined_symbol("foo", 0), "Undef then common");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("Undef then common");
-    assert_int(0, is_undefined_symbol("foo"), "Undef then common");
+    assert_int(0, is_undefined_symbol("foo", 0), "Undef then common");
 
     // Defined, then a common symbol
     run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 1, 0, 0);
     assert_no_error("Defined, then common");
-    assert_int(1, MGGS("foo")->src_value, "Defined, then common");
+    assert_int(1, MGGS("foo", 0)->src_value, "Defined, then common");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
-    assert_int(1, MGGS("foo")->src_value, "Defined, then common");
+    assert_int(1, MGGS("foo", 0)->src_value, "Defined, then common");
 
     // Common symbol, then defined
     run_init_symbols();
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, SHN_COMMON, 1, 0, 0);
     assert_no_error("Common then defined");
-    assert_int(1, MGGS("foo")->src_value, "Common then defined");
-    assert_int(1, MGGS("foo")->is_common, "Common then defined");
+    assert_int(1, MGGS("foo", 0)->src_value, "Common then defined");
+    assert_int(1, MGGS("foo", 0)->is_common, "Common then defined");
     process_one_symbol("foo", 4, STB_GLOBAL, STT_OBJECT, 1, 2, 0, 0);
-    assert_int(0, must_get_global_defined_symbol("foo")->is_common, "Common then defined");
-    assert_int(2, must_get_global_defined_symbol("foo")->src_value, "Common then defined");
+    assert_int(0, must_get_global_defined_symbol("foo", 0)->is_common, "Common then defined");
+    assert_int(2, must_get_global_defined_symbol("foo", 0)->src_value, "Common then defined");
 }
 
 // Add two undefined symbols, the first weak, the second strong. The resulting undefined symbol must be strong.
@@ -253,7 +255,7 @@ static void test_two_defined_symbols_one_weak_one_strong(void) {
     assert_int(0, resolutions, "Expected the strong symbol to be ignored");
 
     // The weak symbol resolves foo
-    Symbol *symbol = must_get_defined_symbol(global_symbol_table, "foo");
+    Symbol *symbol = must_get_defined_symbol(global_symbol_table, "foo", 0);
     assert_int(STB_WEAK, symbol->binding, "Expected the weak symbol to not be overridden by the strong one");
 
     // If an object file in a library is loaded, and has a strong symbol, it overrides an already
@@ -272,7 +274,7 @@ static void test_two_defined_symbols_one_weak_one_strong(void) {
     assert_int(1, resolutions, "The strong symbol takes over the weak");
 
     // The strong symbol overrides the weak one
-    symbol = must_get_defined_symbol(global_symbol_table, "foo");
+    symbol = must_get_defined_symbol(global_symbol_table, "foo", 0);
     assert_int(STB_GLOBAL, symbol->binding, "Expected the strong symbol to override the weak one");
 }
 

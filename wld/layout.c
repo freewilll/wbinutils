@@ -703,7 +703,7 @@ void make_output_section_command_assignments_symbol_values(OutputElfFile *output
 
         for (int j = 0; j < command_assignments->length; j++) {
             OutputSectionAssignment *command_assignment = (OutputSectionAssignment *) command_assignments->elements[j];
-            Symbol *symbol = get_global_defined_symbol(command_assignment->assignment->name);
+            Symbol *symbol = get_global_defined_symbol(command_assignment->assignment->name, 0);
 
             // The symbol may not be defined if it was a provided one.
             if (symbol) {

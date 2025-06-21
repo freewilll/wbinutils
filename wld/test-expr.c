@@ -91,7 +91,7 @@ static void test_symbol() {
     // foo
     value = run_eval("foo");
     assert_int(0, value.symbol->dst_value, "foo");
-    must_get_global_defined_symbol("foo")->dst_value = 1;
+    must_get_global_defined_symbol("foo", 0)->dst_value = 1;
     assert_int(1, value.symbol->dst_value, "foo");
 
     // .

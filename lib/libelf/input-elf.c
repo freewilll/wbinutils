@@ -122,19 +122,11 @@ static void check_file(InputElfFile *elf_file) {
 }
 
 // May return NULL if not existent
-static InputSection *get_input_section(InputElfFile *elf_file, char *name) {
+InputSection *get_input_section(InputElfFile *elf_file, char *name) {
     return strmap_get(elf_file->section_map, name);
 }
 
-static void load_sections(InputElfFile *elf_file) {
-    // Init section caches
-    elf_file->section_list = new_list(32);
-    elf_file->section_map = new_strmap();
-
-    // Check the header size is within what we expect
-    if (elf_file->elf_header->e_shentsize > sizeof(ElfSectionHeader))
-        error("ELF section header size is too large for: %s", elf_file->filename);
-
+static void load_section_headers(InputElfFile *elf_file) {
     // Load all section headeres
     int section_headers_size = sizeof(ElfSectionHeader) * elf_file->elf_header->e_shnum;
     elf_file->section_headers = malloc(section_headers_size);
@@ -162,7 +154,9 @@ static void load_sections(InputElfFile *elf_file) {
         append_to_list(elf_file->section_list, section);
         strmap_put(elf_file->section_map, strdup(name), section);
     }
+}
 
+static void load_symbol_table(InputElfFile *elf_file) {
     // Look up symbol table.
     // If a .dynsym exists, which is the case for .so files, use that. Otherwise,
     // fall back to .symtab, if present.
@@ -183,6 +177,38 @@ static void load_sections(InputElfFile *elf_file) {
         elf_file->symbol_count = 0;
         elf_file->symbol_table_strings = NULL;
     }
+}
+
+static void load_symbol_versions(InputElfFile *elf_file) {
+    elf_file->symbol_table_version_indexes = NULL;
+
+    // Look up symbol version indexes
+    InputSection *gnu_version = get_input_section(elf_file, ".gnu.version");
+    if (!gnu_version) return;
+    load_section(elf_file, gnu_version);
+
+    uint16_t *gnu_version_data = gnu_version->data;
+
+    elf_file->symbol_table_version_indexes = calloc(elf_file->symbol_count, sizeof(uint16_t));
+    for (int i = 0; i < elf_file->symbol_count; i++) {
+        uint16_t version_index = gnu_version_data[i];
+        version_index &= ~0x8000; // Mask off hidden bit
+        elf_file->symbol_table_version_indexes[i] = version_index;
+    }
+}
+
+static void load_sections(InputElfFile *elf_file) {
+    // Init section caches
+    elf_file->section_list = new_list(32);
+    elf_file->section_map = new_strmap();
+
+    // Check the header size is within what we expect
+    if (elf_file->elf_header->e_shentsize > sizeof(ElfSectionHeader))
+        error("ELF section header size is too large for: %s", elf_file->filename);
+
+    load_section_headers(elf_file);
+    load_symbol_table(elf_file);
+    load_symbol_versions(elf_file);
 }
 
 static void read_common_file_data(InputElfFile *elf_file) {

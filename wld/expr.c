@@ -239,7 +239,7 @@ Value evaluate_node(Node *node, OutputElfFile *elf_file) {
 
         case OP_ALIGN:  {
             if (!node->left)
-                left.number = must_get_global_defined_symbol(".")->dst_value;
+                left.number = must_get_global_defined_symbol(".", 0)->dst_value;
 
             uint64_t align = VALUE(right);
             uint64_t value = VALUE(left);

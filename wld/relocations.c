@@ -114,7 +114,8 @@ int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_f
 
                 if (elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC) {
                     char *symbol_name = &strings[elf_symbol->st_name];
-                    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
+                    int version_index = 0;
+                    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
                     if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry in make_global_symbols_in_use: %s", symbol_name);
                     if (!strmap_get(global_symbols_in_use, symbol_name)) strmap_put(global_symbols_in_use, symbol_name, (void *) 1);
                 }
@@ -328,8 +329,9 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
         // Handle a relocation to a non-section symbol
 
         symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+        int version_index = 0;
 
-        Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
+        Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
         if (!symbol) {
             // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
             dst_value = 0;
@@ -502,7 +504,8 @@ static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, Input
 
             // Lookup the symbol in the symbol table
             char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-            Symbol *symbol = lookup_symbol(input_elf_file, symbol_name);
+            int version_index = 0;
+            Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
             if (!symbol) panic("Unexpectedly got undefined symbol in a .got.* entry in scan_relocation_in_input_elf_file: %s\n", symbol_name);
 
             if (result == SCAN_RELOCATION_NEEDS_GOT)
