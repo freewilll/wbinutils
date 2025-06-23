@@ -39,6 +39,7 @@ typedef struct input_elf_file {
     ElfSymbol *symbol_table;
     int symbol_count;
     uint16_t *symbol_table_version_indexes; // Indexed by symbol index, the version index of the symbol
+    List *symbol_version_names;             // Version names, indexed by version index
 } InputElfFile;
 
 InputSection *get_input_section(InputElfFile *elf_file, char *name);

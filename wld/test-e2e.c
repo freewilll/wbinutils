@@ -1065,7 +1065,7 @@ static void test_automatic_start_stop_symbols() {
 }
 
 // Test a library with no relocations, only two objects in .data and .bss. and two functions
-static void test_library_no_dependencies() {
+static void test_shared_library_no_dependencies() {
     char *object_path = run_was(
         ".globl i;"
         ".globl j;"
@@ -1085,7 +1085,7 @@ static void test_library_no_dependencies() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "test_library_no_dependencies");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "test_shared_library_no_dependencies");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1128,14 +1128,16 @@ static void test_library_no_dependencies() {
         END);
 }
 
-static void test_two_libs_with_data() {
+static void test_two_shared_libs_with_data() {
     // Make a lib with two ints
     char *object_path = run_was(
         ".globl i;"
         ".globl j;"
+        ".globl k;"
         ".data;"
         "    i: .long 1;"
         "    j: .long 2;"
+        "    k: .long 3;" // This must not be included in the .dynsym since it resolves nothing
     );
 
     List *input_paths = new_list(1);
@@ -1206,7 +1208,7 @@ static void test_two_libs_with_data() {
         END);
 }
 
-static void test_two_libs_with_functions() {
+static void test_two_shared_libs_with_functions() {
     // Make a lib with two functions
     char *object_path = run_was(
         ".globl f1;"
@@ -1311,8 +1313,8 @@ static void test_two_libs_with_functions() {
     uint64_t *got_plt_data = got_plt->data;
 
     assert_uint64_t(0x4000, got_plt_data[0], ".got.plt[0]"); // The address of the .dynamic section
-    assert_uint64_t(0x0000, got_plt_data[1], ".got.plt[1]"); // Used by program linker
-    assert_uint64_t(0x0000, got_plt_data[2], ".got.plt[2]"); // Used by program linker
+    assert_uint64_t(0x0000, got_plt_data[1], ".got.plt[1]"); // Used by program linker, must be zero
+    assert_uint64_t(0x0000, got_plt_data[2], ".got.plt[2]"); // Used by program linker, must be zero
     assert_uint64_t(0x3016, got_plt_data[3], ".got.plt[3]"); // .plt1 + 6, the address of the pushq instruction
     assert_uint64_t(0x3026, got_plt_data[4], ".got.plt[4]"); // .plt2 + 6
 }
@@ -1417,9 +1419,9 @@ int main() {
     test_defined_etext();
     test_unused_etext();
     test_automatic_start_stop_symbols();
-    test_library_no_dependencies();
-    test_two_libs_with_data();
-    test_two_libs_with_functions();
+    test_shared_library_no_dependencies();
+    test_two_shared_libs_with_data();
+    test_two_shared_libs_with_functions();
     test_dwarf();
     test_gnu_ld_script_archive();
 }

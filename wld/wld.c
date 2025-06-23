@@ -82,7 +82,7 @@ const char *DYNAMIC_SECTION_TYPE_NAMES[] = {
     "SYMTAB_SHNDX",
 };
 
-static void run_archive_file_linker_script(const char *path, List *input_elf_files);
+static void run_archive_file_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files);
 
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type) {
     int elf_output_type = output_type == OUTPUT_TYPE_STATIC ? ET_EXEC : ET_DYN;
@@ -130,14 +130,23 @@ static void read_object_file(List *input_elf_files, const char *path, int is_sha
 }
 
 // Identify the filetype and load the file
-static int read_library(const char *path, List *input_elf_files) {
+static int read_library(const char *path, List *input_elf_files, StrMap *read_shared_object_files) {
     int objects_added = 0;
 
     FileType type = identify_library_file(path);
 
+    // Only read an .so file once
+    if (type == FT_SHARED_LIBRARY) {
+        if (strmap_get(read_shared_object_files, path)) {
+            return 0;
+        }
+
+        strmap_put(read_shared_object_files, path, (void *) 1);
+    }
+
     switch (type) {
         case FT_LINKER_SCRIPT:
-            run_archive_file_linker_script(path, input_elf_files);
+            run_archive_file_linker_script(path, input_elf_files, read_shared_object_files);
             break;
 
         case FT_ARCHIVE: {
@@ -163,7 +172,7 @@ static int read_library(const char *path, List *input_elf_files) {
 // OUTPUT_FORMAT(elf64-x86-64)
 // GROUP ( /usr/lib/x86_64-linux-gnu/libm-2.31.a /usr/lib/x86_64-linux-gnu/libmvec.a )
 // Parse the linker script and process all libraries in the GROUP()
-static void run_archive_file_linker_script(const char *path, List *input_elf_files) {
+static void run_archive_file_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files) {
     init_lexer(path);
     List *linker_script = parse();
 
@@ -180,7 +189,7 @@ static void run_archive_file_linker_script(const char *path, List *input_elf_fil
             for (int j = 0; j < input_group_items->length; j++) {
                 InputGroupItem *input_group_item = input_group_items->elements[j];
                 char *path = input_group_item->filename;
-                objects_added += read_library(path, input_elf_files);
+                objects_added += read_library(path, input_elf_files, read_shared_object_files);
             }
 
             if (!objects_added) break;
@@ -191,6 +200,7 @@ static void run_archive_file_linker_script(const char *path, List *input_elf_fil
 // Go down all input files which are either object files or libraries
 static List *read_input_files(List *library_paths, List *input_files, int output_type) {
     List *input_elf_files = new_list(32);
+    StrMap *read_shared_object_files = new_strmap();
 
     for (int i = 0; i < input_files->length; i++) {
         InputFile *input_file = input_files->elements[i];
@@ -199,13 +209,16 @@ static List *read_input_files(List *library_paths, List *input_files, int output
 
         if (input_file->is_library) {
             const char *path = search_for_library(output_type, library_paths, input_filename);
-            read_library(path, input_elf_files);
+
+            read_library(path, input_elf_files, read_shared_object_files);
         }
         else {
             // It's an object file
             read_object_file(input_elf_files, input_filename, 0);
         }
     }
+
+    free_strmap(read_shared_object_files);
 
     return input_elf_files;
 }
@@ -536,6 +549,8 @@ static void create_default_sections(OutputElfFile *output_elf_file) {
 
 // Process IFUNCs and create .got.plt, .iplt and .rela.iplt if required
 static void process_ifuncs(OutputElfFile *output_elf_file, List *input_elf_files) {
+    if (output_elf_file->type == ET_DYN) return;
+
     // Global symbols
     process_ifuncs_from_symbol_table(output_elf_file, global_symbol_table);
 
@@ -761,7 +776,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Set the symbol values in the .got
     update_got_values(output_elf_file);
 
-    // FOr ET_DYN files, update .plt, .got.plt and .rela.plt sections
+    // For ET_DYN files, update .plt, .got.plt and .rela.plt sections
     update_dynamic_relocatable_values(output_elf_file);;
 
     // For ET_DYN files, update the relocation entries in the GOT table

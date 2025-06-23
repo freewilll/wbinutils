@@ -13,23 +13,11 @@
 #include "wld/utils.h"
 #include "wld/wld.h"
 
-#define A_FIRST 1 // TODO remove. Temporary
-
 // Try and find a .a or .so on the builtin library paths. Fails if not found. Outputs is_shared.
 char *search_for_library(int output_type, List *library_paths, const char *name) {
     char *filename = malloc(strlen(name) + 10);
 
-    if (A_FIRST) {
-        // Try to find a .a file
-        sprintf(filename, "lib%s.a", name);
-        char *path = find_file(library_paths, filename, "library");
-        if (path) {
-            free(filename);
-            return path;
-        }
-    }
-
-    // TODO swap .a and .so file finding around
+    // Try to find a .so file first of we are outputting a shared library
     if (output_type == OUTPUT_TYPE_SHARED) {
         // Try to find an .so file first, otherwise fall back to a .a
         sprintf(filename, "lib%s.so", name);

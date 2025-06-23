@@ -10,6 +10,8 @@
 #include "strmap.h"
 #include "error.h"
 
+#define DEBUG_SYMBOL_VERSIONS 0
+
 static const char *SYMBOL_TYPE_NAMES[] = {
     "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
     "?", "?", "?", "?", "?", "?", "?", "?"
@@ -181,6 +183,7 @@ static void load_symbol_table(InputElfFile *elf_file) {
 
 static void load_symbol_versions(InputElfFile *elf_file) {
     elf_file->symbol_table_version_indexes = NULL;
+    elf_file->symbol_version_names = new_list(32);
 
     // Look up symbol version indexes
     InputSection *gnu_version = get_input_section(elf_file, ".gnu.version");
@@ -194,6 +197,105 @@ static void load_symbol_versions(InputElfFile *elf_file) {
         uint16_t version_index = gnu_version_data[i];
         version_index &= ~0x8000; // Mask off hidden bit
         elf_file->symbol_table_version_indexes[i] = version_index;
+    }
+
+    // Parse VERDEF section
+    InputSection *gnu_version_d = get_input_section(elf_file, ".gnu.version_d");
+    if (gnu_version_d) {
+        if (DEBUG_SYMBOL_VERSIONS) printf("VERDEF for %s:\n", elf_file->filename);
+
+        load_section(elf_file, gnu_version_d);
+        void *gnu_version_d_data = gnu_version_d->data;
+
+        ElfVerdef *vd = gnu_version_d_data;
+        ElfVerdef *vd_end = gnu_version_d_data + gnu_version_d->size;
+
+        while (vd < vd_end) {
+            if (vd->vd_version != 1)
+                panic("Unsupported GNU verdef version %d", vd->vd_version);
+            if (vd->vd_cnt == 0)
+                panic("Invalid verdef with zero vd_cnt");
+
+            int is_base = vd->vd_flags & VER_FLG_BASE; // Filename
+            int is_hidden = vd->vd_ndx & VERSYM_HIDDEN;
+
+            if (!is_base && !is_hidden) {
+                // The first entry of vd_aux is the version name.
+                // The rest are parents, which aren't dealt with here.
+                int vda_offset = vd->vd_aux;
+
+                ElfVerdaux *vda = (void *) vd + vda_offset;
+                const char *version_name = &((char *) elf_file->symbol_table_strings)[vda->vda_name];
+
+                // Ensure the symbol_version_names is large enough to hold the index/string
+                if (elf_file->symbol_version_names->length < vd->vd_ndx + 1)
+                    resize_list(elf_file->symbol_version_names, vd->vd_ndx + 1);
+
+                elf_file->symbol_version_names->elements[vd->vd_ndx] = strdup(version_name);
+
+                if (DEBUG_SYMBOL_VERSIONS)
+                    printf("idx %5d: flags=%10x name=%s\n",
+                        vd->vd_ndx,      // Version Index
+                        vd->vd_flags,    // Version information
+                        version_name
+                    );
+            }
+
+            if (!vd->vd_next) break;
+            vd =(void *) vd + vd->vd_next;
+        }
+    }
+
+    // Parse VERNEED section
+    InputSection *gnu_version_r = get_input_section(elf_file, ".gnu.version_r");
+    if (gnu_version_r) {
+        load_section(elf_file, gnu_version_r);
+        void *gnu_version_r_data = gnu_version_r->data;
+
+       if (DEBUG_SYMBOL_VERSIONS)  printf("VERNEED for %s:\n", elf_file->filename);
+
+        ElfVerneed *vn = gnu_version_r_data;
+        ElfVerneed *vn_end = gnu_version_r_data + gnu_version_r->size;
+
+        while (vn < vn_end) {
+            if (vn->vn_version != 1)
+                panic("Unsupported GNU verneed version %d", vn->vn_version);
+            if (vn->vn_cnt == 0)
+                panic("Invalid verneed with zero vn_cnt");
+
+            if (DEBUG_SYMBOL_VERSIONS)
+                printf("Addr %010lx  ver=%10x file=%10x cnt=%10x aux=%10x next=%10x\n",
+                    (void *) vn - gnu_version_r_data,
+                    vn->vn_version,  // Version revision
+                    vn->vn_file,     // Offset of filename for this dependency
+                    vn->vn_cnt,      // Number of associated aux entries
+                    vn->vn_aux,      // Offset in bytes to verdaux array
+                    vn->vn_next      // Offset in bytes to next verneed entry
+                );
+
+            // Loop over all aux entries.
+            int vna_offset = vn->vn_aux;
+            for (int i = 0; i < vn->vn_cnt; i++) {
+                if (vna_offset >= gnu_version_d->size) panic("VDA offset %d exceeds size %x", vna_offset, gnu_version_d->size);
+                ElfVernaux *vna = (void *) vn + vna_offset;
+                const char *version_name = &((char *) elf_file->symbol_table_strings)[vna->vna_name];
+                uint16_t version_index = vna->vna_other;
+                if (DEBUG_SYMBOL_VERSIONS) printf("  %s version= %d\n", version_name, version_index);
+
+                // Ensure the symbol_version_names is large enough to hold the index/string
+                if (elf_file->symbol_version_names->length < version_index + 1)
+                    resize_list(elf_file->symbol_version_names, version_index + 1);
+
+                elf_file->symbol_version_names->elements[version_index] = strdup(version_name);
+
+                if (!vna->vna_next) break;
+                vna_offset += vna->vna_next;
+            }
+
+            if (!vn->vn_next) break;
+            vn =(void *) vn + vn->vn_next;
+        }
+        if (DEBUG_SYMBOL_VERSIONS) printf("\n");
     }
 }
 

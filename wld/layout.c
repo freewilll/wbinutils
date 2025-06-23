@@ -575,7 +575,7 @@ static void reset_layout_complete(List *input_elf_files) {
 // The second time when the final layout is done.
 // The script does a parallel walk of the the sections output list (which may contain orphans) and the script
 void layout_output_sections(OutputElfFile *output_elf_file, List *input_elf_files) {
-    if (DEBUG_LAYOUT) printf("------------------------------------\nLaying out executable\n");
+    if (DEBUG_LAYOUT) printf("------------------------------------\nLaying out sections\n");
 
     reset_layout_complete(input_elf_files);
 

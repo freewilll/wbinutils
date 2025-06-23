@@ -176,6 +176,12 @@
 #define DT_PREINIT_ARRAYSZ 33   // size in bytes of DT_PREINIT_ARRAY
 #define DT_SYMTAB_SHNDX    34   // Address of SYMTAB_SHNDX section
 
+// Legal values for vd_flags (version information flags)
+#define VER_FLG_BASE    0x1 // Version definition of file itself
+#define VER_FLG_WEAK    0x2 // Weak version identifier
+
+#define VERSYM_HIDDEN 0x8000
+
 typedef struct elf_header {
     uint8_t   ei_magic0;        // 0x7F followed by ELF(45 4c 46) in ASCII; these four bytes constitute the magic number.
     uint8_t   ei_magic1;
@@ -256,18 +262,34 @@ typedef struct elf_dyn {
 } ElfDyn;
 
 typedef struct elf_verdef {
-  uint16_t  vd_version; // Version revision
-  uint16_t  vd_flags;   // Version information
-  uint16_t  vd_ndx;     // Version Index
-  uint16_t  vd_cnt;     // Number of associated aux entries
-  uint32_t  vd_hash;    // Version name hash value
-  uint32_t  vd_aux;     // Offset in bytes to verdaux array
-  uint32_t  vd_next;    // Offset in bytes to next verd
+  uint16_t vd_version;  // Version revision
+  uint16_t vd_flags;    // Version information
+  uint16_t vd_ndx;      // Version Index
+  uint16_t vd_cnt;      // Number of associated aux entries
+  uint32_t vd_hash;     // Version name hash value
+  uint32_t vd_aux;      // Offset in bytes to verdaux array
+  uint32_t vd_next;     // Offset in bytes to next verd
 } ElfVerdef;
 
 typedef struct elf_verdaux {
   uint32_t  vda_name;   // Version or dependency names
   uint32_t  vda_next;   // Offset in bytes to next verdaux
 } ElfVerdaux;
+
+typedef struct elf_verneed {
+  uint16_t	vn_version;     // Version of structure
+  uint16_t	vn_cnt;	        // Number of associated aux entries
+  uint32_t	vn_file;        // Offset of filename for this dependency
+  uint32_t	vn_aux;	        // Offset in bytes to vernaux array
+  uint32_t	vn_next;        // Offset in bytes to next verneed entry
+} ElfVerneed;
+
+typedef struct elf_vernaux {
+  uint32_t	vna_hash;       // Hash value of dependency name
+  uint16_t	vna_flags;      // Dependency specific information
+  uint16_t	vna_other;      // Unused
+  uint32_t	vna_name;       // Dependency name string offset
+  uint32_t	vna_next;       // Offset in bytes to next vernaux entry
+} ElfVernaux;
 
 #endif

@@ -114,9 +114,14 @@ int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_f
 
                 if (elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC) {
                     char *symbol_name = &strings[elf_symbol->st_name];
-                    int version_index = 0;
+
+                    int version_index = input_elf_file->symbol_table_version_indexes ? input_elf_file->symbol_table_version_indexes[symbol_index] : 0;
                     Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
-                    if (!symbol) panic("Unexpectedly got undefined symbol in a GOT entry in make_global_symbols_in_use: %s", symbol_name);
+
+                    // For object files, ensure all relocation symbols are defined
+                    if (input_elf_file->type == ET_REL && !symbol)
+                        panic("Unexpectedly got undefined symbol in a GOT entry in make_global_symbols_in_use: %s", symbol_name);
+
                     if (!strmap_get(global_symbols_in_use, symbol_name)) strmap_put(global_symbols_in_use, symbol_name, (void *) 1);
                 }
 
