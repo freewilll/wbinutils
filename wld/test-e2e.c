@@ -1104,7 +1104,7 @@ static void test_shared_library_no_dependencies() {
         PT_LOAD,          0x1000,  0x1000,  0x00e3,  0x00e3, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x0002,  0x0002, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x0068,  0x0070, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x3000,  0x0060,  0x0060, PF_R,         0x0008,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x0060,  0x0060, PF_R | PF_W, 0x0008,
         END
     );
 
@@ -1178,7 +1178,7 @@ static void test_two_shared_libs_with_data() {
         PT_LOAD,          0x1000,  0x1000,  0x00a8,  0x00a8, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x00b0,  0x00b0, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x3000,  0x00a0,  0x00a0, PF_R,         0x0008,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x00a0,  0x00a0, PF_R | PF_W,   0x0008,
         END
     );
 
@@ -1258,7 +1258,7 @@ static void test_two_shared_libs_with_functions() {
         PT_LOAD,          0x2000,  0x2000,  0x0030,  0x0030, PF_R,         0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x003a,  0x003a, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x4000,  0x4000,  0x00d8,  0x00d8, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x4000,  0x4000,  0x00b0,  0x00b0, PF_R,         0x0008,
+        PT_DYNAMIC,       0x4000,  0x4000,  0x00b0,  0x00b0, PF_R | PF_W,  0x0008,
         END
     );
 

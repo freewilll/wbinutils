@@ -499,7 +499,7 @@ static void make_elf_program_segment_headers(OutputElfFile *output_elf_file) {
         ElfProgramSegmentHeader *tls_program_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
 
         tls_program_segment->p_type = PT_DYNAMIC;
-        tls_program_segment->p_flags = PF_R;
+        tls_program_segment->p_flags = PF_R | PF_W;
         tls_program_segment->p_offset = section_dynamic->output_section->offset;
         tls_program_segment->p_filesz = section_dynamic->output_section->size;
         tls_program_segment->p_memsz = section_dynamic->output_section->size;
