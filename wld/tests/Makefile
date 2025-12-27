@@ -25,8 +25,8 @@ test: \
 	orphan-sections \
 	ifuncs \
 	undefined-unreferenced-symbol \
-	lib-minimal \
-	lib-using-lib
+	shared-lib-minimal \
+	shared-lib-using-shared-lib
 
 .PHONY: sanity1
 sanity1:
@@ -124,13 +124,13 @@ ifuncs:
 undefined-unreferenced-symbol:
 	make -C undefined-unreferenced-symbol
 
-.PHONY: lib-minimal
-lib-minimal:
-	make -C lib-minimal
+.PHONY: shared-lib-minimal
+shared-lib-minimal:
+	make -C shared-lib-minimal
 
-.PHONY: lib-using-lib
-lib-using-lib:
-	make -C lib-using-lib
+.PHONY: shared-lib-using-shared-lib
+shared-lib-using-shared-lib:
+	make -C shared-lib-using-shared-lib
 
 clean:
 	@make -C sanity1 clean
@@ -157,5 +157,5 @@ clean:
 	@make -C orphan-sections clean
 	@make -C ifuncs clean
 	@make -C undefined-unreferenced-symbol clean
-	@make -C lib-minimal clean
-	@make -C lib-using-lib clean
+	@make -C shared-lib-minimal clean
+	@make -C shared-lib-using-shared-lib clean
