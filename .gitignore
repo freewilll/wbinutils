@@ -1,4 +1,5 @@
 *.o
+*.d
 /*.s
 **/core
 a.out
