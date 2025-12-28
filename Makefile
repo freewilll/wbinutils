@@ -10,49 +10,49 @@ all: ${LIBS} bin/was bin/wld
 
 .PHONY: lib/liblist.a
 lib/liblist.a:
-	@make -C lib/liblist
+	+${MAKE} -C lib/liblist
 
 .PHONY: lib/libstrmap.a
 lib/libstrmap.a:
-	@make -C lib/libstrmap
+	+${MAKE} -C lib/libstrmap
 
 .PHONY: lib/libstrmap_ordered.a
 lib/libstrmap_ordered.a:
-	@make -C lib/libstrmap_ordered
+	+${MAKE} -C lib/libstrmap_ordered
 
 .PHONY: lib/libmap_ordered.a
 lib/libmap_ordered.a:
-	@make -C lib/libmap_ordered
+	+${MAKE} -C lib/libmap_ordered
 
 .PHONY: lib/liberror.a
 lib/liberror.a:
-	@make -C lib/liberror
+	+${MAKE} -C lib/liberror
 
 .PHONY: lib/libelf.a
 lib/libelf.a: lib/liblist.a lib/libstrmap.a
-	@make -C lib/libelf
+	+${MAKE} -C lib/libelf
 
 bin/was: ${LIBS}
-	@make -C was
+	+${MAKE} -C was
 
 bin/wld: ${LIBS}
-	@make -C wld
+	+${MAKE} -C wld
 
 .PHONY: test
 test: bin/was bin/wld lib/liblist.a lib/libstrmap.a lib/libstrmap_ordered.a lib/libmap_ordered.a
-	@make -C was test
-	@make -C wld test
-	@make -C lib/liblist test
-	@make -C lib/libstrmap test
-	@make -C lib/libstrmap_ordered test
-	@make -C lib/libmap_ordered test
+	+${MAKE} -C was test
+	+${MAKE} -C wld test
+	+${MAKE} -C lib/liblist test
+	+${MAKE} -C lib/libstrmap test
+	+${MAKE} -C lib/libstrmap_ordered test
+	+${MAKE} -C lib/libmap_ordered test
 
 clean:
-	@make -C lib/liblist clean
-	@make -C lib/libstrmap clean
-	@make -C lib/libstrmap_ordered clean
-	@make -C lib/libmap_ordered clean
-	@make -C lib/liberror clean
-	@make -C lib/libelf clean
-	@make -C was clean
-	@make -C wld clean
+	+${MAKE} -C lib/liblist clean
+	+${MAKE} -C lib/libstrmap clean
+	+${MAKE} -C lib/libstrmap_ordered clean
+	+${MAKE} -C lib/libmap_ordered clean
+	+${MAKE} -C lib/liberror clean
+	+${MAKE} -C lib/libelf clean
+	+${MAKE} -C was clean
+	+${MAKE} -C wld clean

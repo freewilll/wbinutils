@@ -68,7 +68,7 @@ ${TARGET}: libwld.a main.o ${LIBS_PATH}
 	gcc -g -Werror -I . -I ../include main.o libwld.a -o ${TARGET}
 
 test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser run-test-expr run-test-utils run-test-e2e
-	make -C tests
+	+$(MAKE) -C tests
 
 libtest-archive-loading.a: test-archive-loading.o
 	ar rcs libtest-archive-loading.a test-archive-loading.o
@@ -118,7 +118,7 @@ clean:
 	@rm -f default-shared.ld.h
 	@rm -f libwld.a
 	@rm -f ${TARGET}
-	@make -C tests clean
+	@+$(MAKE) -C tests clean
 	@rm -f test-archive-loading
 	@rm -f libtest-archive-loading.a
 	@rm -f libtest-archive-loading-long.a

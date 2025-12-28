@@ -30,132 +30,132 @@ test: \
 
 .PHONY: sanity1
 sanity1:
-	make -C sanity1
+	+$(MAKE) -C sanity1
 
 .PHONY: sanity2
 sanity2:
-	make -C sanity2
+	+$(MAKE) -C sanity2
 
 .PHONY: glibc-math
 glibc-math:
-	make -C glibc-math
+	+$(MAKE) -C glibc-math
 
 .PHONY: glibc-with-gcc-ld
 glibc-with-gcc-ld:
-	make -C glibc-with-gcc-ld
+	+$(MAKE) -C glibc-with-gcc-ld
 
 .PHONY: musl-libc-hello-world
 musl-libc-hello-world:
-	make -C musl-libc-hello-world
+	+$(MAKE) -C musl-libc-hello-world
 
 .PHONY: musl-libc-tls-hello-world
 musl-libc-tls-hello-world:
-	make -C musl-libc-tls-hello-world
+	+$(MAKE) -C musl-libc-tls-hello-world
 
 .PHONY: lib-object-file-selection
 lib-object-file-selection:
-	make -C lib-object-file-selection
+	+$(MAKE) -C lib-object-file-selection
 
 .PHONY: symbol-resolution-bindings
 symbol-resolution-bindings:
-	make -C symbol-resolution-bindings
+	+$(MAKE) -C symbol-resolution-bindings
 
 .PHONY: symbol-resolution-double-strong-bindings
 symbol-resolution-double-strong-bindings:
-	make -C symbol-resolution-double-strong-bindings
+	+$(MAKE) -C symbol-resolution-double-strong-bindings
 
 .PHONY: symbol-resolution-weak-strong-bindings
 symbol-resolution-weak-strong-bindings:
-	make -C symbol-resolution-weak-strong-bindings
+	+$(MAKE) -C symbol-resolution-weak-strong-bindings
 
 .PHONY: symbol-resolution-with-common-sections
 symbol-resolution-with-common-sections:
-	make -C symbol-resolution-with-common-sections
+	+$(MAKE) -C symbol-resolution-with-common-sections
 
 .PHONY: symbol-resolution-weak-strong-in-library
 symbol-resolution-weak-strong-in-library:
-	make -C symbol-resolution-weak-strong-in-library
+	+$(MAKE) -C symbol-resolution-weak-strong-in-library
 
 .PHONY: symbol-resolution-weak-strong-both-defined-in-library
 symbol-resolution-weak-strong-both-defined-in-library:
-	make -C symbol-resolution-weak-strong-both-defined-in-library
+	+$(MAKE) -C symbol-resolution-weak-strong-both-defined-in-library
 
 .PHONY: local-symbols
 local-symbols:
-	make -C local-symbols
+	+$(MAKE) -C local-symbols
 
 .PHONY: abs-symbol
 abs-symbol:
-	make -C abs-symbol
+	+$(MAKE) -C abs-symbol
 
 .PHONY: symbol-resolution-with-mixed-bss-and-common-sections
 symbol-resolution-with-mixed-bss-and-common-sections:
-	make -C symbol-resolution-with-mixed-bss-and-common-sections
+	+$(MAKE) -C symbol-resolution-with-mixed-bss-and-common-sections
 
 .PHONY: relocation-relaxation
 relocation-relaxation:
-	make -C relocation-relaxation
+	+$(MAKE) -C relocation-relaxation
 
 .PHONY: relocation-locals
 relocation-locals:
-	make -C relocation-locals
+	+$(MAKE) -C relocation-locals
 
 .PHONY: relocation-got
 relocation-got:
-	make -C relocation-got
+	+$(MAKE) -C relocation-got
 
 .PHONY: relocation-tls
 relocation-tls:
-	make -C relocation-tls
+	+$(MAKE) -C relocation-tls
 
 .PHONY: array-lifecycle
 array-lifecycle:
-	make -C array-lifecycle
+	+$(MAKE) -C array-lifecycle
 
 .PHONY: orphan-sections
 orphan-sections:
-	make -C orphan-sections
+	+$(MAKE) -C orphan-sections
 
 .PHONY: ifuncs
 ifuncs:
-	make -C ifuncs
+	+$(MAKE) -C ifuncs
 
 .PHONY: undefined-unreferenced-symbol
 undefined-unreferenced-symbol:
-	make -C undefined-unreferenced-symbol
+	+$(MAKE) -C undefined-unreferenced-symbol
 
 .PHONY: shared-lib-minimal
 shared-lib-minimal:
-	make -C shared-lib-minimal
+	+$(MAKE) -C shared-lib-minimal
 
 .PHONY: shared-lib-using-shared-lib
 shared-lib-using-shared-lib:
-	make -C shared-lib-using-shared-lib
+	+$(MAKE) -C shared-lib-using-shared-lib
 
 clean:
-	@make -C sanity1 clean
-	@make -C sanity2 clean
-	@make -C glibc-hello-world clean
-	@make -C glibc-math clean
-	@make -C musl-libc-hello-world clean
-	@make -C musl-libc-tls-hello-world clean
-	@make -C lib-object-file-selection clean
-	@make -C symbol-resolution-bindings clean
-	@make -C symbol-resolution-double-strong-bindings clean
-	@make -C symbol-resolution-weak-strong-bindings clean
-	@make -C symbol-resolution-with-common-sections clean
-	@make -C symbol-resolution-weak-strong-in-library clean
-	@make -C symbol-resolution-weak-strong-both-defined-in-library clean
-	@make -C local-symbols clean
-	@make -C abs-symbol clean
-	@make -C symbol-resolution-with-mixed-bss-and-common-sections clean
-	@make -C relocation-relaxation clean
-	@make -C relocation-locals clean
-	@make -C relocation-got clean
-	@make -C relocation-tls clean
-	@make -C array-lifecycle clean
-	@make -C orphan-sections clean
-	@make -C ifuncs clean
-	@make -C undefined-unreferenced-symbol clean
-	@make -C shared-lib-minimal clean
-	@make -C shared-lib-using-shared-lib clean
+	@+$(MAKE) -C sanity1 clean
+	@+$(MAKE) -C sanity2 clean
+	@+$(MAKE) -C glibc-hello-world clean
+	@+$(MAKE) -C glibc-math clean
+	@+$(MAKE) -C musl-libc-hello-world clean
+	@+$(MAKE) -C musl-libc-tls-hello-world clean
+	@+$(MAKE) -C lib-object-file-selection clean
+	@+$(MAKE) -C symbol-resolution-bindings clean
+	@+$(MAKE) -C symbol-resolution-double-strong-bindings clean
+	@+$(MAKE) -C symbol-resolution-weak-strong-bindings clean
+	@+$(MAKE) -C symbol-resolution-with-common-sections clean
+	@+$(MAKE) -C symbol-resolution-weak-strong-in-library clean
+	@+$(MAKE) -C symbol-resolution-weak-strong-both-defined-in-library clean
+	@+$(MAKE) -C local-symbols clean
+	@+$(MAKE) -C abs-symbol clean
+	@+$(MAKE) -C symbol-resolution-with-mixed-bss-and-common-sections clean
+	@+$(MAKE) -C relocation-relaxation clean
+	@+$(MAKE) -C relocation-locals clean
+	@+$(MAKE) -C relocation-got clean
+	@+$(MAKE) -C relocation-tls clean
+	@+$(MAKE) -C array-lifecycle clean
+	@+$(MAKE) -C orphan-sections clean
+	@+$(MAKE) -C ifuncs clean
+	@+$(MAKE) -C undefined-unreferenced-symbol clean
+	@+$(MAKE) -C shared-lib-minimal clean
+	@+$(MAKE) -C shared-lib-using-shared-lib clean
