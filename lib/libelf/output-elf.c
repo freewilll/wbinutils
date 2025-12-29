@@ -379,8 +379,8 @@ void write_elf_file(OutputElfFile *output_elf_file) {
         if (!f) { perror("Unable to open write output file"); exit(1); }
     }
 
-    // If the output is executable, set the exec flag
-    if (output_elf_file->type == ET_EXEC) {
+    // If the output is executable, or a dynamic file set the exec flag
+    if (output_elf_file->type == ET_EXEC || output_elf_file->type == ET_DYN) {
         if (chmod(output_elf_file->filename, 0755) < 0) {
             perror("Unable to set executable permissions");
             exit(1);

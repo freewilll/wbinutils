@@ -11,6 +11,7 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    . = SIZEOF_HEADERS;                                                     \n"
 #endif
     "    . = ALIGN(CONSTANT (MAXPAGESIZE));                                      \n"
+    "    .interp :   { *(.interp)                                               }\n"
 
 #ifdef SHARED
     "    .hash :     { *(.hash)                                                 }\n"
@@ -18,7 +19,6 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    .dynstr :   { *(.dynstr)                                               }\n"
     "    .rela.dyn : { *(.rela.dyn)                                             }\n"
 #else
-    "    .interp :   { *(.interp)                                               }\n"
 #endif
     "    .rela.plt : {                                                           \n"
     "        *(.rela.plt)                                                        \n"
