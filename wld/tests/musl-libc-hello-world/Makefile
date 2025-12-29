@@ -25,7 +25,8 @@ main: main.o ${WLD}
 	-o main                                               \
 	-lc -lgcc -lgcc_eh                                    \
 	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	-static
 
 run-main: main
 	@./main # Catch non-zero error

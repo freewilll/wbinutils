@@ -8,7 +8,7 @@ test: run-main
 	as $< -o $@
 
 main: ${WLD} main.o
-	${WLD} -o main main.o
+	${WLD} -o main main.o -static
 
 run-main: main
 	./main

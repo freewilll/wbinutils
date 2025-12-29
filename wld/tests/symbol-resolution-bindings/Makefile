@@ -19,19 +19,19 @@ test: run-main12 run-mainl12 run-main21 run-mainl21
 
 main12: main.o lib1.o lib2.o ${WLD}
 	# lib1.o then lib2.o
-	${WLD} main.o lib1.o lib2.o -o main12
+	${WLD} main.o lib1.o lib2.o -o main12 -static
 
 mainl12: main.o lib1.a lib2.o ${WLD}
 	# lib1.a then lib2.o
-	${WLD} main.o -L . -l1 lib2.o -o mainl12
+	${WLD} main.o -L . -l1 lib2.o -o mainl12 -static
 
 main21: main.o lib1.o lib2.o ${WLD}
 	# lib2.o then lib1.o
-	${WLD} main.o lib2.o lib1.o -o main21
+	${WLD} main.o lib2.o lib1.o -o main21 -static
 
 mainl21: main.o lib1.o lib2.a ${WLD}
 	# lib1.a then lib2.o
-	${WLD} main.o lib1.o -L . -l2 -o mainl21
+	${WLD} main.o lib1.o -L . -l2 -o mainl21 -static
 
 run-main12: main12
 	@MSG=$$(./main12); ERR=$$? ;\

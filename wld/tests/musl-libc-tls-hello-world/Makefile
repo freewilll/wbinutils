@@ -30,7 +30,8 @@ main-data-and-bss: main-data-and-bss.o
 	-o $@                                                 \
 	-lc -lgcc -lgcc_eh                                    \
 	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	/usr/lib/x86_64-linux-musl/crtn.o				      \
+	-static
 
 .PHONY: run-main-data
 run-main-data: main-data

@@ -24,7 +24,7 @@ test: main_o1_o2 main_l1_o2 run-main_o1_l2 run-main_l1_l2
 	ar rcs $@ $<
 
 main_o1_o2: main.o lib1.o lib2.o ${WLD}
-	@MSG=$$(${WLD} main.o lib1.o lib2.o -o main_o1_o2 2>/dev/null); ERR=$$? ;\
+	@MSG=$$(${WLD} main.o lib1.o lib2.o -o main_o1_o2 -static 2>/dev/null); ERR=$$? ;\
 	if [ "$$ERR" != "1" ]; then \
 		echo "wld exit code was $$ERR, not 1."; \
 		exit 1; \
@@ -32,7 +32,7 @@ main_o1_o2: main.o lib1.o lib2.o ${WLD}
 	echo "lib-object-file-selection wld exit code for main_o1_o2 test passed"
 
 main_l1_o2: main.o lib1.a lib2.o ${WLD}
-	@MSG=$$(${WLD} main.o -L . -l1 lib2.o -o main_l1_o2 2>/dev/null); ERR=$$? ;\
+	@MSG=$$(${WLD} main.o -L . -l1 lib2.o -o main_l1_o2 -static 2>/dev/null); ERR=$$? ;\
 	if [ "$$ERR" != "1" ]; then \
 		echo "wld exit code was $$ERR, not 1."; \
 		exit 1; \
@@ -41,11 +41,11 @@ main_l1_o2: main.o lib1.a lib2.o ${WLD}
 
 main_o1_l2: main.o lib1.o lib2.a ${WLD}
 	# lib1.a then lib2.o
-	${WLD} main.o lib1.o -L . -l2 -o main_o1_l2
+	${WLD} main.o lib1.o -L . -l2 -o main_o1_l2 -static
 
 main_l1_l2: main.o lib1.a lib2.a ${WLD}
 	# lib1.a then lib2.o
-	${WLD} main.o -L . -l1 -l2 -o main_l1_l2
+	${WLD} main.o -L . -l1 -l2 -o main_l1_l2 -static
 
 run-main_l1_o2: main_l1_o2
 	@MSG=$$(./main_l1_o2); ERR=$$? ;\

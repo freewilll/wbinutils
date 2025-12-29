@@ -20,10 +20,10 @@ liba21.a: test1.o test2.o
 	ar rcs $@ test2.o test1.o
 
 main12: liba12.a main.o ${WLD}
-	${WLD} main.o -L . -la12 -o main12
+	${WLD} main.o -L . -la12 -o main12 -static
 
 main21: liba21.a main.o ${WLD}
-	${WLD} main.o -L . -la21 -o main21
+	${WLD} main.o -L . -la21 -o main21 -static
 
 run-main12: main12
 	./main12

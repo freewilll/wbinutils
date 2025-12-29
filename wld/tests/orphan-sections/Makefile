@@ -8,7 +8,7 @@ test: run-orphans
 	as $< -o $@
 
 orphans: orphans.o orphans2.o ${WLD}
-	${WLD} orphans.o orphans2.o -o orphans
+	${WLD} orphans.o orphans2.o -o orphans -static
 
 run-orphans: orphans
 	./orphans

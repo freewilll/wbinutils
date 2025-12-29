@@ -8,7 +8,7 @@ test: run-main
 	as $< -o $@
 
 main: ${WLD} main.o lib1.o lib2.o lib3.o
-	${WLD} -o main main.o lib1.o lib2.o lib3.o
+	${WLD} -o main main.o lib1.o lib2.o lib3.o -static
 
 run-main: main
 	./main

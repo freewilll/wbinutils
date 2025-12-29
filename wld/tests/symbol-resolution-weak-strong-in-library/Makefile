@@ -16,7 +16,7 @@ liba.a: test1.o test2.o test3.o
 	ar rcs $@ test1.o test2.o test3.o
 
 main: liba.a main.o ${WLD}
-	${WLD} main.o -L . -la -o main
+	${WLD} main.o -L . -la -o main -static
 
 run-main: main
 	./main

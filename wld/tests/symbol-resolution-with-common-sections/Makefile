@@ -8,7 +8,7 @@ test: run
 	as $< -o $@
 
 file: ${WLD} file1.o file2.o
-	${WLD} file1.o file2.o -o file
+	${WLD} file1.o file2.o -o file -static
 
 run: file
 	@MSG=$$(./file); ERR=$$? ;\

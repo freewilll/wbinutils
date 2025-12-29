@@ -28,7 +28,8 @@ main: main.o
 		-lgcc_eh \
 		-lc \
 		-lm \
-		/usr/lib/x86_64-linux-gnu/crtn.o
+		/usr/lib/x86_64-linux-gnu/crtn.o \
+		-static
 
 run-main: main
 	@./main

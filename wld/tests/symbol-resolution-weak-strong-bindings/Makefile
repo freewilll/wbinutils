@@ -38,52 +38,52 @@ test: \
 	ar rcs $@ $<
 
 mains_os_ow: mains.o libs.o libw.o ${WLD}
-	${WLD} mains.o libs.o libw.o -o mains_os_ow
+	${WLD} mains.o libs.o libw.o -o mains_os_ow -static
 
 mains_ls_ow: mains.o libs.a libw.o ${WLD}
-	${WLD} mains.o -L . -ls libw.o -o mains_ls_ow
+	${WLD} mains.o -L . -ls libw.o -o mains_ls_ow -static
 
 mains_os_lw: mains.o libs.o libw.a ${WLD}
-	${WLD} mains.o libs.o -L . -lw -o mains_os_lw
+	${WLD} mains.o libs.o -L . -lw -o mains_os_lw -static
 
 mains_ls_lw: mains.o libs.a libw.a ${WLD}
-	${WLD} mains.o -L . -ls -lw -o mains_ls_lw
+	${WLD} mains.o -L . -ls -lw -o mains_ls_lw -static
 
 mains_ow_os: mains.o libs.o libw.o ${WLD1}
-	${WLD} mains.o libw.o libs.o -o mains_ow_os
+	${WLD} mains.o libw.o libs.o -o mains_ow_os -static
 
 mains_ow_ls: mains.o libs.a libw.o ${WLD}
-	${WLD} mains.o libw.o -L . -ls -o mains_ow_ls
+	${WLD} mains.o libw.o -L . -ls -o mains_ow_ls -static
 
 mains_lw_os: mains.o libs.o libw.a ${WLD}
-	${WLD} mains.o -L . -lw libs.o -o mains_lw_os
+	${WLD} mains.o -L . -lw libs.o -o mains_lw_os -static
 
 mains_lw_ls: mains.o libs.a libw.a ${WLD}
-	${WLD} mains.o -L . -lw -ls -o mains_lw_ls
+	${WLD} mains.o -L . -lw -ls -o mains_lw_ls -static
 
 mainw_os_ow: mainw.o libs.o libw.o ${WLD}
-	${WLD} mainw.o libs.o libw.o -o mainw_os_ow
+	${WLD} mainw.o libs.o libw.o -o mainw_os_ow -static
 
 mainw_ls_ow: mainw.o libs.a libw.o ${WLD}
-	${WLD} mainw.o -L . -ls libw.o -o mainw_ls_ow
+	${WLD} mainw.o -L . -ls libw.o -o mainw_ls_ow -static
 
 mainw_os_lw: mainw.o libs.o libw.a ${WLD}
-	${WLD} mainw.o libs.o -L . -lw -o mainw_os_lw
+	${WLD} mainw.o libs.o -L . -lw -o mainw_os_lw -static
 
 mainw_ls_lw: mainw.o libs.a libw.a ${WLD}
-	${WLD} mainw.o -L . -ls -lw -o mainw_ls_lw
+	${WLD} mainw.o -L . -ls -lw -o mainw_ls_lw -static
 
 mainw_ow_os: mainw.o libs.o libw.o ${WLD1}
-	${WLD} mainw.o libw.o libs.o -o mainw_ow_os
+	${WLD} mainw.o libw.o libs.o -o mainw_ow_os -static
 
 mainw_ow_ls: mainw.o libs.a libw.o ${WLD}
-	${WLD} mainw.o libw.o -L . -ls -o mainw_ow_ls
+	${WLD} mainw.o libw.o -L . -ls -o mainw_ow_ls -static
 
 mainw_lw_os: mainw.o libs.o libw.a ${WLD}
-	${WLD} mainw.o -L . -lw libs.o -o mainw_lw_os
+	${WLD} mainw.o -L . -lw libs.o -o mainw_lw_os -static
 
 mainw_lw_ls: mainw.o libs.a libw.a ${WLD}
-	${WLD} mainw.o -L . -lw -ls -o mainw_lw_ls
+	${WLD} mainw.o -L . -lw -ls -o mainw_lw_ls -static
 
 run-mains_%: mains_%
 	@./$<; ERR=$$? ; if [ "$$ERR" != "1" ]; then echo "Exit code was $$ERR, not 1."; exit 1; fi

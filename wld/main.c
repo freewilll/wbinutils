@@ -12,6 +12,7 @@ int main(int argc, char **argv) {
     int exit_code = 0;
     int help = 0;
     int verbose = 0;
+    int is_static = 0;
     int is_shared = 0;
     List *input_files = new_list(32);
     char *output_filename = NULL;
@@ -73,13 +74,12 @@ int main(int argc, char **argv) {
                 argv += 2;
             }
             else if (!strcmp(argv[0], "-static")) {
-                // Do nothing
+                is_static = 1;
                 argc--;
                 argv++;
             }
             else if (!strcmp(argv[0], "-shared")) {
                 is_shared = 1;
-                // Do nothing
                 argc--;
                 argv++;
             }
@@ -116,7 +116,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    int output_type = is_shared ? OUTPUT_TYPE_SHARED : OUTPUT_TYPE_STATIC;
+    int output_type = is_shared || !is_static ? OUTPUT_TYPE_SHARED : OUTPUT_TYPE_STATIC;
 
     if (verbose) {
         printf("Wld linker\n");

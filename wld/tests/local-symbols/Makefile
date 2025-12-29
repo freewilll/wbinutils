@@ -6,7 +6,7 @@ all: run-test1
 	as $< -o $@
 
 test1: test1.o ${WLD}
-	${WLD} test1.o -o test1
+	${WLD} test1.o -o test1 -static
 
 run-test1: test1
 	@./test1; ERR=$$? ;\

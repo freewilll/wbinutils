@@ -8,7 +8,7 @@ test: run-sanity1
 	as $< -o $@
 
 sanity1: sanity1.o ${WLD}
-	${WLD} sanity1.o -o sanity1
+	${WLD} sanity1.o -o sanity1 -static
 
 run-sanity1: sanity1
 	@./sanity1; ERR=$$? ;\

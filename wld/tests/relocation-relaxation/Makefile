@@ -8,7 +8,7 @@ test: run-main
 	as $< -o $@
 
 main: ${WLD} main.o libc.o
-	${WLD} -o main main.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o
+	${WLD} -o main main.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o -static
 
 run-main: main
 	./main

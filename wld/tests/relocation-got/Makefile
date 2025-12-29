@@ -8,14 +8,14 @@ test: run-main run-main-with-optional
 	as $< -o $@
 
 main: main.o
-	${WLD} -o main main.o
+	${WLD} -o main main.o -static
 
 run-main: main
 	./main
 	echo "relocation-got test passed"
 
 main-with-optional: main.o optional.o
-	${WLD} -o main-with-optional main.o optional.o
+	${WLD} -o main-with-optional main.o optional.o -static
 
 run-main-with-optional: main-with-optional
 	@./main-with-optional; ERR=$$? ;\
