@@ -315,6 +315,14 @@ static void set_in_dynamic_section(OutputElfFile *output_elf_file, int index, in
     entries[index] = entry;
 }
 
+static void create_interp_section(OutputElfFile *output_elf_file, char *dynamic_linker) {
+    if (!dynamic_linker) return;
+
+    InputSection *section_dynamic = create_extra_section(output_elf_file, INTERP_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC, 1);
+    section_dynamic->size = strlen(dynamic_linker) + 1;
+    section_dynamic->data = dynamic_linker;
+}
+
 // Add several sections if it's a shared library
 static void create_dynamic_sections(OutputElfFile *output_elf_file, List *input_elf_files) {
     if (output_elf_file->type != ET_DYN) return;
@@ -470,7 +478,24 @@ void dump_program_segments(OutputElfFile *output_elf_file) {
 }
 
 // Make the ELF program segment headers. Include the special TLS section if required.
-static void make_elf_program_segment_headers(OutputElfFile *output_elf_file) {
+static void make_elf_program_segment_headers(OutputElfFile *output_elf_file, char *dynamic_linker) {
+    if (dynamic_linker) {
+        InputSection *interp_section = get_extra_section(output_elf_file, INTERP_SECTION_NAME);
+
+        ElfProgramSegmentHeader *dl_program_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
+
+        dl_program_segment->p_type   = PT_INTERP;
+        dl_program_segment->p_flags  = PF_R;
+        dl_program_segment->p_align  = 1;
+        dl_program_segment->p_filesz = interp_section->size;
+        dl_program_segment->p_memsz  = interp_section->size;
+        dl_program_segment->p_offset = interp_section->output_section->offset;
+        dl_program_segment->p_vaddr  = interp_section->output_section->address;
+        dl_program_segment->p_paddr  = interp_section->output_section->address;
+
+        append_to_list(output_elf_file->program_segments_list, dl_program_segment);
+    }
+
     int needs_tls = 0;
 
     for (int i = 0; i < output_elf_file->sections_list->length; i++) {
@@ -672,7 +697,7 @@ static void copy_extra_sections_to_output(OutputElfFile *output_elf_file) {
     }
 }
 
-OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type) {
+OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker) {
     // Create output file
     OutputElfFile *output_elf_file = init_output_elf_file(output_filename, output_type);
 
@@ -723,6 +748,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Add .dynamic section if it's a shared library
     create_dynamic_sections(output_elf_file, input_elf_files);
 
+    // Add an .interp section if the dynamic linker is set
+    create_interp_section(output_elf_file, dynamic_linker);
+
     // For ET_DYN files, make a hash table of the symbols
     make_symbol_hashes(output_elf_file);
 
@@ -762,7 +790,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     layout_program_segments(output_elf_file);
 
     // Make the ELF program segment headers. Include the special TLS section if required.
-    make_elf_program_segment_headers(output_elf_file);
+    make_elf_program_segment_headers(output_elf_file, dynamic_linker);
 
     // Assign final values to all symbols
     make_symbol_values(output_elf_file, input_elf_files);

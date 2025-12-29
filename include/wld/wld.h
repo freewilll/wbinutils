@@ -27,6 +27,7 @@
 #define DYNSTR_SECTION_NAME     ".dynstr"
 #define DYNSYM_SECTION_NAME     ".dynsym"
 #define HASH_SECTION_NAME       ".hash"
+#define INTERP_SECTION_NAME     ".interp"
 
 #define DEBUG_SYMBOL_RESOLUTION 0
 #define DEBUG_RELOCATIONS 0
@@ -53,6 +54,6 @@ void dump_dynamic_section(OutputElfFile *output_elf_file);
 void dump_relocations(OutputSection* section);
 void dump_sections(OutputElfFile *output_elf_file);
 void dump_program_segments(OutputElfFile *output_elf_file);
-OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type);
+OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker);
 
 #endif

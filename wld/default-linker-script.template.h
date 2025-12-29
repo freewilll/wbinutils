@@ -17,6 +17,8 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    .dynsym :   { *(.dynsym)                                               }\n"
     "    .dynstr :   { *(.dynstr)                                               }\n"
     "    .rela.dyn : { *(.rela.dyn)                                             }\n"
+#else
+    "    .interp :   { *(.interp)                                               }\n"
 #endif
     "    .rela.plt : {                                                           \n"
     "        *(.rela.plt)                                                        \n"

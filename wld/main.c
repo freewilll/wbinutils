@@ -17,6 +17,7 @@ int main(int argc, char **argv) {
     char *output_filename = NULL;
     List *library_paths = new_list(32);
     List *linker_scripts = new_list(32);
+    char *dynamic_linker = NULL;
 
     argc--;
     argv++;
@@ -82,9 +83,9 @@ int main(int argc, char **argv) {
                 argc--;
                 argv++;
             }
-            // --dynamic-linker x
+            // -dynamic-linker x
             else if (!strcmp(argv[0], "-dynamic-linker")) {
-                // Not implemented
+                dynamic_linker = argv[1];
                 argc -= 2;
                 argv += 2;
             }
@@ -137,7 +138,7 @@ int main(int argc, char **argv) {
         error("Missing input filename");
     }
 
-    run(library_paths, linker_scripts, input_files, output_filename, output_type);
+    run(library_paths, linker_scripts, input_files, output_filename, output_type, dynamic_linker);
 
     exit(exit_code);
 }
