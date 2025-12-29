@@ -534,7 +534,7 @@ static OutputElfFile *run_wld(List *input_filenames, int output_type, char **pou
     unlink(template);
 
     char *output_path;
-    if (output_type == OUTPUT_TYPE_SHARED) {
+    if (output_type & OUTPUT_TYPE_FLAG_SHARED) {
         // Append .so
         output_path = malloc(strlen(template) + 32);
         sprintf(output_path, "/tmp/libwld%s.so", template);
@@ -586,7 +586,7 @@ static void test_sanity() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC, NULL, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -623,7 +623,7 @@ static void test_empty_object_file() {
     append_to_list(input_paths, object1_path);
     append_to_list(input_paths, object2_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC, NULL, 0, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -654,7 +654,7 @@ void test_segments_are_page_aligned() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -704,7 +704,7 @@ static void test_orphan_sections_no_rearrangement(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -759,7 +759,7 @@ static void test_orphan_sections_rearrangement(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -797,7 +797,7 @@ static void test_tls() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "tls");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "tls");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                            Align
@@ -839,7 +839,7 @@ static void test_two_bss_sections(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -882,7 +882,7 @@ static void test_data_and_two_bss_sections(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -916,7 +916,7 @@ static void test_etext_undefined() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "undefined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "undefined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -957,7 +957,7 @@ static void test_defined_etext() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "defined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "defined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size     Flags                      Align
@@ -998,7 +998,7 @@ static void test_unused_etext() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "unused etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "unused etext");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -1039,7 +1039,7 @@ static void test_automatic_start_stop_symbols() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "__start_ and __end_ symbols");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -1085,7 +1085,7 @@ static void test_shared_library_no_dependencies() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "test_shared_library_no_dependencies");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_shared_library_no_dependencies");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1144,7 +1144,7 @@ static void test_two_shared_libs_with_data() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1159,7 +1159,7 @@ static void test_two_shared_libs_with_data() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1222,7 +1222,7 @@ static void test_two_shared_libs_with_functions() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1237,7 +1237,7 @@ static void test_two_shared_libs_with_functions() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1340,7 +1340,7 @@ static void test_dwarf() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "dwarf lines");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "dwarf lines");
 
     // Ensure that the .debug_abbrev has address zero. This is required by DWARF.
     // No alloc sections must have address zero.
@@ -1396,7 +1396,7 @@ static void test_gnu_ld_script_archive() {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, "*gnuldscript");
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_STATIC,  NULL, 1, "linking to a GNU ld script archive");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "linking to a GNU ld script archive");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align

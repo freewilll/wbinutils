@@ -85,12 +85,13 @@ const char *DYNAMIC_SECTION_TYPE_NAMES[] = {
 static void run_archive_file_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files);
 
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type) {
-    int elf_output_type = output_type == OUTPUT_TYPE_STATIC ? ET_EXEC : ET_DYN;
+    int elf_output_type = output_type & OUTPUT_TYPE_FLAG_STATIC ? ET_EXEC : ET_DYN;
 
     OutputElfFile *result = new_output_elf_file(output_filename, elf_output_type);
     result->extra_sections = new_strmap_ordered();
     result->ifunc_symbols = new_list(0);
     result->global_symbols_in_use  = new_strmap();
+    result->is_executable = output_type & OUTPUT_TYPE_FLAG_EXECUTABLE;
 
     return result;
 }
@@ -225,7 +226,7 @@ static List *read_input_files(List *library_paths, List *input_files, int output
 
 // Go through the linker script and set the entrypoint symbol
 static void set_entrypoint_symbol(OutputElfFile *output_elf_file, List *input_elf_files) {
-    if (output_elf_file->type != ET_EXEC) return;
+    if (!output_elf_file->is_executable) return;
 
     for (int i = 0; i < output_elf_file->linker_script->length; i++) {
         ScriptCommand *script_command = output_elf_file->linker_script->elements[i];
@@ -617,7 +618,7 @@ static void make_symbol_values(OutputElfFile *output_elf_file, List *input_elf_f
 
 // Set the executable entrypoint
 static void set_entrypoint(OutputElfFile *output_elf_file) {
-    if (output_elf_file->type != ET_EXEC) return;
+    if (!output_elf_file->is_executable) return;
 
     if (!entrypoint_symbol_name) entrypoint_symbol_name = DEFAULT_ENTRYPOINT_SYMBOL_NAME;
     Symbol *symbol = get_defined_symbol(global_symbol_table, entrypoint_symbol_name, 0);

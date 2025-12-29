@@ -38,7 +38,7 @@ static void assert_int(int expected, int actual, const char *message) {
 }
 
 static void run_init_symbols(void) {
-    OutputElfFile *output_elf_file = init_output_elf_file("dummy", OUTPUT_TYPE_STATIC);
+    OutputElfFile *output_elf_file = init_output_elf_file("dummy", OUTPUT_TYPE_FLAG_STATIC);
     init_symbols(output_elf_file);
 }
 

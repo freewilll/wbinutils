@@ -5,8 +5,10 @@
 #include "input-elf.h"
 #include "output-elf.h"
 
-#define OUTPUT_TYPE_STATIC   1
-#define OUTPUT_TYPE_SHARED   2
+// Flags that determine the output type
+#define OUTPUT_TYPE_FLAG_STATIC       1
+#define OUTPUT_TYPE_FLAG_SHARED       2
+#define OUTPUT_TYPE_FLAG_EXECUTABLE   4
 
 #define DEFAULT_ENTRYPOINT_SYMBOL_NAME  "_start"
 

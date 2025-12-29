@@ -38,6 +38,7 @@ typedef struct output_section  {
 typedef struct output_elf  {
     const char *filename;                                   // Output filename
     int type;                                               // Object file type, one of ET_*
+    int is_executable;                                      // Object file type, one of ET_*
     List *sections_list;                                    // List of OutputSections
     StrMap *sections_map;                                   // Map of the same OutputSections as in the list
     OutputSection *section_text;                            // Optionally pre-created sections ...

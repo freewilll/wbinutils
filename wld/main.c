@@ -116,7 +116,10 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-    int output_type = is_shared || !is_static ? OUTPUT_TYPE_SHARED : OUTPUT_TYPE_STATIC;
+    int output_type = 0;
+    if (is_shared) output_type |= OUTPUT_TYPE_FLAG_SHARED;
+    if (is_static) output_type |= OUTPUT_TYPE_FLAG_STATIC;
+    if (!is_shared) output_type |=OUTPUT_TYPE_FLAG_EXECUTABLE;
 
     if (verbose) {
         printf("Wld linker\n");
