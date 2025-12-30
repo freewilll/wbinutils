@@ -120,6 +120,7 @@ int main(int argc, char **argv) {
     if (is_shared) output_type |= OUTPUT_TYPE_FLAG_SHARED;
     if (is_static) output_type |= OUTPUT_TYPE_FLAG_STATIC;
     if (!is_shared) output_type |=OUTPUT_TYPE_FLAG_EXECUTABLE;
+    if (!is_static && !is_shared) output_type |= OUTPUT_TYPE_FLAG_SHARED; // For a  dynamic executable
 
     if (verbose) {
         printf("Wld linker\n");
