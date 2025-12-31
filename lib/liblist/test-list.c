@@ -10,7 +10,7 @@ void assert_int(int expected, int actual, char *message) {
     }
 }
 
-int test_append(int initial_length) {
+void test_append(int initial_length) {
     List *l = new_list(initial_length);
 
     append_to_list(l, (void *) 1);
@@ -32,9 +32,23 @@ int test_append(int initial_length) {
     assert_int(4, (long) l->elements[3], "Append 3f");
 }
 
+void test_prepend() {
+    List *l = new_list(0);
+
+    prepend_to_list(l, (void *) 1);
+    assert_int(1, l->length, "prepend 1");
+    assert_int(1, (long) l->elements[0], "prepend 2");
+
+    prepend_to_list(l, (void *) 2);
+    assert_int(2, l->length, "prepend 2");
+    assert_int(2, (long) l->elements[0], "prepend 3");
+    assert_int(1, (long) l->elements[1], "prepend 4");
+}
+
 int main() {
     test_append(0);
     test_append(2);
     test_append(4);
     test_append(8);
+    test_prepend();
 }

@@ -5,8 +5,7 @@
 
 #define MIN_SIZE 0
 
-List *new_list(int initial_allocation)
-{
+List *new_list(int initial_allocation) {
     List *l = malloc(sizeof(List));
 
     l->length = 0;
@@ -22,14 +21,12 @@ List *new_list(int initial_allocation)
     return l;
 }
 
-void free_list(List *l)
-{
+void free_list(List *l) {
     free(l->elements);
     free(l);
 }
 
-static int round_up(int length)
-{
+static int round_up(int length) {
     if (length == 0)
         return 0;
     int result = 1;
@@ -38,8 +35,7 @@ static int round_up(int length)
     return result;
 }
 
-void resize_list(List *l, int new_length)
-{
+void resize_list(List *l, int new_length) {
     if (new_length < l->allocated)
     {
         l->length = new_length;
@@ -61,8 +57,13 @@ void resize_list(List *l, int new_length)
     l->allocated = new_allocated;
 }
 
-void append_to_list(List *l, void *element)
-{
+void append_to_list(List *l, void *element) {
     resize_list(l, l->length + 1);
     l->elements[l->length - 1] = element;
+}
+
+void prepend_to_list(List *l, void *element) {
+    resize_list(l, l->length + 1);
+    for (int i = l->length - 1; i > 0; i--) l->elements[i] = l->elements[i - 1];
+    l->elements[0] = element;
 }

@@ -11,5 +11,6 @@ List *new_list(int length);
 void free_list(List *l);
 void resize_list(List* l, int new_length);
 void append_to_list(List *l, void *element);
+void prepend_to_list(List *l, void *element);
 
 #endif
