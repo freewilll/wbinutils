@@ -412,17 +412,45 @@ static void allocate_elf_output_memory(OutputElfFile *output_elf_file) {
     output_elf_file->data = calloc(1, output_elf_file->size);
 }
 
+// For dynamic executables, the first program segment header must be the program header.
+static void make_phdr_program_segment_header(OutputElfFile *output_elf_file){
+    ElfProgramSegmentHeader *phdr_segment = &output_elf_file->elf_program_segment_headers[0];
+
+    phdr_segment->p_type   = PT_PHDR;
+    phdr_segment->p_flags  = PF_R;
+    phdr_segment->p_align  = 8;
+    phdr_segment->p_filesz = output_elf_file->elf_program_segments_header_size;
+    phdr_segment->p_memsz  = phdr_segment->p_filesz;
+    phdr_segment->p_offset = output_elf_file->elf_program_segments_offset;
+    phdr_segment->p_vaddr  = phdr_segment->p_offset;
+    phdr_segment->p_paddr  = phdr_segment->p_offset;
+}
+
 // Populate the first program segment header. This contains a page that has the start of the executable.
-static void make_first_program_segment_header(OutputElfFile *output) {
+static void make_first_load_program_segment_header(OutputElfFile *output, int new_load_segment_index) {
     // The lowest address is in the first program segment header.
     // Use this address to find an address low enough to hold the ELF headers and round it down to a page.
-    ElfProgramSegmentHeader *first_program_segment = output->program_segments_list->elements[0];
+
+    // Find first PT_LOAD segment
+    // Executables have a PT_PHDR as the first entry, which must be skipped over.
+    int first_load_segment_index = -1;
+    for (int i = 0; i < output->program_segments_list->length; i++) {
+        ElfProgramSegmentHeader *segment = output->program_segments_list->elements[i];
+        if (segment->p_type == PT_LOAD) {
+            first_load_segment_index = i;
+            break;
+        }
+    }
+
+    if (first_load_segment_index == -1) panic("No PT_LOAD sections in ELF file");
+
+    ElfProgramSegmentHeader *first_program_segment = output->program_segments_list->elements[first_load_segment_index];
     uint64_t address = first_program_segment->p_paddr - headers_size(output);
     address = ALIGN_DOWN(address, 0x1000);
 
     uint64_t size = output->elf_section_headers_offset + output->elf_section_headers_size;
 
-    ElfProgramSegmentHeader *h = &output->elf_program_segment_headers[0];
+    ElfProgramSegmentHeader *h = &output->elf_program_segment_headers[new_load_segment_index];
     h->p_type   = PT_LOAD;  // Loadable
     h->p_flags  = PF_R;     // Read only
     h->p_vaddr  = address;
@@ -536,20 +564,29 @@ static void make_elf_program_segment_headers(OutputElfFile *output_elf_file, cha
         append_to_list(output_elf_file->program_segments_list, tls_program_segment);
     }
 
+    // One to two extra entries are prepended here. A PT_LOAD segment for the start of the executable,
+    // and, for dynamic executables, a PT_PHDR segment
+    int is_dyn_executable = output_elf_file->is_executable && output_elf_file->type == ET_DYN;
+    int first_load_segment_index = is_dyn_executable ? 1 : 0;
+    int prepended_entries = is_dyn_executable ? 2 : 1;
+
+    output_elf_file->elf_program_segments_count = output_elf_file->program_segments_list->length + prepended_entries;
+
     // Allocate memory for the program segment headers
-    output_elf_file->elf_program_segments_count = output_elf_file->program_segments_list->length + 1;
     output_elf_file->elf_program_segments_header_size = sizeof(ElfProgramSegmentHeader) * output_elf_file->elf_program_segments_count;
     output_elf_file->elf_program_segment_headers = calloc(1, output_elf_file->elf_program_segments_header_size);
 
     output_elf_file->elf_program_segments_offset  = sizeof(ElfSectionHeader);
     output_elf_file->elf_section_headers_offset  = output_elf_file->elf_program_segments_offset + output_elf_file->elf_program_segments_header_size;
 
-    // Populate the null program segment header
-    make_first_program_segment_header(output_elf_file);
+    if (is_dyn_executable) make_phdr_program_segment_header(output_elf_file);
+
+    // Populate the first program segment header that loads the start of the executable
+    make_first_load_program_segment_header(output_elf_file, first_load_segment_index);
 
     for (int i = 0; i < output_elf_file->program_segments_list->length; i++) {
         ElfProgramSegmentHeader *program_segment = output_elf_file->program_segments_list->elements[i];
-        memcpy(&output_elf_file->elf_program_segment_headers[i + 1], program_segment, sizeof(ElfProgramSegmentHeader));
+        memcpy(&output_elf_file->elf_program_segment_headers[i + prepended_entries], program_segment, sizeof(ElfProgramSegmentHeader));
     }
 
     if (DEBUG_LAYOUT) dump_program_segments(output_elf_file);

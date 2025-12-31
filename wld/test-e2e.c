@@ -534,7 +534,7 @@ static OutputElfFile *run_wld(List *input_filenames, int output_type, char **pou
     unlink(template);
 
     char *output_path;
-    if (output_type & OUTPUT_TYPE_FLAG_SHARED) {
+    if (output_type & OUTPUT_TYPE_FLAG_SHARED && !(output_type & OUTPUT_TYPE_FLAG_EXECUTABLE)) {
         // Append .so
         output_path = malloc(strlen(template) + 32);
         sprintf(output_path, "/tmp/libwld%s.so", template);
@@ -1406,6 +1406,35 @@ static void test_gnu_ld_script_archive() {
     );
 }
 
+// There is not much here other than the program segments check
+static void test_dynamic_executable_sanity() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movl $1, %eax;"
+        "    lea code(%rip), %rdi;"
+        "    mov (%rdi), %ebx;"
+        "    int $0x80;"
+        ".section .data;"
+        "    code: .long 0"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 1, "test_dynamic_executable_sanity");
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x1000,  0x001000,  0x04c,   0x4c,   PF_R,         0x1000,
+        PT_LOAD,          0x2000,  0x002000,  0x010,   0x10,   PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x3000,  0x003000,  0x064,   0x64,   PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x3000,  0x003000,  0x060,   0x60,   PF_R | PF_W,  0x0008,
+        END
+    );
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -1424,4 +1453,5 @@ int main() {
     test_two_shared_libs_with_functions();
     test_dwarf();
     test_gnu_ld_script_archive();
+    test_dynamic_executable_sanity();
 }
