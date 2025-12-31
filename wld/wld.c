@@ -413,21 +413,18 @@ static void allocate_elf_output_memory(OutputElfFile *output_elf_file) {
 }
 
 // For dynamic executables, the first program segment header must be the program header.
-static void make_phdr_program_segment_header(OutputElfFile *output_elf_file){
-    ElfProgramSegmentHeader *phdr_segment = &output_elf_file->elf_program_segment_headers[0];
+static void prepend_phdr_program_segment_header(OutputElfFile *output_elf_file){
+    ElfProgramSegmentHeader *phdr_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
 
     phdr_segment->p_type   = PT_PHDR;
     phdr_segment->p_flags  = PF_R;
     phdr_segment->p_align  = 8;
-    phdr_segment->p_filesz = output_elf_file->elf_program_segments_header_size;
-    phdr_segment->p_memsz  = phdr_segment->p_filesz;
-    phdr_segment->p_offset = output_elf_file->elf_program_segments_offset;
-    phdr_segment->p_vaddr  = phdr_segment->p_offset;
-    phdr_segment->p_paddr  = phdr_segment->p_offset;
+
+    prepend_to_list(output_elf_file->program_segments_list, phdr_segment);
 }
 
 // Populate the first program segment header. This contains a page that has the start of the executable.
-static void make_first_load_program_segment_header(OutputElfFile *output, int new_load_segment_index) {
+static void prepend_first_load_program_segment_header(OutputElfFile *output) {
     // The lowest address is in the first program segment header.
     // Use this address to find an address low enough to hold the ELF headers and round it down to a page.
 
@@ -450,7 +447,8 @@ static void make_first_load_program_segment_header(OutputElfFile *output, int ne
 
     uint64_t size = output->elf_section_headers_offset + output->elf_section_headers_size;
 
-    ElfProgramSegmentHeader *h = &output->elf_program_segment_headers[new_load_segment_index];
+    ElfProgramSegmentHeader *h = calloc(1, sizeof(ElfProgramSegmentHeader));
+
     h->p_type   = PT_LOAD;  // Loadable
     h->p_flags  = PF_R;     // Read only
     h->p_vaddr  = address;
@@ -458,6 +456,8 @@ static void make_first_load_program_segment_header(OutputElfFile *output, int ne
     h->p_filesz = size;
     h->p_memsz  = size;
     h->p_align  = 0x1000;   // Align on page boundaries
+
+    prepend_to_list(output->program_segments_list, h);
 }
 
 // Print sections in a format similar to readelf's output
@@ -567,26 +567,32 @@ static void make_elf_program_segment_headers(OutputElfFile *output_elf_file, cha
     // One to two extra entries are prepended here. A PT_LOAD segment for the start of the executable,
     // and, for dynamic executables, a PT_PHDR segment
     int is_dyn_executable = output_elf_file->is_executable && output_elf_file->type == ET_DYN;
-    int first_load_segment_index = is_dyn_executable ? 1 : 0;
-    int prepended_entries = is_dyn_executable ? 2 : 1;
 
-    output_elf_file->elf_program_segments_count = output_elf_file->program_segments_list->length + prepended_entries;
+    // Populate the first program segment header that loads the start of the executable
+    prepend_first_load_program_segment_header(output_elf_file);
+
+    if (is_dyn_executable) prepend_phdr_program_segment_header(output_elf_file);
 
     // Allocate memory for the program segment headers
+    output_elf_file->elf_program_segments_count = output_elf_file->program_segments_list->length;
     output_elf_file->elf_program_segments_header_size = sizeof(ElfProgramSegmentHeader) * output_elf_file->elf_program_segments_count;
     output_elf_file->elf_program_segment_headers = calloc(1, output_elf_file->elf_program_segments_header_size);
-
     output_elf_file->elf_program_segments_offset  = sizeof(ElfSectionHeader);
     output_elf_file->elf_section_headers_offset  = output_elf_file->elf_program_segments_offset + output_elf_file->elf_program_segments_header_size;
 
-    if (is_dyn_executable) make_phdr_program_segment_header(output_elf_file);
-
-    // Populate the first program segment header that loads the start of the executable
-    make_first_load_program_segment_header(output_elf_file, first_load_segment_index);
+    // Fixup the now-known values in PHDR
+    if (is_dyn_executable) {
+        ElfProgramSegmentHeader *phdr_segment = output_elf_file->program_segments_list->elements[0];
+        phdr_segment->p_filesz = output_elf_file->elf_program_segments_header_size;
+        phdr_segment->p_memsz  = phdr_segment->p_filesz;
+        phdr_segment->p_offset = output_elf_file->elf_program_segments_offset;
+        phdr_segment->p_vaddr  = phdr_segment->p_offset;
+        phdr_segment->p_paddr  = phdr_segment->p_offset;
+    }
 
     for (int i = 0; i < output_elf_file->program_segments_list->length; i++) {
         ElfProgramSegmentHeader *program_segment = output_elf_file->program_segments_list->elements[i];
-        memcpy(&output_elf_file->elf_program_segment_headers[i + prepended_entries], program_segment, sizeof(ElfProgramSegmentHeader));
+        memcpy(&output_elf_file->elf_program_segment_headers[i], program_segment, sizeof(ElfProgramSegmentHeader));
     }
 
     if (DEBUG_LAYOUT) dump_program_segments(output_elf_file);

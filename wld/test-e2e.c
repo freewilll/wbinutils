@@ -597,8 +597,9 @@ static void test_sanity() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
-        PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x2000,  0x402000,  0x04,    0x04,   PF_R | PF_W,  0x1000,
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,         0x1000,
+        PT_LOAD,          0x1000,  0x401000,  0x010,   0x10,   PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x004,   0x04,   PF_R | PF_W,  0x1000,
         END
     );
 
@@ -666,6 +667,7 @@ void test_segments_are_page_aligned() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags               Align
+        PT_LOAD,          0x0000,  0x400000,  0x1c0,   0x1c0,  PF_R,               0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X,        0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x04,    0x04,   PF_R | PF_W,        0x1000,
         PT_LOAD,          0x3000,  0x403000,  0x04,    0x04,   PF_R | PF_W | PF_X, 0x1000,
@@ -716,8 +718,9 @@ static void test_orphan_sections_no_rearrangement(void) {
     // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags               Align
-        PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,   PF_R | PF_X,        0x1000,
-        PT_LOAD,          0x2000,  0x402000,  0x08,    0x08,   PF_R | PF_X | PF_W, 0x1000,
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,               0x1000,
+        PT_LOAD,          0x1000,  0x401000,  0x020,   0x020,  PF_R | PF_X,        0x1000,
+        PT_LOAD,          0x2000,  0x402000,  0x008,   0x008,  PF_R | PF_X | PF_W, 0x1000,
         END
     );
 }
@@ -773,6 +776,7 @@ static void test_orphan_sections_rearrangement(void) {
     // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz    Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x200,   0x200,    PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x20,    0x20,     PF_R | PF_X,  0x1000,  // .text
         PT_LOAD,          0x2000,  0x402000,  0x0c,    0x14,     PF_R | PF_W,  0x1000,  // .data, .bss
         END
@@ -809,9 +813,10 @@ static void test_tls() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x1c0,   0x1c0,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x0c,    0x0c,   PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R | PF_W,  0x1000,
-        PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R       ,  8,
+        PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R ,        8,
         END
     );
 }
@@ -851,6 +856,7 @@ static void test_two_bss_sections(void) {
     // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags        Align
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,        0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X, 0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x00,    0x10,   PF_R | PF_W, 0x1000,
         END
@@ -895,6 +901,7 @@ static void test_data_and_two_bss_sections(void) {
     // The orphan section gets merged into the .data section
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags        Align
+        PT_LOAD,          0x0000,  0x400000,  0x1c0,   0x1c0,  PF_R,        0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x10,    0x10,   PF_R | PF_X, 0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x08,    0x18,   PF_R | PF_W, 0x1000,
         END
@@ -926,6 +933,7 @@ static void test_etext_undefined() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x140,   0x140,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x13,    0x13,   PF_R | PF_X,  0x1000,
         END
     );
@@ -968,6 +976,7 @@ static void test_defined_etext() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x0013,  0x0013, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x1014,  0x1014, PF_R | PF_W,  0x1000,
         END
@@ -1009,6 +1018,7 @@ static void test_unused_etext() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x0004,  0x0004, PF_R | PF_W,  0x1000,
         END
@@ -1050,6 +1060,7 @@ static void test_automatic_start_stop_symbols() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x401000,  0x001a,  0x001a, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x2000,  0x402000,  0x0004,  0x0004, PF_R | PF_W,  0x1000,
         END
@@ -1101,10 +1112,11 @@ static void test_shared_library_no_dependencies() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x0000,  0x2c0,   0x2c0,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x1000,  0x00e3,  0x00e3, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x0002,  0x0002, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x0068,  0x0070, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x3000,  0x0060,  0x0060, PF_R | PF_W, 0x0008,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x0060,  0x0060, PF_R | PF_W,  0x0008,
         END
     );
 
@@ -1175,10 +1187,11 @@ static void test_two_shared_libs_with_data() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x0000,  0x2c0,   0x2c0,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x1000,  0x00a8,  0x00a8, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x00b0,  0x00b0, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x3000,  0x00a0,  0x00a0, PF_R | PF_W,   0x0008,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x00a0,  0x00a0, PF_R | PF_W,  0x0008,
         END
     );
 
@@ -1254,6 +1267,7 @@ static void test_two_shared_libs_with_functions() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x0000,  0x0300,  0x0300, PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x1000,  0x0077,  0x0077, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x0030,  0x0030, PF_R,         0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x003a,  0x003a, PF_R | PF_X,  0x1000,
@@ -1427,6 +1441,8 @@ static void test_dynamic_executable_sanity() {
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_PHDR,          0x0040,  0x000040,  0x150,   0x150,  PF_R,         0x0008,
+        PT_LOAD,          0x0000,  0x00000,   0x280,   0x280,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x001000,  0x04c,   0x4c,   PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x002000,  0x010,   0x10,   PF_R | PF_X,  0x1000,
         PT_LOAD,          0x3000,  0x003000,  0x064,   0x64,   PF_R | PF_W,  0x1000,
