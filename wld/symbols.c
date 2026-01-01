@@ -766,7 +766,7 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
     output_elf_file->section_symtab->info = output_elf_file->sections_list->length; // Index of the first global symbol
 
-    // .so files don't have a symtab
+    // .so files don't have a symtab. Edit: this is Not true. A symbtab is useful for debugging
     if (output_elf_file->type == ET_DYN) return;
 
     add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
@@ -839,7 +839,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
         dynsym_symbol_count++;
 
-        if (symbol->src_is_shared_library && symbol->needs_got) rela_dyn_entry_count++;
+        if (symbol->needs_got) rela_dyn_entry_count++;
     }
 
     output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
@@ -1283,7 +1283,6 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
-        if (!symbol->src_is_shared_library) continue;
 
         if (symbol->needs_got) {
             int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.

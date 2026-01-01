@@ -1333,6 +1333,58 @@ static void test_two_shared_libs_with_functions() {
     assert_uint64_t(0x3026, got_plt_data[4], ".got.plt[4]"); // .plt2 + 6
 }
 
+static void test_shared_lib_with_two_objects() {
+    char *object_path1 = run_was(
+        ".text;"
+
+        "_start:;"
+        "    mov i@GOTPCREL(%rip), %eax;" // Produces a relocation in .rela.dyn
+        "    callq f@PLT;"                // Produces a relocation in .rela.plt
+    );
+
+    char *object_path2 = run_was(
+        ".text;"
+        ".globl f;"
+        ".globl i;"
+
+        "f:;"
+        "    nop;"
+        ".section .data;"
+        "    i: .long 0"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+    append_to_list(input_paths, object_path2);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "shared_lib_with_two_objects");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    // The relocations must be resolved my the dynamic loader, since it's a shared library,
+    // meaning the i and f symbols could be overridden. Therefore, they cannot be
+    // linkes statically.
+
+    // Relocation for i
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_GLOB_DAT, 2,                0x40d0,  0,
+        END);
+
+    // Relocation for f
+    assert_rela_plt_relocations(elf_file,
+        // Tag              Dyn symtab index  Address  Offset
+        R_X86_64_JUMP_SLOT, 1,                0x40f0,  0,
+        END);
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x3030,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f",
+        0x40f8,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        END);
+}
+
 // Ensure the relocation to .debug_abbrev is correct and the address is zero.
 static void test_dwarf() {
     char *object_path = run_was(
@@ -1467,6 +1519,7 @@ int main() {
     test_shared_library_no_dependencies();
     test_two_shared_libs_with_data();
     test_two_shared_libs_with_functions();
+    test_shared_lib_with_two_objects();
     test_dwarf();
     test_gnu_ld_script_archive();
     test_dynamic_executable_sanity();

@@ -222,6 +222,7 @@ static void layout_sections_with_script(OutputElfFile *output_elf_file, List *in
                 for (int k = 0; k < input_elf_files->length; k++) {
                     InputElfFile *elf_file = input_elf_files->elements[k];
 
+                    // Don't include sections from shared libraries
                     if (elf_file->type == ET_DYN) continue;
 
                     // Check the input file matches the pattern
@@ -291,6 +292,8 @@ static void layout_orphan_sections(OutputElfFile *output_elf_file, List *input_e
     // Loop over all input files
     for (int i = 0; i < input_elf_files->length; i++) {
         InputElfFile *elf_file = input_elf_files->elements[i];
+
+        // Don't include sections from shared libraries
         if (elf_file->type == ET_DYN) continue;
 
         // Loop over all sections
@@ -370,7 +373,7 @@ void layout_input_sections(OutputElfFile *output_elf_file, List *input_elf_files
     // Reset dst sections
     for (int i = 0; i < input_elf_files->length; i++) {
         InputElfFile *elf_file = input_elf_files->elements[i];
-        if (elf_file->type == ET_DYN) continue;
+        if (elf_file->type == ET_DYN) continue; // Don't include sections from shared libraries
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {
@@ -558,7 +561,7 @@ static uint64_t process_assignment(OutputElfFile *output_elf_file, Symbol *dot_s
 static void reset_layout_complete(List *input_elf_files) {
     for (int i = 0; i < input_elf_files->length; i++) {
         InputElfFile *elf_file = input_elf_files->elements[i];
-        if (elf_file->type == ET_DYN) continue;
+        if (elf_file->type == ET_DYN) continue; // Don't include sections from shared libraries
 
         // Loop over all sections
         for (int j = 0; j < elf_file->section_list->length; j++) {

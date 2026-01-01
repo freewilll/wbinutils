@@ -26,7 +26,8 @@ test: \
 	ifuncs \
 	undefined-unreferenced-symbol \
 	shared-lib-minimal \
-	shared-lib-using-shared-lib
+	shared-lib-using-shared-lib \
+	shared-lib-and-two-object-files
 
 .PHONY: sanity1
 sanity1:
@@ -132,6 +133,10 @@ shared-lib-minimal:
 shared-lib-using-shared-lib:
 	+$(MAKE) -C shared-lib-using-shared-lib
 
+.PHONY: shared-lib-and-two-object-files
+shared-lib-and-two-object-files:
+	+$(MAKE) -C shared-lib-and-two-object-files
+
 clean:
 	@+$(MAKE) -C sanity1 clean
 	@+$(MAKE) -C sanity2 clean
@@ -159,3 +164,4 @@ clean:
 	@+$(MAKE) -C undefined-unreferenced-symbol clean
 	@+$(MAKE) -C shared-lib-minimal clean
 	@+$(MAKE) -C shared-lib-using-shared-lib clean
+	@+$(MAKE) -C shared-lib-and-two-object-files clean
