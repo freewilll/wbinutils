@@ -27,7 +27,8 @@ test: \
 	undefined-unreferenced-symbol \
 	shared-lib-minimal \
 	shared-lib-using-shared-lib \
-	shared-lib-and-two-object-files
+	shared-lib-and-two-object-files \
+	musl-libc-dynamic-hello-world
 
 .PHONY: sanity1
 sanity1:
@@ -137,6 +138,10 @@ shared-lib-using-shared-lib:
 shared-lib-and-two-object-files:
 	+$(MAKE) -C shared-lib-and-two-object-files
 
+.PHONY: musl-libc-dynamic-hello-world
+musl-libc-dynamic-hello-world:
+	+$(MAKE) -C musl-libc-dynamic-hello-world
+
 clean:
 	@+$(MAKE) -C sanity1 clean
 	@+$(MAKE) -C sanity2 clean
@@ -165,3 +170,4 @@ clean:
 	@+$(MAKE) -C shared-lib-minimal clean
 	@+$(MAKE) -C shared-lib-using-shared-lib clean
 	@+$(MAKE) -C shared-lib-and-two-object-files clean
+	@+$(MAKE) -C musl-libc-dynamic-hello-world clean

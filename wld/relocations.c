@@ -168,6 +168,8 @@ int apply_relocation(
         uint64_t value_got_iplt_offset
     ) {
 
+    int output_is_shared = output_elf_file->type == ET_DYN;
+
     uint32_t output_virtual_address = rw_section_address + output_offset;
 
     output_pointer += output_offset;
@@ -188,6 +190,8 @@ int apply_relocation(
     }
 
     if (DEBUG_RELOCATIONS) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
+
+    const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
 
     switch (type) {
         case R_X86_64_64: {
@@ -248,20 +252,21 @@ int apply_relocation(
             uint8_t *popcode = (uint8_t *) (output_pointer - 2);
             uint8_t opcode = *popcode;
 
+            uint32_t value = S;
+
             if (link_dynamically || (opcode != 0xc7 && opcode != 0x81)) {
-                // The symbol has an entry in the GOT or IPLT
-
-                if (value_got_offset == -1 && value_got_iplt_offset == -1) panic("Expected a value in the GOT, but no entry is present");
-
                 if (value_got_offset != -1)
-                    S = output_elf_file->got_virt_address + value_got_offset + A - P;
+                    value = output_elf_file->got_virt_address + value_got_offset + A - P;
+                else if (value_got_iplt_offset != -1)
+                    value = output_elf_file->got_iplt_virt_address + value_got_iplt_offset + A - P;
                 else
-                    S = output_elf_file->got_iplt_virt_address + value_got_iplt_offset + A - P;
+                    // The value has relaxed to RIP-relative addressing and has neither a GOT or PLT entry
+                    value = S + A - P;
             }
 
-            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", S);
+            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             uint32_t *output = (uint32_t *) output_pointer;
-            *output = S;
+            *output = value;
             break;
 
             return 1;
@@ -290,9 +295,8 @@ int apply_relocation(
         }
 
         default: {
-            const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
             if (VERBOSE_ERROR_LIST)
-                printf("Unhandled relocation type %s\n", relocation_name);
+                printf("Unhandled relocation type %s for a static relocation\n", relocation_name);
             return 1;
         }
     }
@@ -385,13 +389,13 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 // SCAN_RELOCATION_OK        if OK
 // SCAN_RELOCATION_ERROR     if an error
 // SCAN_RELOCATION_NEEDS_GOT if the symbol requires a GOT entry
-int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *relocation) {
+int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
     uint64_t offset = relocation->r_offset;
     input_data += offset;
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
-    if (type == R_X86_64_PLT32 && !input_is_shared) type = R_X86_64_PC32;
+    if (type == R_X86_64_PLT32 && !link_dynamically) type = R_X86_64_PC32;
 
     if (type == R_X86_64_GOTTPOFF) {
         // Convert a foo@GOTTPOFF(%rip) to foo@GOTPCREL(%rip)
@@ -407,7 +411,7 @@ int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *reloca
             return SCAN_RELOCATION_OK;
 
         case R_X86_64_GOTPCRELX: {
-            if (input_is_shared) return SCAN_RELOCATION_NEEDS_GOT;
+            if (link_dynamically) return SCAN_RELOCATION_NEEDS_GOT;
 
             // Relax instructions to not use the GOT
 
@@ -419,6 +423,11 @@ int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *reloca
             uint8_t opcode = *popcode;
 
             if (offset > 1 && opcode == 0x8b) {
+                if (output_is_shared) {
+                    // TODO Convert movl foo@GOTPCREL@(%rip) to lea foo(%rip).
+                    panic("Relaxing to relative-RIP load for R_X86_64_GOTPCRELX for not implemented for ET_DYN\n");
+                }
+
                 // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo, %eax
                 *popcode = 0xc7;
                 *pmod_rm = 0xc0 | (*pmod_rm & 0x38) >> 3;
@@ -443,7 +452,7 @@ int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *reloca
 
         case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
-            if (input_is_shared) return SCAN_RELOCATION_NEEDS_GOT;
+            if (link_dynamically) return SCAN_RELOCATION_NEEDS_GOT;
 
             // Relax instructions to not use the GOT
 
@@ -452,6 +461,14 @@ int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *reloca
             uint8_t opcode = *popcode;
 
             if (offset > 2 && opcode == 0x8b) {
+                if (output_is_shared) {
+                    // Convert mov foo@GOTPCREL@(%rip) to lea foo(%rip).
+                    // The RIP-relative value of foo will be used rather than a GOT slot.
+                    *popcode = 0x8d; // lea
+
+                    return SCAN_RELOCATION_OK;
+                }
+
                 // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo, %rax
                 convert_Gvqp_to_Evqp(input_data, 0xc7, 0);
                 return SCAN_RELOCATION_OK;
@@ -473,7 +490,7 @@ int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *reloca
         }
 
         case R_X86_64_PLT32:
-            if (input_is_shared)
+            if (link_dynamically)
                 return SCAN_RELOCATION_NEEDS_GOT_PLT;
             else
                 panic("Unhandled R_X86_64_PLT32");
@@ -490,10 +507,10 @@ int scan_relocation(void *input_data, int input_is_shared, ElfRelocation *reloca
     return SCAN_RELOCATION_OK;
 }
 
-static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, InputSection *input_section, int input_is_shared, ElfRelocation *relocation) {
+static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, InputSection *input_section, int output_is_shared, int link_dynamically, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
-    int result = scan_relocation(input_section->data, input_is_shared, relocation);
+    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, relocation);
 
     switch (result) {
         case SCAN_RELOCATION_NEEDS_GOT:
@@ -577,8 +594,10 @@ void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, in
                 int link_dynamically = symbol_is_from_shared_library;
                 if (!symbol_is_from_shared_library && output_elf_file->type == ET_DYN && !output_elf_file->is_executable) link_dynamically = 1;
 
+                int output_is_shared = output_elf_file->type == ET_DYN;
+
                 if (phase == RELOCATION_PHASE_SCAN)
-                    failed_relocations += scan_relocation_in_input_elf_file(input_elf_file, input_section, link_dynamically, relocation);
+                    failed_relocations += scan_relocation_in_input_elf_file(input_elf_file, input_section, output_is_shared, link_dynamically, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
                     failed_relocations += apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, relocation);
                 relocation++;
