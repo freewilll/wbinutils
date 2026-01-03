@@ -767,7 +767,6 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     output_elf_file->section_symtab->info = output_elf_file->sections_list->length; // Index of the first global symbol
 
     // .so files don't have a symtab. Edit: this is Not true. A symbtab is useful for debugging
-    if (output_elf_file->type == ET_DYN) return;
 
     add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_NOTYPE, STV_DEFAULT, SHN_UNDEF); // Null symbol
 
@@ -780,6 +779,9 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         if (!strcmp(snv->name, ".")) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+
+        if (output_elf_file->type == ET_DYN && symbol->src_is_shared_library) continue;
+
         int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
     }
@@ -862,8 +864,9 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
             elf_symbol->st_value = symbol->dst_value;
             elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
         }
-        else {
-            // symtab
+
+        // symtab
+        if (symbol->dst_index) {
             ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
             ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
             elf_symbol->st_value = symbol->dst_value;

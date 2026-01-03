@@ -1138,6 +1138,16 @@ static void test_shared_library_no_dependencies() {
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
         0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
         END);
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section  Name
+        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
+        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
+        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
+        0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
+        END);
 }
 
 static void test_two_shared_libs_with_data() {
@@ -1501,6 +1511,16 @@ static void test_dynamic_executable_sanity() {
         PT_DYNAMIC,       0x3000,  0x003000,  0x060,   0x60,   PF_R | PF_W,  0x0008,
         END
     );
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section  Name
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        END);
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
+        END);
 }
 
 int main() {
