@@ -841,7 +841,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
         dynsym_symbol_count++;
 
-        if (symbol->needs_got) rela_dyn_entry_count++;
+        if (symbol->needs_got || symbol->needs_copy) rela_dyn_entry_count++;
     }
 
     output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
@@ -1267,17 +1267,24 @@ void create_dyn_rela_section(OutputElfFile *output_elf_file) {
     output_elf_file->section_rela_dyn->data = calloc(1, output_elf_file->section_rela_dyn->size);
 }
 
-// For ET_DYN files, update the relocation entries in the GOT table
+// For ET_DYN files, update the relocation entries in the .rela.dyn table
+// This includes
+// - Entries in the .got
+// - Symbols that have a R_X86_64_COPY relocation
+//
+// The first part of the table are all .got entries, with a 1:1 mapping with .got.
+// The second have are R_X86_64_COPY relocations.
 void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
     if (output_elf_file->rela_dyn_entry_count == 0) return;
 
     InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
-    if (!section_got) panic("GOT is NULL");
-    uint64_t got_value = section_got->output_section->address + section_got->dst_offset;
+    uint64_t got_value = section_got ? section_got->output_section->address + section_got->dst_offset : 0;
 
     InputSection *section_rela_dyn = output_elf_file->section_rela_dyn;
     if (!section_rela_dyn) panic(".rela.dyn is NULL");
+
+    int highest_got_entry = -1;
 
     // Loop over all global symbols. If they are present in the dynsym table and came from
     // a shared library, then they have entries in the GOT and need entries in .rela.dyn
@@ -1288,10 +1295,14 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
 
         if (symbol->needs_got) {
+            if (!section_got) panic("GOT is NULL");
+
             int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
             if (i >= output_elf_file->rela_dyn_entry_count)
                 panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
                     symbol->name, i, output_elf_file->rela_dyn_entry_count);
+
+            if (i > highest_got_entry) highest_got_entry = i;
 
             // Populate the relocation entry in .rela.dyn
             ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
@@ -1299,10 +1310,78 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
             r->r_offset = got_value + symbol->got_offset;
             r->r_addend = 0;
         }
-     }
+    }
+
+    // Add entries for symbols that need copying at runtime with a R_X86_64_COPY relocation
+    int i = highest_got_entry + 1;
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
+        if (!symbol->needs_copy) continue;
+
+        if (i >= output_elf_file->rela_dyn_entry_count)
+            panic("Symbol %s has a .rela.dyn offset that exceeds the size of .rela.dyn table: %d >= %d",
+                symbol->name, i, output_elf_file->rela_dyn_entry_count);
+
+        ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
+        r->r_info = R_X86_64_COPY + ((uint64_t) symbol->dst_dynsym_index << 32);
+        r->r_offset = symbol->dst_value;
+        r->r_addend = 0;
+
+        i++;
+    }
 
     ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_rela_dyn->output_section->index];
     h->sh_link = output_elf_file->section_dynsym->output_section->index;
     h->sh_entsize = sizeof(ElfRelocation);
     h->sh_flags = SHF_ALLOC;
+}
+
+// Allocate space for symbols used in a dynamic executable that are defined in a shared library.
+void layout_data_copy_section(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN || !output_elf_file->is_executable) return;
+
+    InputSection *data_copy_section = NULL;
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+
+        char binding = symbol->binding;
+        char type = symbol->type;
+        char visibility = symbol->other & 3;
+        const char *type_name = SYMBOL_TYPE_NAMES[type];
+        const char *binding_name = SYMBOL_BINDING_NAMES[binding];
+        const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
+
+        // If:
+        // - Symbol type is STT_OBJECT
+        // - Symbol is GLOBAL
+        // - Symbol is defined in a shared object
+        // - Symbol is referenced by the executable
+        if (symbol->type == STT_OBJECT && symbol->binding == STB_GLOBAL && symbol->src_is_shared_library && symbol->resolves_undefined_symbol) {
+            // The alignemtn of the symbol is the alignment of the section it's in.
+            int align = symbol->input_section->align;
+
+            // Create a new .data.copy section if not already existent.
+            if (!data_copy_section)
+                data_copy_section = get_or_create_extra_section(output_elf_file, DATA_COPY_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, align);
+
+            // Increase the alignment in the section if necessary
+            if (align > data_copy_section->align) data_copy_section->align = align;
+
+            // Disassociate the symbol with the shared library
+            // This is a bit hacky, since this pretends the symbol originated in the executable in the first place
+            // and completely removes any reference to the shared library.
+            symbol->input_section = data_copy_section;
+            symbol->src_value = data_copy_section->size;
+            symbol->needs_copy = 1;
+            symbol->src_is_shared_library = 0;
+
+            data_copy_section->size += symbol->size;
+        }
+    }
+
+    if (data_copy_section)
+        data_copy_section->data = calloc(1, sizeof(data_copy_section->size));
 }

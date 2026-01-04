@@ -1523,6 +1523,58 @@ static void test_dynamic_executable_sanity() {
         END);
 }
 
+void test_dynamic_executable_using_an_object_in_a_library() {
+    char *library_path = run_was(
+        ".globl i;"
+        ".type i, @object;" // Required
+        ".size i, 4;"       // Required
+        ".data;"
+        "    i: .long 1;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, library_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_using_an_object_in_a_library");
+
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movq i(%rip), %rax;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_using_an_object_in_a_library");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x1a,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1080,   0x1080, 0x18,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x07,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
+        0x30a0,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_COPY,     2,                0x30a0,  0,
+        END);
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -1543,4 +1595,5 @@ int main() {
     test_dwarf();
     test_gnu_ld_script_archive();
     test_dynamic_executable_sanity();
+    test_dynamic_executable_using_an_object_in_a_library();
 }

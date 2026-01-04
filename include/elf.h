@@ -111,6 +111,7 @@
 #define R_X86_64_PC32            2   // PC relative 32 bit signed     S + A - P
 #define R_X86_64_GOT32           3   // 32 bit GOT entry              G + A
 #define R_X86_64_PLT32           4   // 32 bit PLT address            L + A - P
+#define R_X86_64_COPY            5   // Copy symbol at runtime
 #define R_X86_64_GLOB_DAT        6   // 32 bit GOT entry for .so      G + A
 #define R_X86_64_JUMP_SLOT       7   // 32 bit PLT entry for so       G + A
 #define R_X86_64_RELATIVE        8   // Adjust by program base
@@ -125,6 +126,7 @@
 #define R_X86_64_IRELATIVE      37   // Adjust indirectly by program base
 #define R_X86_64_GOTPCRELX      41   // Introduced in GNU binutils 2.26
 #define R_X86_64_REX_GOTPCRELX  42   // Introduced in GNU binutils 2.26
+
 #define E_MACHINE_TYPE_X86_64   0x3e
 
 // Object file type

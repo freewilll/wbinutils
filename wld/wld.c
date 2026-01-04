@@ -117,7 +117,7 @@ InputSection *create_extra_section(OutputElfFile *output_elf_file, char *name, u
     return extra_section;
 }
 
-static InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align) {
+InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align) {
     InputSection *section = get_extra_section(output_elf_file, name);
     if (section) return section;
     return create_extra_section(output_elf_file, name, type, flags, align);
@@ -782,6 +782,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
 
     // Allocate memory for extra sections like .got.plt, .iplt and .rela.iplt
     allocate_extra_sections(output_elf_file);
+
+    // Allocate space in the .data.copy extra section for symbols needing the R_X86_64_COPY relocation
+    layout_data_copy_section(output_elf_file);
 
     // For libraries, add the symbols to the ELF dynsym table
     make_elf_dyn_symbols(output_elf_file);

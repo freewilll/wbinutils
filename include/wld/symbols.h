@@ -32,6 +32,7 @@ typedef struct symbol {
     int needs_got;                  // Set if the symbol needs an entry in the Global Offset Table (GOT)
     int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt table
     int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt table, for ifuncs
+    int needs_copy;                 // Uses a R_X86_64_COPY relocation to copy data from a shared lib to an executable
     uint64_t got_offset;            // Offset in the .got section, if present
     uint64_t got_plt_offset;        // Offset in the .got.plt section, if present
     uint64_t got_iplt_offset;       // Offset in the .got.iplt section, if present
@@ -90,5 +91,6 @@ void update_iplt(OutputElfFile *output_elf_file);
 void make_symbol_hashes(OutputElfFile *output_elf_file);
 void create_dyn_rela_section(OutputElfFile *output_elf_file);
 void update_dyn_rela_section(OutputElfFile *output_elf_file);
+void layout_data_copy_section(OutputElfFile *output_elf_file);
 
 #endif

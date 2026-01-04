@@ -28,7 +28,8 @@ test: \
 	shared-lib-minimal \
 	shared-lib-using-shared-lib \
 	shared-lib-and-two-object-files \
-	musl-libc-dynamic-hello-world
+	musl-libc-dynamic-hello-world \
+	musl-libc-dynamic-fprintf-to-stdout
 
 .PHONY: sanity1
 sanity1:
@@ -142,6 +143,10 @@ shared-lib-and-two-object-files:
 musl-libc-dynamic-hello-world:
 	+$(MAKE) -C musl-libc-dynamic-hello-world
 
+.PHONY: musl-libc-dynamic-fprintf-to-stdout
+musl-libc-dynamic-fprintf-to-stdout:
+	+$(MAKE) -C musl-libc-dynamic-fprintf-to-stdout
+
 clean:
 	@+$(MAKE) -C sanity1 clean
 	@+$(MAKE) -C sanity2 clean
@@ -171,3 +176,4 @@ clean:
 	@+$(MAKE) -C shared-lib-using-shared-lib clean
 	@+$(MAKE) -C shared-lib-and-two-object-files clean
 	@+$(MAKE) -C musl-libc-dynamic-hello-world clean
+	@+$(MAKE) -C musl-libc-dynamic-fprintf-to-stdout clean
