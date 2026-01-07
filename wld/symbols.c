@@ -844,6 +844,8 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
         if (symbol->needs_got || symbol->needs_copy) rela_dyn_entry_count++;
     }
 
+    rela_dyn_entry_count += output_elf_file->extra_rela_dyn_symbols->length;
+
     output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
     output_elf_file->rela_dyn_entry_count = rela_dyn_entry_count;
 }
@@ -1328,6 +1330,29 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         r->r_info = R_X86_64_COPY + ((uint64_t) symbol->dst_dynsym_index << 32);
         r->r_offset = symbol->dst_value;
         r->r_addend = 0;
+
+        i++;
+    }
+
+    // Add extra dyn entries for R_X86_64_RELATIVE relocations
+    for (int j = 0; j < output_elf_file->extra_rela_dyn_symbols->length; j++) {
+        RelativeRelaDynRelocation *rrdr = output_elf_file->extra_rela_dyn_symbols->elements[j];
+
+        uint64_t addend;
+
+        if (rrdr->symbol) {
+            addend = rrdr->symbol->dst_value + rrdr->addend;
+        }
+        else {
+            // The symbol is an offset into the relocation input section
+            if (!rrdr->relocation_input_section) panic("Unexpected undefined e->relocation_input_section");
+            addend = rrdr->relocation_input_section->output_section->offset + rrdr->relocation_input_section->dst_offset + rrdr->addend;
+        }
+
+        ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
+        r->r_info = R_X86_64_RELATIVE;
+        r->r_offset = rrdr->target_section->output_section->offset + rrdr->target_section->dst_offset + rrdr->offset;
+        r->r_addend = addend;
 
         i++;
     }

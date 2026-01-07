@@ -92,6 +92,7 @@ OutputElfFile *init_output_elf_file(const char *output_filename, int output_type
     result->ifunc_symbols = new_list(0);
     result->global_symbols_in_use  = new_strmap();
     result->is_executable = output_type & OUTPUT_TYPE_FLAG_EXECUTABLE;
+    result->extra_rela_dyn_symbols = new_list(32);
 
     return result;
 }
@@ -632,14 +633,19 @@ static void process_ifuncs(OutputElfFile *output_elf_file, List *input_elf_files
     }
 }
 
+// Create the .bss section if it doesn't already exist
+OutputSection *get_or_create_create_bss_section(OutputElfFile *output) {
+    if (!output->section_bss)
+        output->section_bss = add_output_section(output, ".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 0);
+
+    return output->section_bss;
+}
+
 // If there are any common symbols, create a bss section and allocate values the symbols
 static void add_common_symbols_to_bss(OutputElfFile *output) {
     if (!common_symbols_are_present()) return;
 
-    // Create the .bss section
-    if (!output->section_bss)
-        output->section_bss = add_output_section(output, ".bss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE, 0);
-
+    get_or_create_create_bss_section(output);
     layout_common_symbols_in_bss_section(output->section_bss);
 }
 
@@ -772,7 +778,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     finalize_symbols(output_elf_file);
 
     // Relax instructions where possible and determine which symbols need to be in the GOT
-    apply_relocations(input_elf_files, output_elf_file, RELOCATION_PHASE_SCAN);
+    apply_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_SCAN);
 
     // Create the .got, .got.plt, .plt, .rela.plt sections, as needed
     create_got_plt_and_rela_sections(output_elf_file);
@@ -882,7 +888,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     copy_extra_sections_to_output(output_elf_file);
 
     // Write relocated symbol values to the output ELF file
-    apply_relocations(input_elf_files, output_elf_file, RELOCATION_PHASE_APPLY);
+    apply_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_APPLY);
 
     // Write the ELF file
     write_elf_file(output_elf_file);

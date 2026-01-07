@@ -195,8 +195,16 @@ int apply_relocation(
 
     switch (type) {
         case R_X86_64_64: {
+            uint64_t value;
+
+            if (output_elf_file->type == ET_DYN && output_elf_file->is_executable)
+                // This cannot be resolved here. A .rela.dyn R_X86_64_RELATIVE relocation is needed
+                value = 0;
+            else
+                value = S + A;
+
             uint64_t *output = (uint64_t *) output_pointer;
-            uint64_t value = S + A;
+
             if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             *output = value;
             break;
@@ -386,10 +394,11 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 // The instructions are rewritten in the loaded input ELF section.
 // apply_relocation() puts the relocated values in the output ELF file.
 // Returns:
-// SCAN_RELOCATION_OK        if OK
-// SCAN_RELOCATION_ERROR     if an error
-// SCAN_RELOCATION_NEEDS_GOT if the symbol requires a GOT entry
-int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, ElfRelocation *relocation) {
+// SCAN_RELOCATION_OK                           if OK
+// SCAN_RELOCATION_ERROR                        if an error
+// SCAN_RELOCATION_NEEDS_GOT                    if the symbol requires a GOT entry
+// SCAN_RELOCATION_NEEDS_RELATIVE_RELOCATION    if the symbol needs a R_X86_64_RELATIVE in the .rela.dyn section
+int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, int is_executable, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
     uint64_t offset = relocation->r_offset;
     input_data += offset;
@@ -404,6 +413,12 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
 
     switch (type) {
         case R_X86_64_64:
+            if (output_is_shared && is_executable) // Is it a dynamic executable?
+                // A .rela.dyn R_X86_64_RELATIVE relocation is needed
+                return SCAN_RELOCATION_NEEDS_RELATIVE_RELOCATION;
+            else
+                return SCAN_RELOCATION_OK;
+
         case R_X86_64_PC32:
         case R_X86_64_TPOFF32:
         case R_X86_64_32:
@@ -507,10 +522,13 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
     return SCAN_RELOCATION_OK;
 }
 
-static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, InputSection *input_section, int output_is_shared, int link_dynamically, ElfRelocation *relocation) {
+// Returns SCAN_RELOCATION_OK=0 or SCAN_RELOCATION_OK=1
+static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int output_is_shared, int link_dynamically, int is_executable, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
-    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, relocation);
+    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, is_executable, relocation);
+
+    if (result == SCAN_RELOCATION_OK) return SCAN_RELOCATION_OK;
 
     switch (result) {
         case SCAN_RELOCATION_NEEDS_GOT:
@@ -546,6 +564,44 @@ static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, Input
             break;
         }
 
+        case SCAN_RELOCATION_NEEDS_RELATIVE_RELOCATION:
+            // Ignore relocations for non-loadable sections, e.g. dwarf sections
+            if (!(input_section->flags & SHF_ALLOC)) return SCAN_RELOCATION_OK;
+
+            // A .rela.dyn entry is needed
+            int symbol_index = relocation->r_info >> 32;
+            ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+            char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+
+            InputSection *relocation_input_section = NULL;
+            Symbol *symbol = NULL;
+            int is_common = elf_symbol->st_shndx == SHN_COMMON;
+
+            int version_index = 0;
+            symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
+
+            if (!is_common && elf_symbol->st_shndx >= SHN_LORESERVE)
+                panic("Unhandled section index %d when processing", elf_symbol->st_shndx);
+            else if (is_common) {
+                // The symbol must be defined. This is the only way to get it's offset, allocated in the .bss section.
+                if (!symbol) panic("Expected %s to be defined due to a relocation referencing it", symbol);
+            }
+            else {
+                // The symbol may be unset, in which case the relocation is an offset into the relocation input section.
+                relocation_input_section = (InputSection *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+            }
+
+            RelativeRelaDynRelocation *rrdr = calloc(1,sizeof(RelativeRelaDynRelocation));
+            rrdr->target_section = input_section;
+            rrdr->symbol = symbol;
+            rrdr->relocation_input_section = relocation_input_section;
+            rrdr->offset = relocation->r_offset;
+            rrdr->addend = relocation->r_addend;
+
+            append_to_list(output_elf_file->extra_rela_dyn_symbols, rrdr);
+
+            return SCAN_RELOCATION_OK;
+
         default:
             return result;
     }
@@ -553,7 +609,7 @@ static int scan_relocation_in_input_elf_file(InputElfFile *input_elf_file, Input
     return SCAN_RELOCATION_OK;
 }
 
-void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, int phase) {
+void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, int phase) {
     int failed_relocations = 0;
 
     if (DEBUG_RELOCATIONS) printf("\nRelocations:\n");
@@ -595,9 +651,10 @@ void apply_relocations(List *input_elf_files, OutputElfFile *output_elf_file, in
                 if (!symbol_is_from_shared_library && output_elf_file->type == ET_DYN && !output_elf_file->is_executable) link_dynamically = 1;
 
                 int output_is_shared = output_elf_file->type == ET_DYN;
+                int is_executable = output_elf_file->is_executable;
 
                 if (phase == RELOCATION_PHASE_SCAN)
-                    failed_relocations += scan_relocation_in_input_elf_file(input_elf_file, input_section, output_is_shared, link_dynamically, relocation);
+                    failed_relocations += scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, output_is_shared, link_dynamically, is_executable, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
                     failed_relocations += apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, relocation);
                 relocation++;

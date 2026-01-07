@@ -32,8 +32,10 @@
 #define EV_NUM		2
 
 #define SHN_UNDEF         0         // This section table index means the symbol is undefined. When the link editor combines this object file with another that defines the indicated symbol, this file's references to the symbol will be linked to the actual definition.
+#define SHN_LORESERVE     65280     // Start of reserved indices (0xff00)
 #define SHN_ABS           65521     // The symbol has an absolute value that will not change because of relocation.#define
 #define SHN_COMMON        65522     // This symbol labels a common block that has not yet been allocate
+#define SHN_HIRESERVE     65536     // End of reserved indices (0xffff)
 
 #define SHF_WRITE         (1 << 0)  // Writeable
 #define SHF_ALLOC         (1 << 1)  // Occupies memory
@@ -114,7 +116,7 @@
 #define R_X86_64_COPY            5   // Copy symbol at runtime
 #define R_X86_64_GLOB_DAT        6   // 32 bit GOT entry for .so      G + A
 #define R_X86_64_JUMP_SLOT       7   // 32 bit PLT entry for so       G + A
-#define R_X86_64_RELATIVE        8   // Adjust by program base
+#define R_X86_64_RELATIVE        8   // Adjust by program base        B + A
 #define R_X86_64_GOTPCREL        9   // 32 bit signed PC relative offset to GOT
 #define R_X86_64_32             10   // Direct 8 bit                  S + A
 #define R_X86_64_32S            11   // Direct 8 bit sign extended    S + A

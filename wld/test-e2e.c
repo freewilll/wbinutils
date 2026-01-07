@@ -381,7 +381,9 @@ void assert_relocations(OutputElfFile *elf_file, OutputSection *section, va_list
                 expected_addend != got_addend) {
 
             dump_relocations(section);
-            panic("Relocations mismatch at position %d: expected %#x, %d, %#x, %d, got %#x, %d, %#x, %ld",
+            panic("Relocations mismatch at position %d:\n"
+                "expected type=%#08x, symbol index=%4d, offset=%#08x, addend=%#08lx\n"
+                "got      type=%#08x, symbol index=%4d, offset=%#08x, addend=%#08lx",
                 pos / sizeof(ElfRelocation),
                 expected_type,
                 expected_symbol_index,
@@ -1575,6 +1577,174 @@ void test_dynamic_executable_using_an_object_in_a_library() {
         END);
 }
 
+// Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
+// This tests a relocation from the .rodata section, without there being a symbol
+void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
+    char *object_path = run_was(
+        ".globl foo;"
+        ".globl _start;"
+        ".data;"
+        "    .align   8;"
+        "    .type    foo, @object;"
+        "    .size    foo, 8;"
+        "    foo: .quad .SL0;;"
+        ".section .rodata;"
+        "   .SL0: .string \"Hello World!\";"
+        ".text;"
+        "_start: nop;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x0c,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1070,   0x1070, 0x18,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x01,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".rodata",         SHT_PROGBITS,   0x3000,   0x3000, 0x0d,  SHF_ALLOC,                 4,
+        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x4090,   0x4090, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x4090,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "foo",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_RELATIVE, 0,                0x4090,  0x3000,
+        END);
+}
+
+// Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
+// This tests a relocation from initialized data
+void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".globl x;"
+        ".globl px;"
+        ".data;"
+        "    .align   4;"
+        "    .type    x, @object;"
+        "    .size    x, 4;"
+        "x:  .long    42;"
+        "    .align   8;"
+        "    .type    px, @object;"
+        "    .size    px, 8;"
+        "px:;"
+        "    .quad    x;"
+        ".text;"
+        "_start: nop;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x3090,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "x",
+        0x3098,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "px",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_RELATIVE, 0,                0x3098,  0x3090,
+        END);
+}
+
+// Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
+// This tests a relocation from uninitialized data
+void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_data() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        ".comm x,4,4;"
+        ".globl px;"
+        ".data;"
+        "   .align   8;"
+        "   .type    px, @object;"
+        "   .size    px, 8;"
+        "px: .quad x;"
+        ".text;"
+        "_start: nop;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x3098,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",  "x",
+        0x3090,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "px",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_RELATIVE, 0,                0x3090,  0x3098,
+        END);
+}
+
+// This tests the offset and addend handling in the relocation code
+void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
+    char *object_path1 = run_was(
+        "    .globl   foo;"
+        "    .data;"
+        "    .align   8;"
+        "    .type    foo, @object;"
+        "    .size    foo, 8;"
+        "foo: .quad .SL0;"
+        ".section .rodata;"
+        ".SL0: .string \"foo\";"
+        ".globl _start;"
+        ".text;"
+        "_start: nop;"
+    );
+
+    char *object_path2 = run_was(
+        "    .globl   bar;"
+        "    .data;"
+        "    .align   8;"
+        "    .type    bar, @object;"
+        "    .size    bar, 8;"
+        "bar: .quad .SL0;"
+        ".section .rodata;"
+        ".SL0: .string \"bar\";"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+    append_to_list(input_paths, object_path2);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x4090,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "foo",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x4098,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "bar",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_RELATIVE, 0,                0x4090,  0x3000,
+        R_X86_64_RELATIVE, 0,                0x4098,  0x3004,
+        END);
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -1596,4 +1766,8 @@ int main() {
     test_gnu_ld_script_archive();
     test_dynamic_executable_sanity();
     test_dynamic_executable_using_an_object_in_a_library();
+    test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata();
+    test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data();
+    test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_data();
+    test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files();
 }

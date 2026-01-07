@@ -46,13 +46,21 @@ typedef struct symbol {
     uint64_t dst_value;             // Value in the final ELF section
     int dst_index;                  // Index in the final ELF symbol table
     int dst_dynsym_index;           // Index in the final ELF dynsyn table (for libraries)
-    int resolves_undefined_symbol; // Set to 1 if the symbol is from a shared library and resolves an undefined symbol
+    int resolves_undefined_symbol;  // Set to 1 if the symbol is from a shared library and resolves an undefined symbol
 } Symbol;
 
 typedef struct symbol_table {
     MapOrdered *defined_symbols;
     MapOrdered *undefined_symbols;
 } SymbolTable;
+
+typedef struct relative_rela_dyn_relocation {
+    InputSection* target_section;               // Where the relocated value is written to
+    InputSection* relocation_input_section;     // Either relocation_input_section or symbol must be not-null
+    Symbol *symbol;                             // May not be set. Relocations in this case point to an offset in a section.
+    uint64_t offset;                            // Relocation offset in the input section (if set)
+    uint64_t addend;                            // Addend of the relocation
+} RelativeRelaDynRelocation;
 
 extern SymbolTable *global_symbol_table;
 extern StrMap *local_symbol_tables;

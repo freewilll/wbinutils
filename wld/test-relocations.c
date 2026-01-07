@@ -67,7 +67,8 @@ void run_full_relocation(int output_type, void *output_data, uint64_t output_off
     uint64_t rw_section_address = output_virtual_address - output_offset;
     uint64_t rw_section_offset = rw_section_address - 0x400000;
 
-    int result = scan_relocation(output_data, link_dynamically, output_is_shared, &relocation);
+    int is_executable = 0;
+    int result = scan_relocation(output_data, link_dynamically, output_is_shared, is_executable, &relocation);
     if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);
 
     result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, link_dynamically, &relocation,
