@@ -678,7 +678,6 @@ static void test_sanity() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
-        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         END);
 }
@@ -1013,7 +1012,6 @@ static void test_etext_undefined() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility    Section  Name
-        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,   "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
         0x401013,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "etext",                    // Set by linker
         END);
@@ -1057,7 +1055,6 @@ static void test_defined_etext() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
-        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         0x403010,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",  "etext",
         END);
@@ -1099,7 +1096,6 @@ static void test_unused_etext() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
-        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         END);
 }
@@ -1169,7 +1165,6 @@ static void test_automatic_start_stop_symbols() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
-        0,         0,     STT_NOTYPE, STB_GLOBAL, STV_HIDDEN,  "ABS",   "_GLOBAL_OFFSET_TABLE_",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__start_foo",
         0x402004,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__stop_foo",
@@ -1268,7 +1263,7 @@ static void test_two_shared_libs_with_data() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_data");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1283,7 +1278,7 @@ static void test_two_shared_libs_with_data() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_data");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1320,6 +1315,12 @@ static void test_two_shared_libs_with_data() {
         DT_NULL,        0,          NULL
     );
 
+    assert_symtab(elf_file,
+    //  Value   Size   Type        Binding     Visibility   Section    Name
+        0x3000, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x30a0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
+        END);
+
     assert_dynsym(elf_file,
     //  Value  Size   Type        Binding     Visibility   Section  Name
         0,     0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",   "i",
@@ -1347,7 +1348,7 @@ static void test_two_shared_libs_with_functions() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_functions");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1362,7 +1363,7 @@ static void test_two_shared_libs_with_functions() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "__start_ and __end_ symbols");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_functions");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1401,6 +1402,12 @@ static void test_two_shared_libs_with_functions() {
         DT_JMPREL,      0x2000,     NULL,
         DT_NULL,        0,          NULL
     );
+
+    assert_symtab(elf_file,
+    //  Value   Size   Type        Binding     Visibility   Section    Name
+        0x4000, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x40b0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got.plt", "_GLOBAL_OFFSET_TABLE_",
+        END);
 
     assert_dynsym(elf_file,
     //  Value  Size   Type        Binding     Visibility   Section  Name

@@ -94,6 +94,8 @@ void make_elf_symbols(OutputElfFile *output_elf_file);
 void update_elf_symbols(OutputElfFile *output_elf_file);
 void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file);
 void update_got_values(OutputElfFile *output_elf_file);
+void set_got_symbol_value(OutputElfFile *output_elf_file);
+void create_got_symbol(OutputElfFile *output_elf_file);
 void update_dynamic_relocatable_values(OutputElfFile *output_elf_file);
 void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table);
 void allocate_extra_sections(OutputElfFile *output_elf_file);;

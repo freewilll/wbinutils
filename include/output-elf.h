@@ -72,6 +72,7 @@ typedef struct output_elf  {
     StrMap *global_symbols_in_use;                          // Used by wld
     int dynsym_symbol_count;                                // Used by wld
     int rela_dyn_entry_count;                               // Used by wld
+    int got_entries_count;                                  // Used by wld
     int got_plt_entries_count;                              // Used by wld
     List *shared_libraries;                                 // Used by wld
     List *extra_rela_dyn_symbols;                           // Used by wld

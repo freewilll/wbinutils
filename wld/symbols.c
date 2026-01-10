@@ -893,6 +893,23 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
             elf_symbol->st_shndx = dynamic_section->index;
         }
 
+        if (!strcmp(symbol->name, GLOBAL_OFFSET_TABLE_SYMBOL_NAME)) {
+            ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+            ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
+
+            if (output_elf_file->got_entries_count) {
+                OutputSection *section = get_output_section(output_elf_file, GOT_SECTION_NAME);
+                elf_symbol->st_value = symbol->dst_value;
+                elf_symbol->st_shndx = section->index;
+            }
+
+            if (output_elf_file->got_plt_entries_count) {
+                OutputSection *section = get_output_section(output_elf_file, GOT_PLT_SECTION_NAME);
+                elf_symbol->st_value = symbol->dst_value;
+                elf_symbol->st_shndx = section->index;
+            }
+        }
+
         if (!symbol->is_abs && !symbol->output_section) continue; // Weak symbols may not be defined
 
         // dynsym
@@ -914,19 +931,17 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
     }
 }
 
-static void add_hidden_symbol(char *name) {
-    Symbol *symbol = add_defined_symbol(global_symbol_table, name, 0 ,STT_NOTYPE, STB_GLOBAL, 0, 0, 0, 0);
+static Symbol *add_hidden_symbol(char *name) {
+    Symbol *symbol = add_defined_symbol(global_symbol_table, name, 0, STT_NOTYPE, STB_GLOBAL, 0, 0, 0, 0);
     symbol->is_abs = 1;
     symbol->visibility = STV_HIDDEN;
+    return symbol;
 }
 
 void init_symbols(OutputElfFile *output_elf_file) {
     global_symbol_table = new_symbol_table();
     local_symbol_tables = new_strmap();
     provided_symbols = new_strmap_ordered();
-
-    if (output_elf_file->type == ET_EXEC)
-        add_hidden_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME);
 }
 
 // Create the .got, .got.plt, .plt, .rela.plt sections, as needed
@@ -942,6 +957,7 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
         if (symbol->needs_got_plt) got_plt_entries_count++;
     }
 
+    output_elf_file->got_entries_count = got_entries_count;
     output_elf_file->got_plt_entries_count = got_plt_entries_count;
 
     if (got_entries_count) {
@@ -971,18 +987,18 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
     }
 }
 
+// Create the _GLOBAL_OFFSET_TABLE_ symbol if it's needed
+void create_got_symbol(OutputElfFile *output_elf_file) {
+    if (output_elf_file->got_entries_count + output_elf_file->got_plt_entries_count > 0)
+        add_defined_symbol(global_symbol_table, GLOBAL_OFFSET_TABLE_SYMBOL_NAME, 0, STT_OBJECT, STB_LOCAL, 0, 0, 0, 0);
+}
+
 // Set the symbol values in the .got
 void update_got_values(OutputElfFile *output_elf_file) {
     InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
     if (!section_got) return;
 
     uint64_t got_value = section_got->output_section->address + section_got->dst_offset;
-
-    // Set the special GOT symbol to the virtual address of the GOT
-    Symbol *got_symbol = get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME, 0);
-
-    // The got symbol is only defined for statically linked executables
-    if (got_symbol) got_symbol->dst_value = got_value;
 
     // Set the address of the GOT
     output_elf_file->got_virt_address = got_value;
@@ -1114,6 +1130,23 @@ void update_dynamic_relocatable_values(OutputElfFile *output_elf_file) {
 
         plt_index++;
         got_plt_index++;
+    }
+}
+
+// Set the _GLOBAL_OFFSET_TABLE_ symbol to the address of the .got or .got.plt section
+void set_got_symbol_value(OutputElfFile *output_elf_file) {
+    InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
+    if (section_got) {
+        uint64_t got_value = section_got->output_section->address + section_got->dst_offset;
+        Symbol *got_symbol = get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME, 0);
+        if (got_symbol) got_symbol->dst_value = got_value;
+    }
+
+    InputSection *section_got_plt = get_extra_section(output_elf_file, GOT_PLT_SECTION_NAME);
+    if (section_got_plt) {
+        uint64_t got_value = section_got_plt->output_section->address + section_got_plt->dst_offset;
+        Symbol *got_symbol = get_global_defined_symbol(GLOBAL_OFFSET_TABLE_SYMBOL_NAME, 0);
+        if (got_symbol) got_symbol->dst_value = got_value;
     }
 }
 

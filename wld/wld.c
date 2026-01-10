@@ -789,6 +789,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Create the .got, .got.plt, .plt, .rela.plt sections, as needed
     create_got_plt_and_rela_sections(output_elf_file);
 
+    // Create the _GLOBAL_OFFSET_TABLE_ symbol if it's needed
+    create_got_symbol(output_elf_file);
+
     // Process IFUNCs and create .got.plt, .iplt and .rela.iplt if required
     process_ifuncs(output_elf_file, input_elf_files);
 
@@ -860,9 +863,6 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Set the symbol values in the .got
     update_got_values(output_elf_file);
 
-    // Set the symbol values in the .got
-    update_got_values(output_elf_file);
-
     // For ET_DYN files, update .plt, .got.plt and .rela.plt sections
     update_dynamic_relocatable_values(output_elf_file);;
 
@@ -871,6 +871,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
 
     // Make .iplt jmp instructions that refer to the entries in .got.iplt, also finish off .rela.iplt
     update_iplt(output_elf_file);
+
+    // Set the _GLOBAL_OFFSET_TABLE_ symbol to the address of the .got or .got.plt section
+    set_got_symbol_value(output_elf_file);
 
     // Set the symbol's value and section indexes
     update_elf_symbols(output_elf_file);
