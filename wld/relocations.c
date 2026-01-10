@@ -111,17 +111,17 @@ int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_f
                 // Get the symbol
                 ElfSymbol *elf_symbol = &((ElfSymbol *) symbol_section->data)[symbol_index];
                 int elf_symbol_type = elf_symbol->st_info & 0xf;
+                char elf_symbol_binding = (elf_symbol->st_info >> 4) & 0xf;
 
-                if (elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC) {
+                // Relocatable things can be of STT_NOTYPE, so are included here
+                int is_relocatable_type = elf_symbol_type == STT_NOTYPE || elf_symbol_type == STT_OBJECT || elf_symbol_type == STT_FUNC;
+
+                // Weak bindings are allowed to be undefined so are not considered in use
+                if (is_relocatable_type && elf_symbol_binding != STB_WEAK) {
                     char *symbol_name = &strings[elf_symbol->st_name];
+                    // The symbol may be undefined, which is an error that will be reported later.
 
-                    int version_index = input_elf_file->symbol_table_version_indexes ? input_elf_file->symbol_table_version_indexes[symbol_index] : 0;
-                    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
-
-                    // For object files, ensure all relocation symbols are defined
-                    if (input_elf_file->type == ET_REL && !symbol)
-                        panic("Cannot process a relocation for an undefined symbol: %s", symbol_name);
-
+                    // Add it to the symbols in use map
                     if (!strmap_get(global_symbols_in_use, symbol_name)) strmap_put(global_symbols_in_use, symbol_name, (void *) 1);
                 }
 

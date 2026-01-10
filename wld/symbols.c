@@ -526,9 +526,8 @@ int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shar
     return resolved_symbols;
 }
 
-// Treat all weak symbols as defined, with value zero. Fail if any undefined symbols are left
-void finalize_symbols(OutputElfFile *output_elf_file) {
-    // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
+// For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
+void resolve_provided_symbols(OutputElfFile *output_elf_file) {
     strmap_ordered_foreach(provided_symbols, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *provided_symbol = strmap_ordered_get(provided_symbols, name);
@@ -541,6 +540,10 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
         }
     }
 
+}
+
+// Treat all weak symbols as defined, with value zero. Fail if any undefined symbols are left
+void finalize_symbols(OutputElfFile *output_elf_file) {
     List *undefined_symbol_names = new_list(32);
 
     // Make a count of undefined unused unreferenced symbols
@@ -574,10 +577,10 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
         return; // All symbols are defined
     }
 
-    printf("Undefined symbols:\n");
+    fprintf(stderr, "Undefined symbols:\n");
     for (int i = 0; i < undefined_symbol_names->length; i++) {
         char *name = undefined_symbol_names->elements[i];
-        printf("  %s\n", name);
+        fprintf(stderr, "  %s\n", name);
     }
 
     error("Unable to resolve undefined references");

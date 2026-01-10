@@ -79,6 +79,7 @@ Symbol *get_undefined_symbol(const char *name, int version_index);
 int is_undefined_symbol(const char *name, int version_index);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
 int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only);
+void resolve_provided_symbols(OutputElfFile *output_elf_file);
 void finalize_symbols(OutputElfFile *output_elf_file);
 void dump_output_symbols(OutputElfFile *output_elf_file);
 void debug_print_symbol(Symbol *symbol);

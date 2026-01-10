@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "list.h"
@@ -25,6 +26,14 @@ static void assert_uint64_t(uint64_t expected, uint64_t actual, const char *mess
         exit(1);
     }
 }
+
+static void assert_string(const char *expected, const char *actual, const char *message) {
+    if (strcmp(expected, actual)) {
+        printf("%s: expected %s, got %s\n", message, expected, actual);
+        exit(1);
+    }
+}
+
 
 static void fail_sections(OutputElfFile *elf_file, List *expected_sections) {
     printf("Got sections:\n");
@@ -508,6 +517,71 @@ static char *run_was(char *assembly) {
     return strdup(object_path);
 }
 
+static char *run_wld_and_capture_stderr(List *input_filenames, const char *output_path) {
+    int pipe_fds[2];
+    if (pipe(pipe_fds) == -1) { perror("pipe"); exit(1); }
+
+    pid_t pid = fork();
+    if (pid == -1) { perror("fork"); exit(1); }
+
+    if (pid == 0) {
+        close(pipe_fds[0]);
+        if (dup2(pipe_fds[1], STDERR_FILENO) == -1) { perror("dup2"); exit(1); }
+        close(pipe_fds[1]);
+
+        int argc = 0;
+        int max_args = input_filenames->length + 6;
+        char **argv = calloc(max_args, sizeof(char *));
+        if (!argv) { perror("calloc"); exit(1); }
+
+        argv[argc++] = "../bin/wld";
+        argv[argc++] = "-o";
+        argv[argc++] = (char *) output_path;
+
+        for (int i = 0; i < input_filenames->length; i++)
+            argv[argc++] = input_filenames->elements[i];
+
+        argv[argc] = NULL;
+
+        execv(argv[0], argv);
+        perror("execv");
+        _exit(1);
+    }
+
+    close(pipe_fds[1]);
+
+    size_t capacity = 1024;
+    size_t length = 0;
+    char *result = malloc(capacity);
+    if (!result) { perror("malloc"); exit(1); }
+
+    char buffer[256];
+    ssize_t read_bytes = 0;
+    while ((read_bytes = read(pipe_fds[0], buffer, sizeof(buffer))) > 0) {
+        if (length + read_bytes + 1 > capacity) {
+            while (length + read_bytes + 1 > capacity) capacity *= 2;
+            result = realloc(result, capacity);
+            if (!result) { perror("realloc"); exit(1); }
+        }
+        memcpy(result + length, buffer, read_bytes);
+        length += read_bytes;
+    }
+
+    result[length] = '\0';
+
+    close(pipe_fds[0]);
+
+    int status = 0;
+    if (waitpid(pid, &status, 0) == -1) { perror("waitpid"); exit(1); }
+
+    int exit_code = WEXITSTATUS(status);
+    if (exit_code != 1)
+        panic("Wld exited with unexpected exit code %d, expected 1:\n%s", exit_code, result);
+
+    return result;
+}
+
+
 static OutputElfFile *run_wld(List *input_filenames, int output_type, char **poutput_lib_name, int run_executable, char *test_name) {
     // Make list of InputFile from the input filenames
     List *input_files = new_list(input_filenames->length);
@@ -528,10 +602,7 @@ static OutputElfFile *run_wld(List *input_filenames, int output_type, char **pou
 
     char template[] = "XXXXXX";
     int fd = mkstemp(template);
-    if (fd == -1) {
-        perror("mkstemp");
-        exit(1);
-    }
+    if (fd == -1) { perror("mkstemp"); exit(1); }
     close(fd);
     unlink(template);
 
@@ -1032,6 +1103,34 @@ static void test_unused_etext() {
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         END);
 }
+
+// Test undefined symbol error output
+static void test_undefined_symbol() {
+    char *object_path = run_was(
+        ".text;"
+        ".globl _start;"
+        "_start: callq f@PLT;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char output_template[] = "/tmp/asm_XXXXXX";
+    int fd = mkstemp(output_template);
+    if (fd == -1) { perror("mkstemp"); exit(1); }
+    close(fd);
+
+    char *stderr_output = run_wld_and_capture_stderr(input_paths, output_template);
+
+    const char *expected =
+        "Undefined symbols:\n"
+        "  f\n"
+        "error: Unable to resolve undefined references\n";
+
+    assert_string(expected, stderr_output, "undefined symbol in plt call");
+    free(stderr_output);
+}
+
 
 // Test adding of __start_ and __stop_ symbols for sections with C names
 static void test_automatic_start_stop_symbols() {
@@ -1757,6 +1856,7 @@ int main() {
     test_etext_undefined();
     test_defined_etext();
     test_unused_etext();
+    test_undefined_symbol();
     test_automatic_start_stop_symbols();
     test_shared_library_no_dependencies();
     test_two_shared_libs_with_data();

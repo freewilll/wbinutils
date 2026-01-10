@@ -771,6 +771,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script
     layout_output_sections(output_elf_file, input_elf_files);
 
+    // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
+    resolve_provided_symbols(output_elf_file);
+
     // Make set of all global symbols that have relocations
     make_global_symbols_in_use(output_elf_file, input_elf_files);
 
