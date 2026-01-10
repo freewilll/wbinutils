@@ -771,6 +771,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // Run through linker script, group sections into program segments, determine section offsets and assign addresses to symbols in the script
     layout_output_sections(output_elf_file, input_elf_files);
 
+    // Add a _DYNAMIC symbol for ET_DYN outputs
+    add_dynamic_symbol(output_elf_file);
+
     // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
     resolve_provided_symbols(output_elf_file);
 

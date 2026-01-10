@@ -10,6 +10,7 @@
 #include "wld/script.h"
 
 #define GLOBAL_OFFSET_TABLE_SYMBOL_NAME "_GLOBAL_OFFSET_TABLE_"
+#define DYNAMIC_SYMBOL_NAME "_DYNAMIC"
 
 // Symbol name & version
 typedef struct symbol_nv {
@@ -101,5 +102,6 @@ void make_symbol_hashes(OutputElfFile *output_elf_file);
 void create_dyn_rela_section(OutputElfFile *output_elf_file);
 void update_dyn_rela_section(OutputElfFile *output_elf_file);
 void layout_data_copy_section(OutputElfFile *output_elf_file);
+void add_dynamic_symbol(OutputElfFile *output_elf_file);
 
 #endif

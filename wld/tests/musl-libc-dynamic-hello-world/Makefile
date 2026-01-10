@@ -22,7 +22,6 @@ main: main.o ${WLD}
 	-lc                                                   \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
-
 run-main: main
 	@./main # Catch non-zero error
 	@MSG=$$(./main);\

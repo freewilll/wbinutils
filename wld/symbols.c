@@ -552,6 +552,10 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->undefined_symbols, snv);
 
+        // Don't resovle a _DYNAMIC WEAK symbol. It may be included through a .o crt file
+        // but is only needed for an ET_DYN ELF file.
+        if (!strcmp(snv->name, DYNAMIC_SYMBOL_NAME)) continue;
+
         if (symbol->src_is_shared_library)  {
             // Undefined symbols in shared libraries are allowed
             if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring undefined %s in lib\n" , symbol->name);
@@ -767,7 +771,6 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     ElfSectionHeader *elf_section_header = &output_elf_file->elf_section_headers[output_elf_file->section_symtab->index];
 
     output_elf_file->section_symtab->link = output_elf_file->section_strtab->index;
-    output_elf_file->section_symtab->info = output_elf_file->sections_list->length; // Index of the first global symbol
 
     // .so files don't have a symtab. Edit: this is Not true. A symbtab is useful for debugging
 
@@ -775,13 +778,30 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
 
     for (int i = 1; i < output_elf_file->sections_list->length; i++) {
         OutputSection *section = output_elf_file->sections_list->elements[i];
-        add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, STV_DEFAULT, i);
+        int dst_index = add_elf_symbol(output_elf_file, "", 0, 0, STB_LOCAL, STT_SECTION, STV_DEFAULT, i);
+        output_elf_file->section_symtab->info = dst_index + 1;
     }
 
+    // Add local symbols
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         if (!strcmp(snv->name, ".")) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (symbol->binding != STB_LOCAL) continue;
+
+        if (output_elf_file->type == ET_DYN && symbol->src_is_shared_library) continue;
+
+        int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
+        output_elf_file->section_symtab->info = symbol->dst_index + 1;
+    }
+
+    // Add global symbols
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (!strcmp(snv->name, ".")) continue;
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (symbol->binding != STB_GLOBAL) continue;
 
         if (output_elf_file->type == ET_DYN && symbol->src_is_shared_library) continue;
 
@@ -860,12 +880,26 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
         if (!strcmp(snv->name, ".")) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
 
+        if (output_elf_file->type == ET_DYN && !strcmp(symbol->name, DYNAMIC_SYMBOL_NAME)) {
+            ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+            ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
+
+            elf_symbol->st_value = symbol->dst_value;
+
+            OutputSection *dynamic_section = get_output_section(output_elf_file, DYNAMIC_SECTION_NAME);
+            if (!dynamic_section) panic("%s section is unexpectedly missing", DYNAMIC_SECTION_NAME);
+
+            elf_symbol->st_value = dynamic_section->offset;
+            elf_symbol->st_shndx = dynamic_section->index;
+        }
+
         if (!symbol->is_abs && !symbol->output_section) continue; // Weak symbols may not be defined
 
+        // dynsym
         if (output_elf_file->type == ET_DYN) {
-            // dynsym
             ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_dynsym->data;
             ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_dynsym_index];
+
             elf_symbol->st_value = symbol->dst_value;
             elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
         }
@@ -1412,4 +1446,13 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
 
     if (data_copy_section)
         data_copy_section->data = calloc(1, sizeof(data_copy_section->size));
+}
+
+// Any ELF file that has a PT_DYNAMIC section must add a local _DYNAMIC symbol.
+// Add a _DYNAMIC symbol for ET_DYN outputs
+void add_dynamic_symbol(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type == ET_DYN) {
+        add_defined_symbol(global_symbol_table, DYNAMIC_SYMBOL_NAME, 0, STT_OBJECT, STB_LOCAL, STV_DEFAULT, 0, 0, 0);
+        resolve_undefined_symbol(DYNAMIC_SYMBOL_NAME, 0, 0, 0);
+    }
 }

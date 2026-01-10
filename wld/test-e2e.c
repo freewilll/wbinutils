@@ -1242,12 +1242,13 @@ static void test_shared_library_no_dependencies() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
-        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
-        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
-        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
-        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
-        0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
+        0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",    "i",
+        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",    "j",
+        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",     "k",
+        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",     "l",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "f1",
+        0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "f2",
         END);
 }
 
@@ -1615,7 +1616,8 @@ static void test_dynamic_executable_sanity() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
 
     assert_dynsym(elf_file,
