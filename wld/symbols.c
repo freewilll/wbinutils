@@ -44,16 +44,25 @@ int symbol_nv_compare(const void *a, const void *b) {
 }
 
 static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, const SymbolNV *snv) {
+    // If we're not making a dynamic ELF, then there is no dynsym
+    if (output_elf_file->type != ET_DYN) return 0;
+
+    // Exclude special symbol .
     if (!strcmp(symbol->name, ".")) return 0;
+
+    // Hidden and internal symbols never go in the .dynsym
     if (symbol->visibility == STV_HIDDEN || symbol->visibility == STV_INTERNAL) return 0;
+
+    // Local symbols are never go in the .dynsym
+    if (symbol->binding == STB_LOCAL) return 0;
 
     // Don't add defined symbols that aren't exported to .dynsym
     int is_exported_binding = symbol->binding == STB_GLOBAL || symbol->binding == STB_WEAK;
     int is_undefined = is_undefined_symbol(symbol->name, snv->version_index);
     if (!is_exported_binding && !is_undefined) return 0;
 
-    // When making a shared library, only include symbols from other shared libraries that resolve undefined symbols.
-    if (symbol->src_is_shared_library && output_elf_file->type == ET_DYN)
+    // Only include symbols from other shared libraries that resolve undefined symbols.
+    if (symbol->src_is_shared_library)
         return symbol->resolves_undefined_symbol;
 
     return 1;
