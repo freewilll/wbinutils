@@ -30,7 +30,7 @@ static void read_header(InputElfFile *elf_file) {
     fseek(elf_file->file, elf_file->file_offset, SEEK_SET);
     elf_file->elf_header = malloc(sizeof(ElfHeader));
     int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
-    if (read != sizeof(ElfHeader)) error("Unable to read input file: %s", elf_file->filename);
+    if (read != sizeof(ElfHeader)) error("Unable to read ELF header from input file: %s", elf_file->filename);
     elf_file->type = elf_file->elf_header->e_type;
 }
 
@@ -38,7 +38,7 @@ static void read_header(InputElfFile *elf_file) {
 static void *read_from_file(InputElfFile *elf_file, void *dst, uint64_t offset, uint64_t size) {
     fseek(elf_file->file, elf_file->file_offset + offset, SEEK_SET);
     int read = fread(dst, 1, size, elf_file->file);
-    if (read != size) error("Unable to read input file: %s", elf_file->filename);
+    if (read != size) error("Unable to read from input ELF file: %s", elf_file->filename);
 }
 
 // Allocate memory for a section, read it, and return it
