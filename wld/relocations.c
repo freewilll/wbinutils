@@ -556,10 +556,14 @@ static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, Inp
             Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
             if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol_name);
 
-            if (result == SCAN_RELOCATION_NEEDS_GOT)
+            if (result == SCAN_RELOCATION_NEEDS_GOT) {
                 symbol->needs_got = 1;
-            else
+                symbol->needs_dynsym_entry = 1;
+            }
+            else {
                 symbol->needs_got_plt = 1;
+                symbol->needs_dynsym_entry = 1;
+            }
 
             break;
         }

@@ -61,11 +61,16 @@ static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, c
     int is_undefined = is_undefined_symbol(symbol->name, snv->version_index);
     if (!is_exported_binding && !is_undefined) return 0;
 
-    // Only include symbols from other shared libraries that resolve undefined symbols.
-    if (symbol->src_is_shared_library)
-        return symbol->resolves_undefined_symbol;
+    // Include symbols with relocations
+    if (symbol->needs_dynsym_entry) return 1;
 
-    return 1;
+    // Only include symbols from other shared libraries that resolve undefined symbols.
+    if (symbol->src_is_shared_library) return 0;
+
+    // Implicit else, the symbol is not from a shared library.
+    // For executables, include no symbols, since no dynamic linking will be done to them.
+    // for shared libraries, include them all, since they need to be exported.
+    return !output_elf_file->is_executable;
 }
 
 static const char *SYMBOL_TYPE_NAMES[] = {
@@ -377,6 +382,8 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
     InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
 
     if (found_symbol)  {
+        if (DEBUG_SYMBOL_RESOLUTION) printf("  Merging two symbols %s existing binding=%s found binding=%s ...",
+            found_symbol->name, SYMBOL_BINDING_NAMES[found_symbol->binding], SYMBOL_BINDING_NAMES[esc->binding]);
         // Check bindings
 
         // Two strong bindings
@@ -386,17 +393,21 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
             if (!esc->is_library) fail(esc->elf_file, "Multiple definition of %s", esc->snv->name);
 
             // The second symbol is ignored
+            if (DEBUG_SYMBOL_RESOLUTION) printf("doing nothing\n");
         }
 
         // For weak-weak it's first come first served. Use the existing symbol
-        else if (found_symbol->binding == STB_WEAK && esc->binding == STB_WEAK)
-            ; // Do nothing
+        else if (found_symbol->binding == STB_WEAK && esc->binding == STB_WEAK) {
+            // Do nothing
+            if (DEBUG_SYMBOL_RESOLUTION) printf("doing nothing, the existing symbol takes precedence in weak-weak\n");
+        }
         else {
             // One is strong and one is weak.
             // Two cases:
             // - If the new symbol is strong and not in a library, it resolves the exiting weak one.
             // - If the new symbol is strong and is being loaded, it resolves the exiting weak one.
             if (esc->binding != STB_WEAK && (!esc->is_library || !esc->read_only)) {
+                if (DEBUG_SYMBOL_RESOLUTION) printf("the new symbol overrides the existing one\n");
                 // The new symbol is strong and takes over
                 result = 1;
 
@@ -408,6 +419,17 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
                     found_symbol->binding = esc->binding;
                 }
             }
+            else {
+                if (DEBUG_SYMBOL_RESOLUTION) printf("doing nothing, the new weak symbol is ignored\n");
+            }
+
+            // Determine if this symbol needs to be in the .dynsym table
+            // This is necessary if one of them is in a shared library and the other in an object file
+            int in_dynymm =
+                (esc->is_shared_library && !found_symbol->src_is_shared_library) ||
+                (!esc->is_shared_library && !found_symbol->src_is_shared_library);
+
+            if (in_dynymm) found_symbol->needs_dynsym_entry = 1;
         }
     }
     else {
@@ -1178,6 +1200,7 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
 
             // Reserve .got.iplt entry
             symbol->needs_got_iplt = 1;
+            symbol->needs_dynsym_entry = 1;
 
             if (!section_got_iplt) {
                 section_got_iplt = create_extra_section(output_elf_file, GOT_IPLT_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, 8);
@@ -1480,6 +1503,7 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
             symbol->input_section = data_copy_section;
             symbol->src_value = data_copy_section->size;
             symbol->needs_copy = 1;
+            symbol->needs_dynsym_entry = 1;
             symbol->src_is_shared_library = 0;
 
             data_copy_section->size += symbol->size;

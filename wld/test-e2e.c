@@ -1614,7 +1614,7 @@ static void test_dynamic_executable_sanity() {
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
         PT_PHDR,          0x0040,  0x000040,  0x150,   0x150,  PF_R,         0x0008,
         PT_LOAD,          0x0000,  0x00000,   0x280,   0x280,  PF_R,         0x1000,
-        PT_LOAD,          0x1000,  0x001000,  0x04c,   0x4c,   PF_R,         0x1000,
+        PT_LOAD,          0x1000,  0x001000,  0x029,   0x29,   PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x002000,  0x010,   0x10,   PF_R | PF_X,  0x1000,
         PT_LOAD,          0x3000,  0x003000,  0x064,   0x64,   PF_R | PF_W,  0x1000,
         PT_DYNAMIC,       0x3000,  0x003000,  0x060,   0x60,   PF_R | PF_W,  0x0008,
@@ -1627,10 +1627,7 @@ static void test_dynamic_executable_sanity() {
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
 
-    assert_dynsym(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
-        END);
+    assert_dynsym(elf_file, END);
 }
 
 void test_dynamic_executable_using_an_object_in_a_library() {
@@ -1663,10 +1660,10 @@ void test_dynamic_executable_using_an_object_in_a_library() {
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
-        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
-        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
-        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x1a,  SHF_ALLOC,                 1,
-        ".rela.dyn",       SHT_RELA,       0x1080,   0x1080, 0x18,  SHF_ALLOC,                 8,
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x07,  SHF_ALLOC | SHF_EXECINSTR, 16,
         ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
         ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
@@ -1675,13 +1672,12 @@ void test_dynamic_executable_using_an_object_in_a_library() {
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
         0x30a0,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
         END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Address  Offset
-        R_X86_64_COPY,     2,                0x30a0,  0,
+        R_X86_64_COPY,     1,                0x30a0,  0,
         END);
 }
 
@@ -1709,10 +1705,10 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
-        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
-        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
-        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x0c,  SHF_ALLOC,                 1,
-        ".rela.dyn",       SHT_RELA,       0x1070,   0x1070, 0x18,  SHF_ALLOC,                 8,
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x10,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1010,   0x1010, 0x18,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1028,   0x1028, 0x01,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1030,   0x1030, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x01,  SHF_ALLOC | SHF_EXECINSTR, 16,
         ".rodata",         SHT_PROGBITS,   0x3000,   0x3000, 0x0d,  SHF_ALLOC,                 4,
         ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
@@ -1720,11 +1716,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
         NULL
     );
 
-    assert_dynsym(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x4090,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "foo",
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
-        END);
+    assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Address  Offset
@@ -1758,12 +1750,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data
 
     OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
-    assert_dynsym(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
-        0x3090,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "x",
-        0x3098,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "px",
-        END);
+    assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Address  Offset
@@ -1793,12 +1780,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_da
 
     OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
-    assert_dynsym(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
-        0x3098,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",  "x",
-        0x3090,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "px",
-        END);
+    assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Address  Offset
@@ -1839,12 +1821,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
 
     OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
-    assert_dynsym(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x4090,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "foo",
-        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
-        0x4098,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data", "bar",
-        END);
+    assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Address  Offset

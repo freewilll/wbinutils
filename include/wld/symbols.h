@@ -34,6 +34,7 @@ typedef struct symbol {
     int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt table
     int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt table, for ifuncs
     int needs_copy;                 // Uses a R_X86_64_COPY relocation to copy data from a shared lib to an executable
+    int needs_dynsym_entry;         // Set to 1 if the symbol needs a dynsym entry. 0 doesn't exclude it from the .dynsym.
     uint64_t got_offset;            // Offset in the .got section, if present
     uint64_t got_plt_offset;        // Offset in the .got.plt section, if present
     uint64_t got_iplt_offset;       // Offset in the .got.iplt section, if present
