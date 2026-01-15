@@ -786,8 +786,12 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
             if (DEBUG_RELOCATIONS) {
                 printf("%-60s %-60s value=%08lx  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
-                if (symbol->binding != STB_WEAK)
-                    printf("dst sec off %#0lx sec off %#08lx\n", symbol->input_section->output_section->offset, symbol->input_section->dst_offset);
+                if (symbol->binding != STB_WEAK) {
+                    if (symbol->input_section)
+                        printf("dst sec off %#0lx sec off %#08lx\n", symbol->input_section->output_section->offset, symbol->input_section->dst_offset);
+                    else
+                        printf("no input section");
+                }
                 else
                     printf("\n");
             }
