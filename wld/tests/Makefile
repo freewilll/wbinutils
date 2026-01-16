@@ -8,6 +8,7 @@ test: \
 	musl-libc-hello-world \
 	musl-libc-tls-hello-world \
 	lib-object-file-selection \
+	lib-two-libs-with-same-object-filename-inside \
 	symbol-resolution-bindings \
 	symbol-resolution-double-strong-bindings \
 	symbol-resolution-weak-strong-bindings \
@@ -60,6 +61,10 @@ musl-libc-tls-hello-world:
 .PHONY: lib-object-file-selection
 lib-object-file-selection:
 	+$(MAKE) -C lib-object-file-selection
+
+.PHONY: lib-two-libs-with-same-object-filename-inside
+lib-two-libs-with-same-object-filename-inside:
+	+$(MAKE) -C lib-two-libs-with-same-object-filename-inside
 
 .PHONY: symbol-resolution-bindings
 symbol-resolution-bindings:
@@ -165,6 +170,7 @@ clean:
 	@+$(MAKE) -C musl-libc-hello-world clean
 	@+$(MAKE) -C musl-libc-tls-hello-world clean
 	@+$(MAKE) -C lib-object-file-selection clean
+	@+$(MAKE) -C lib-two-libs-with-same-object-filename-inside clean
 	@+$(MAKE) -C symbol-resolution-bindings clean
 	@+$(MAKE) -C symbol-resolution-double-strong-bindings clean
 	@+$(MAKE) -C symbol-resolution-weak-strong-bindings clean

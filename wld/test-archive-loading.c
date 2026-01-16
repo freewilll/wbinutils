@@ -24,13 +24,16 @@ int main() {
     ArchiveFile *file = open_archive_file("libtest-archive-loading.a");
     assert_int(1, file->objects->length, "The file has one object");
     ArchiveFile *af = file->objects->elements[0];
-    assert_string("test-archive-loading.o", af->filename, "The file has test-archive-loading.o");
+    assert_string("libtest-archive-loading.a:test-archive-loading.o", af->filename,
+        "The file has libtest-archive-loading.a:test-archive-loading.o");
 
     // Test libtest-archive-loading-long.a which has two objects in it, one with a long filename
     file = open_archive_file("libtest-archive-loading-long.a");
     assert_int(2, file->objects->length, "The file has one object");
     af = file->objects->elements[0];
-    assert_string("test-archive-loading.o", af->filename, "The file has test-archive-loading.o");
+    assert_string("libtest-archive-loading-long.a:test-archive-loading.o", af->filename,
+        "The file has libtest-archive-loading-long.a:test-archive-loading.o");
     af = file->objects->elements[1];
-    assert_string("a-very-very-very-long-object-filename.o", af->filename, "The file has a-very-very-very-long-object-filename.o");
+    assert_string("libtest-archive-loading-long.a:a-very-very-very-long-object-filename.o", af->filename,
+        "The file has libtest-archive-loading-long.a:a-very-very-very-long-object-filename.o");
 }

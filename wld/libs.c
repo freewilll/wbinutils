@@ -112,7 +112,10 @@ void index_archive_file(ArchiveFile *ar_file) {
             // Append to the objects list
 
             ArchiveFileObject *ar_file_object = malloc(sizeof(ArchiveFileObject));
-            ar_file_object->filename = strdup(name);
+
+            char *filename = malloc(strlen(name) + strlen(ar_file->filename) + 2);
+            sprintf(filename, "%s:%s", ar_file->filename, name);
+            ar_file_object->filename = filename;
             ar_file_object->offset = ftell(ar_file->file);
             append_to_list(ar_file->objects, ar_file_object);
         }
