@@ -32,7 +32,8 @@ test: \
 	musl-libc-dynamic-hello-world \
 	musl-libc-dynamic-fprintf-to-stdout \
 	musl-libc-dynamic-R_X86_64_RELATIVE-relocations \
-	musl-libc-dynamic-weak-strong-library-symbol
+	musl-libc-dynamic-weak-strong-library-symbol \
+	glibc-tls-alignment \
 
 .PHONY: sanity1
 sanity1:
@@ -162,6 +163,10 @@ musl-libc-dynamic-R_X86_64_RELATIVE-relocations:
 musl-libc-dynamic-weak-strong-library-symbol:
 	+$(MAKE) -C musl-libc-dynamic-weak-strong-library-symbol
 
+.PHONY: glibc-tls-alignment
+glibc-tls-alignment:
+	+$(MAKE) -C glibc-tls-alignment
+
 clean:
 	@+$(MAKE) -C sanity1 clean
 	@+$(MAKE) -C sanity2 clean
@@ -195,3 +200,4 @@ clean:
 	@+$(MAKE) -C musl-libc-dynamic-fprintf-to-stdout clean
 	@+$(MAKE) -C musl-libc-dynamic-R_X86_64_RELATIVE-relocations clean
 	@+$(MAKE) -C musl-libc-dynamic-weak-strong-library-symbol clean
+	@+$(MAKE) -C glibc-tls-alignment clean

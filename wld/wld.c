@@ -684,18 +684,26 @@ static void prepare_tls_template(OutputElfFile *output_elf_file) {
     if (tdata_section && tbss_section && tdata_section->index != tbss_section->index - 1)
         panic(".tdata and .tss sections aren't consecutive: %d != %d - 1", tdata_section->index, tbss_section->index);
 
+    uint64_t align;
     if (tdata_section && !tbss_section) {
         output_elf_file->tls_template_size = tdata_section->size;
         output_elf_file->tls_template_address = tdata_section->address;
+        align = tdata_section->align;
     }
     else if (!tdata_section && tbss_section) {
         output_elf_file->tls_template_size = tbss_section->size;
         output_elf_file->tls_template_address = tbss_section->address;
+        align = tbss_section->align;
     }
     else if (tdata_section && tbss_section) {
         output_elf_file->tls_template_size = tbss_section->offset - tdata_section->offset + tbss_section->size;
         output_elf_file->tls_template_address = tdata_section->address;
+        align = tdata_section->align > tbss_section->align ? tdata_section->align : tbss_section->align;
     }
+
+    // See 3.4.6 of ELF Handling for Thread Local Storage
+    // The offset from the thread pointer to the start of the template has to be a multiple of the aligment.
+    output_elf_file->tls_template_tls_offset = ALIGN_UP(output_elf_file->tls_template_size, align);
 }
 
 // Copy the memory for all program sections in the input files to the output file

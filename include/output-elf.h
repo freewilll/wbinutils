@@ -61,6 +61,7 @@ typedef struct output_elf  {
     uint64_t tls_template_tbss_size;                        // Size of the bss part of the TLS template
     uint64_t tls_template_size;                             // Size of the TLS template
     uint64_t tls_template_address;                          // Virtual address of the TLS template
+    uint64_t tls_template_tls_offset;                       // Offset from the thread pointer where the data begins
     uint64_t got_virt_address;                              // Virtual address of the GOT
     uint64_t got_iplt_virt_address;                         // Virtual address of .got.iplt
     uint64_t plt_offset;                                    // Offset of .plt

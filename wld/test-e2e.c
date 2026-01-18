@@ -490,6 +490,35 @@ static void *write_file(const char *filename, const char *contents) {
     fclose(f);
 }
 
+// Run GNU as. This is fragile as GNU as output can't be expected to be consistent
+// in different versions.
+static char *run_as(char *assembly) {
+    // Write out assembly to a temp file
+    char source_path[] = "/tmp/asm_XXXXXX";
+    int fd = mkstemp(source_path);
+    if (fd == -1) { perror("mkstemp"); exit(1); }
+
+    FILE *source_file = fdopen(fd, "w");
+    if (!source_file) { perror("fdopen"); exit(1); }
+    fprintf(source_file, "%s\n", assembly);
+    fclose(source_file);
+
+    char object_path[] = "/tmp/asm_XXXXXX";
+    fd = mkstemp(object_path);
+    if (fd == -1) { perror("mkstemp"); exit(1); }
+
+    // Assemble using ../bin/was
+    char command[512];
+    snprintf(command, sizeof(command), "as -o %s %s", object_path, source_path);
+    int result = system(command);
+    if (result) {
+        printf("Was failed with exit code %d\n", result >> 8);
+        exit(1);
+    }
+
+    return strdup(object_path);
+}
+
 static char *run_was(char *assembly) {
     // Write out assembly to a temp file
     char source_path[] = "/tmp/asm_XXXXXX";
@@ -891,6 +920,63 @@ static void test_tls() {
         PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R ,        8,
         END
     );
+}
+
+// Test the start of the TLS template is a multiple of the TLS section's alignment
+static void test_tls_aligment() {
+    char *object_path1 = run_as(
+        "    .globl	data2;"
+        "    .section .tdata,\"awT\",@progbits;"
+        "    .align 8;"
+        "    .type data2, @object;"
+        "    .size data2, 8;"
+        "data2: .quad 43"
+    );
+
+    char *object_path2 = run_as(
+        "    .globl	data1;"
+        "    .section .tdata,\"awT\",@progbits;"
+        "    .align 4;"
+        "    .type data1, @object;"
+        "    .size data1, 4;"
+        "data1: .long 42;"
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+	    "movl %fs:data1@tpoff, %eax;"
+	    "movq data2@gottpoff(%rip), %rax;"
+        "movq %fs:(%rax), %rax"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+    append_to_list(input_paths, object_path2);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, "test_tls_aligment");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                            Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x13,  SHF_ALLOC | SHF_EXECINSTR,       1,
+        ".tdata",         SHT_PROGBITS,   0x402ff0, 0x2ff0, 0x0c,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 8,
+        NULL
+    );
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x180,   0x180,  PF_R,         0x1000,
+        PT_LOAD,          0x1000,  0x401000,  0x13,    0x13,   PF_R | PF_X,  0x1000,
+        PT_LOAD,          0x2ff0,  0x402ff0,  0x0c,    0x0c,   PF_R | PF_W,  0x1000,
+        PT_TLS,           0x2ff0,  0x402ff0,  0x0c,    0x0c,   PF_R ,        8,
+        END
+    );
+
+    // The TLS section size is 12, and alignment 8. This gets aligned to 16,
+    // so that he start of the TLS section is 16 bytes below the thread pointer.
+    assert_section_data(elf_file, ".text",
+        0x64, 0x8b, 0x04, 0x25, 0xf8, 0xff, 0xff, 0xff,     // mov %fs:-8,%eax          data1 is at the thread pointer -8
+        0x48, 0xc7, 0xc0, 0xf0, 0xff, 0xff, 0xff,           // mov $-16,%rax            data2 is at the thread pointer -16
+        0x64, 0x48, 0x8b, 0x00,                             // mov %fs:(%rax),%rax
+        END);
 }
 
 // Test merging of two bss sections in different files
@@ -1837,6 +1923,7 @@ int main() {
     test_orphan_sections_rearrangement();
     test_orphan_sections_no_rearrangement();
     test_tls();
+    test_tls_aligment();
     test_two_bss_sections();
     test_data_and_two_bss_sections();
     test_etext_undefined();

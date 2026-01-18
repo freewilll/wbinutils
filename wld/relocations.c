@@ -186,7 +186,7 @@ int apply_relocation(
     if (type == R_X86_64_GOTTPOFF) {
         // Convert a foo@GOTTPOFF(%rip) to foo@GOTPCREL(%rip)
         type = R_X86_64_REX_GOTPCRELX;
-        S -= output_elf_file->tls_template_size;
+        S -= output_elf_file->tls_template_tls_offset;
     }
 
     if (DEBUG_RELOCATIONS) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
@@ -282,7 +282,7 @@ int apply_relocation(
 
         case R_X86_64_TPOFF32: {
             uint32_t *output = (uint32_t *) output_pointer;
-            uint32_t value = S + A - output_elf_file->tls_template_size;
+            uint32_t value = S + A - output_elf_file->tls_template_tls_offset;
             if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
             *output = value;
             break;

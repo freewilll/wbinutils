@@ -53,10 +53,10 @@ void assert_data(char *data, ...) {
     va_end(ap);
 }
 
-void run_full_relocation(int output_type, void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset, uint64_t value_plt_offset, int link_dynamically, int output_is_shared) {
+void run_full_relocation(int output_type, void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset, uint64_t value_plt_offset, int link_dynamically, int output_is_shared) {
     OutputElfFile *output_elf_file = new_output_elf_file("", output_type);
     output_elf_file->tls_template_address = tls_template_address;
-    output_elf_file->tls_template_size = tls_template_size;
+    output_elf_file->tls_template_tls_offset = tls_template_tls_offset;
 
     ElfRelocation relocation = {.r_offset = output_offset, .r_info = type, .r_addend = addend};
 
@@ -83,8 +83,8 @@ void run_full_relocation(int output_type, void *output_data, uint64_t output_off
 }
 
 // Runs a relocation with TLS args
-void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_size, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, int output_is_shared) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, tls_template_address, tls_template_size, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1, -1, 0, output_is_shared);
+void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, int output_is_shared) {
+    run_full_relocation(ET_EXEC, output_data, output_offset, tls_template_address, tls_template_tls_offset, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1, -1, 0, output_is_shared);
 }
 
 // Runs a relocation with a GOT value

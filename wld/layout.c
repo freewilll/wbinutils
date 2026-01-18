@@ -523,7 +523,6 @@ static void layout_one_section_in_executable(OutputElfFile *output_elf_file, Out
 
     // Save the total size of the .tdata + .tbss sections
     if (section->type == SHT_NOBITS && (section->flags & SHF_TLS)) {
-        output_elf_file->tls_template_size = dot_symbol->dst_value - output_elf_file->tls_template_offset + section->size;
         output_elf_file->tls_template_tbss_size = section->size;
     }
 
