@@ -76,7 +76,8 @@ typedef struct output_elf  {
     int got_entries_count;                                  // Used by wld
     int got_plt_entries_count;                              // Used by wld
     List *shared_libraries;                                 // Used by wld
-    List *extra_rela_dyn_symbols;                           // Used by wld
+    List *rela_dyn_R_X86_64_RELATIVE_relocations;           // Used by wld
+    List *rela_dyn_R_X86_64_64_relocations;                 // Used by wld
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     uint64_t elf_program_segments_header_size;              // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

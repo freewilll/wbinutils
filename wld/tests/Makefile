@@ -33,6 +33,8 @@ test: \
 	musl-libc-dynamic-fprintf-to-stdout \
 	musl-libc-dynamic-R_X86_64_RELATIVE-relocations \
 	musl-libc-dynamic-weak-strong-library-symbol \
+	musl-libc-dynamic-pointer-to-function-in-lib \
+	musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib \
 	glibc-tls-alignment \
 
 .PHONY: sanity1
@@ -163,6 +165,14 @@ musl-libc-dynamic-R_X86_64_RELATIVE-relocations:
 musl-libc-dynamic-weak-strong-library-symbol:
 	+$(MAKE) -C musl-libc-dynamic-weak-strong-library-symbol
 
+.PHONY: musl-libc-dynamic-pointer-to-function-in-lib
+musl-libc-dynamic-pointer-to-function-in-lib:
+	+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib
+
+.PHONY: musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib
+musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib:
+	+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib
+
 .PHONY: glibc-tls-alignment
 glibc-tls-alignment:
 	+$(MAKE) -C glibc-tls-alignment
@@ -200,4 +210,6 @@ clean:
 	@+$(MAKE) -C musl-libc-dynamic-fprintf-to-stdout clean
 	@+$(MAKE) -C musl-libc-dynamic-R_X86_64_RELATIVE-relocations clean
 	@+$(MAKE) -C musl-libc-dynamic-weak-strong-library-symbol clean
+	@+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib clean
+	@+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib clean
 	@+$(MAKE) -C glibc-tls-alignment clean

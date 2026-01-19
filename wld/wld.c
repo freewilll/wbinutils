@@ -92,7 +92,8 @@ OutputElfFile *init_output_elf_file(const char *output_filename, int output_type
     result->ifunc_symbols = new_list(0);
     result->global_symbols_in_use  = new_strmap();
     result->is_executable = output_type & OUTPUT_TYPE_FLAG_EXECUTABLE;
-    result->extra_rela_dyn_symbols = new_list(32);
+    result->rela_dyn_R_X86_64_RELATIVE_relocations = new_list(32);
+    result->rela_dyn_R_X86_64_64_relocations = new_list(32);
 
     return result;
 }

@@ -1916,6 +1916,136 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
         END);
 }
 
+// An executable calls a function in a shared library through a function pointer
+// The function pointer has a R_X86_64_64 relocation which must make it
+// into the .rela.dyn of the executable.
+void test_dynamic_executable_R_X86_64_64_relocation() {
+    // Make a lib with a function
+    char *object_path1 = run_was(
+        ".globl f;"
+        ".text;"
+        "f:"
+        "    movl $42, %eax;"
+        "    ret;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_R_X86_64_64_relocation");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    char *object_path2 = run_was(
+    "    .data;"
+    "    .align   8;"
+    "    .type    pf, @object;"
+    "    .size    pf, 8;"
+    "pf:;"
+    "    .quad    f;"
+    "    .text;"
+    "    .globl  _start;"
+    "_start:;"
+    "    movq        pf(%rip), %rbx;"
+    "    callq       *%rbx;"
+    "    movl        $1, %eax;"
+    "    movl        $0, %ebx;" // Exit code
+    "    int        $0x80;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path2);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_64_relocation");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x15,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x0000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",     "f",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_64,       1,                0x30a0,  0x0000,
+        END);
+}
+
+// Similar to test_dynamic_executable_R_X86_64_64_relocation,
+// except that it's a library a function in another library through a pointer
+void test_dynamic_library_R_X86_64_64_relocation() {
+    // Make a lib with a function
+    char *object_path1 = run_was(
+        ".globl f;"
+        ".text;"
+        "f:"
+        "    movl $42, %eax;"
+        "    ret;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_R_X86_64_64_relocation");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    char *object_path2 = run_was(
+    "    .data;"
+    "    .align   8;"
+    "    .type    pf, @object;"
+    "    .size    pf, 8;"
+    "pf:;"
+    "    .quad    f;"
+    "    .text;"
+    "    .globl  _start;"
+    "g:;"
+    "    movq        pf(%rip), %rbx;"
+    "    callq       *%rbx;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path2);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_R_X86_64_64_relocation");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x09,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x0000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",     "f",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Address  Offset
+        R_X86_64_64,       1,                0x30a0,  0x0000,
+        END);
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -1943,4 +2073,6 @@ int main() {
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_data();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files();
+    test_dynamic_executable_R_X86_64_64_relocation();
+    test_dynamic_library_R_X86_64_64_relocation();
 }

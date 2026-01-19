@@ -902,7 +902,8 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
         if (symbol->needs_got || symbol->needs_copy) rela_dyn_entry_count++;
     }
 
-    rela_dyn_entry_count += output_elf_file->extra_rela_dyn_symbols->length;
+    rela_dyn_entry_count += output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations->length;
+    rela_dyn_entry_count += output_elf_file->rela_dyn_R_X86_64_64_relocations->length;
 
     output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
     output_elf_file->rela_dyn_entry_count = rela_dyn_entry_count;
@@ -1441,8 +1442,8 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     }
 
     // Add extra dyn entries for R_X86_64_RELATIVE relocations
-    for (int j = 0; j < output_elf_file->extra_rela_dyn_symbols->length; j++) {
-        RelativeRelaDynRelocation *rrdr = output_elf_file->extra_rela_dyn_symbols->elements[j];
+    for (int j = 0; j < output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations->length; j++) {
+        RelativeRelaDynRelocation *rrdr = output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations->elements[j];
 
         uint64_t addend;
 
@@ -1457,6 +1458,20 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
 
         ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
         r->r_info = R_X86_64_RELATIVE;
+        r->r_offset = rrdr->target_section->output_section->offset + rrdr->target_section->dst_offset + rrdr->offset;
+        r->r_addend = addend;
+
+        i++;
+    }
+
+    // Add extra dyn entries for R_X86_64_64 relocations
+    for (int j = 0; j < output_elf_file->rela_dyn_R_X86_64_64_relocations->length; j++) {
+        RelativeRelaDynRelocation *rrdr = output_elf_file->rela_dyn_R_X86_64_64_relocations->elements[j];
+        if (!rrdr->symbol) panic("Did not get a symbol for a R_X86_64_64 relocation\n");
+        uint64_t addend = rrdr->symbol->dst_value + rrdr->addend;
+
+        ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
+        r->r_info = R_X86_64_64 + ((uint64_t) rrdr->symbol->dst_dynsym_index << 32);
         r->r_offset = rrdr->target_section->output_section->offset + rrdr->target_section->dst_offset + rrdr->offset;
         r->r_addend = addend;
 
