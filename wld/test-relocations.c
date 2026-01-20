@@ -53,10 +53,11 @@ void assert_data(char *data, ...) {
     va_end(ap);
 }
 
-void run_full_relocation(int output_type, void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset, uint64_t value_plt_offset, int link_dynamically, int output_is_shared) {
+void run_full_relocation(int output_type, void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset, uint64_t value_plt_offset, int link_dynamically, int output_is_shared, int is_executable) {
     OutputElfFile *output_elf_file = new_output_elf_file("", output_type);
     output_elf_file->tls_template_address = tls_template_address;
     output_elf_file->tls_template_tls_offset = tls_template_tls_offset;
+    output_elf_file->is_executable = is_executable;
 
     ElfRelocation relocation = {.r_offset = output_offset, .r_info = type, .r_addend = addend};
 
@@ -67,7 +68,6 @@ void run_full_relocation(int output_type, void *output_data, uint64_t output_off
     uint64_t rw_section_address = output_virtual_address - output_offset;
     uint64_t rw_section_offset = rw_section_address - 0x400000;
 
-    int is_executable = 0;
     int symbol_is_from_shared_library = 0;
     int result = scan_relocation(output_data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, &relocation);
     if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);
@@ -85,27 +85,27 @@ void run_full_relocation(int output_type, void *output_data, uint64_t output_off
 
 // Runs a relocation with TLS args
 void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, int output_is_shared) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, tls_template_address, tls_template_tls_offset, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1, -1, 0, output_is_shared);
+    run_full_relocation(ET_EXEC, output_data, output_offset, tls_template_address, tls_template_tls_offset, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1, -1, 0, output_is_shared, 0);
 }
 
 // Runs a relocation with a GOT value
 void run_got_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_got_offset) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, value_got_offset, -1, -1, -1, 0, 0);
+    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, value_got_offset, -1, -1, -1, 0, 0, 0);
 }
 
 // Runs a relocation with a .got.iplt value
 void run_got_iplt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_got_iplt_offset) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -1, -1, value_got_iplt_offset, -1, 0, 0);
+    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -1, -1, value_got_iplt_offset, -1, 0, 0, 0);
 }
 
 // Runs a relocation with an .iplt value
 void run_iplt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_iplt_offset) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, value_iplt_offset, -1, -1, 0, 0);
+    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, value_iplt_offset, -1, -1, 0, 0, 0);
 }
 
 // Runs a relocation with an .plt value
 void run_plt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_plt_offset, int link_dynamically) {
-    run_full_relocation(ET_DYN, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, -1, -1, value_plt_offset, link_dynamically, 0);
+    run_full_relocation(ET_DYN, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, -1, -1, value_plt_offset, link_dynamically, 0, 0);
 }
 
 // Runs a regular relocation
@@ -119,8 +119,82 @@ void run_relocation_on_shared_object(void *output_data, uint64_t output_offset, 
 }
 
 void test_R_X86_64_64(void) {
-    uint64_t output_data[4]; memset(output_data, -1, 32);
-    run_relocation(output_data, 8, R_X86_64_64, 0x10, 0x400000, 0x401000);
+    uint64_t output_data[4];
+    memset(output_data, -1, 32);
+
+    // The relocation must be applied to a statically linked executable
+    run_full_relocation(
+        ET_EXEC,        // ELF type
+        output_data,    // ELF section data
+        8,              // output_offset,
+        0,              // tls_template_address
+        0,              // tls_template_tls_offset
+        R_X86_64_64,    // type
+        0x10,           // addend,
+        0x400000,       // output_virtual_address
+        0x401000,       // value
+        0,              // is_tls_value,
+        -1,             // value_got_offset
+        -1,             // value_iplt_offset
+        -1,             // value_got_iplt_offset
+        -1,             // value_plt_offset
+        0,              // link_dynamically
+        0,              // output_is_shared,
+        1               // is_executable
+    );
+
+    assert_uint64(-1, output_data[0], "R_X86_64_64");
+    assert_uint64(0x401010, output_data[1], "R_X86_64_64");
+    assert_uint64(-1, output_data[2], "R_X86_64_64");
+
+    // The relocation must be applied to a dynamically linked executable
+    memset(output_data, -1, 32);
+
+    run_full_relocation(
+        ET_DYN,        // ELF type
+        output_data,    // ELF section data
+        8,              // output_offset,
+        0,              // tls_template_address
+        0,              // tls_template_tls_offset
+        R_X86_64_64,    // type
+        0x10,           // addend,
+        0x400000,       // output_virtual_address
+        0x401000,       // value
+        0,              // is_tls_value,
+        -1,             // value_got_offset
+        -1,             // value_iplt_offset
+        -1,             // value_got_iplt_offset
+        -1,             // value_plt_offset
+        0,              // link_dynamically
+        0,              // output_is_shared,
+        1               // is_executable
+    );
+    assert_uint64(-1, output_data[0], "R_X86_64_64");
+    assert_uint64(0x401010, output_data[1], "R_X86_64_64");
+    assert_uint64(-1, output_data[2], "R_X86_64_64");
+
+    // The relocation must be applied to a dynamically linked shared library
+    memset(output_data, -1, 32);
+
+    run_full_relocation(
+        ET_DYN,        // ELF type
+        output_data,    // ELF section data
+        8,              // output_offset,
+        0,              // tls_template_address
+        0,              // tls_template_tls_offset
+        R_X86_64_64,    // type
+        0x10,           // addend,
+        0x400000,       // output_virtual_address
+        0x401000,       // value
+        0,              // is_tls_value,
+        -1,             // value_got_offset
+        -1,             // value_iplt_offset
+        -1,             // value_got_iplt_offset
+        -1,             // value_plt_offset
+        0,              // link_dynamically
+        0,              // output_is_shared,
+        0               // is_executable
+    );
     assert_uint64(-1, output_data[0], "R_X86_64_64");
     assert_uint64(0x401010, output_data[1], "R_X86_64_64");
     assert_uint64(-1, output_data[2], "R_X86_64_64");

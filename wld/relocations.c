@@ -197,11 +197,9 @@ int apply_relocation(
         case R_X86_64_64: {
             uint64_t value;
 
-            if (output_elf_file->type == ET_DYN && output_elf_file->is_executable)
-                // This cannot be resolved here. A .rela.dyn R_X86_64_RELATIVE or R_X86_64_64 relocation is needed
-                value = 0;
-            else
-                value = S + A;
+            // This  value is used in static executables,
+            // This is also used in DWARF sections in dynamic executables.
+            value = S + A;
 
             uint64_t *output = (uint64_t *) output_pointer;
 

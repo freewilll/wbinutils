@@ -1591,12 +1591,17 @@ static void test_shared_lib_with_two_objects() {
 }
 
 // Ensure the relocation to .debug_abbrev is correct and the address is zero.
+// Ensure the relocation to .text is set in .debug_lines.
+// This tests both static and dynamic executables.
 static void test_dwarf() {
     char *object_path = run_was(
         ".globl _start;"
         ".text;"
         "_start:;"
+        "   .file 1 \"test.c\";"
+        "   .loc 1 4;"
         "    movl $1, %eax;"
+        "   .loc 1 4;"
         "    movl $0, %ebx;"
         "    int $0x80;"
         ".section foo, \"aw\", @progbits;"
@@ -1611,7 +1616,18 @@ static void test_dwarf() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
+    // Static executable
     OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "dwarf lines");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        "foo",            SHT_PROGBITS,   0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,     1,
+        ".debug_info",    SHT_PROGBITS,   0x000000, 0x3000, 0x04,  0,                         1,
+        ".debug_abbrev",  SHT_PROGBITS,   0x000000, 0x3004, 0x04,  0,                         1,
+        ".debug_line",    SHT_PROGBITS,   0x000000, 0x3008, 0x38,  0,                         0,
+        NULL
+    );
 
     // Ensure that the .debug_abbrev has address zero. This is required by DWARF.
     // No alloc sections must have address zero.
@@ -1624,6 +1640,37 @@ static void test_dwarf() {
     assert_int(4, debug_info_section->size, ".debug_info size is 4");
     uint32_t *offset = (uint32_t *) debug_info_section->data;
     assert_int(0, *offset, ".debug_info pointer inside .debug_abbrev is zero");
+
+    // The first instruction in the line number program is extended opcode 2 Set Address.
+    // The address is at 0x2a. This is set by a R_X86_64_64 relocation that points at .text.
+    OutputSection *debug_line = get_output_section(elf_file, ".debug_line");
+    if (!debug_line) panic("Expected a .debug_line section");
+    uint64_t address = (*(uint64_t *) (&debug_line->data[0x2a]));
+    assert_uint64_t(0x401000, address, "Line number address is set to .text");
+
+    // Dynamic executable
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "dwarf lines");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".hash",          SHT_HASH,       0x1000,   0x1000, 0x10,  SHF_ALLOC,                 8,
+        ".dynsym",        SHT_DYNSYM,     0x1010,   0x1010, 0x18,  SHF_ALLOC,                 1,
+        ".dynstr",        SHT_STRTAB,     0x1028,   0x1028, 0x01,  SHF_ALLOC,                 1,
+        ".text",          SHT_PROGBITS,   0x2000,   0x2000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",       SHT_DYNAMIC,    0x3000,   0x3000, 0x60,  SHF_ALLOC | SHF_WRITE,     8,
+        "foo",            SHT_PROGBITS,   0x3060,   0x3060, 0x04,  SHF_ALLOC | SHF_WRITE,     1,
+        ".debug_info",    SHT_PROGBITS,   0x0000,   0x4000, 0x04,  0,                         1,
+        ".debug_abbrev",  SHT_PROGBITS,   0x0000,   0x4004, 0x04,  0,                         1,
+        ".debug_line",    SHT_PROGBITS,   0x0000,   0x4008, 0x38,  0,                         0,
+        NULL
+    );
+
+    // The first instruction in the line number program is extended opcode 2 Set Address.
+    // The address is at 0x2a. This is set by a R_X86_64_64 relocation that points at .text.
+    debug_line = get_output_section(elf_file, ".debug_line");
+    if (!debug_line) panic("Expected a .debug_line section");
+    address = (*(uint64_t *) (&debug_line->data[0x2a]));
+    assert_uint64_t(0x2000, address, "Line number address is set to .text");
 }
 
 // Test statically linking an executable to an archive file via a GNU ld script
