@@ -5,10 +5,14 @@
 extern int object_in_shared_library;
 
 int f();
+int g();
 
 int main() {
     // Test use of stdout from musl's lib
     fprintf(stdout, "Hello World!\n");
+
+    if (f() != 6) return 1;
+    if (g() != 6) return 1;
 
     // Test reading a copy of an object from the shared library.
     // as well as calling a function that reads a copy of an object from the shared library

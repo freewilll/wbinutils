@@ -48,7 +48,7 @@ typedef struct symbol {
     uint64_t dst_value;             // Value in the final ELF section
     int dst_index;                  // Index in the final ELF symbol table
     int dst_dynsym_index;           // Index in the final ELF dynsyn table (for libraries)
-    int resolves_undefined_symbol;  // Set to 1 if the symbol is from a shared library and resolves an undefined symbol
+    int resolves_undefined_symbol;  // Set to 1 if the symbol is from a shared library and resolves an undefined symbol in an object file
 } Symbol;
 
 typedef struct symbol_table {
