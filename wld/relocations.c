@@ -396,7 +396,7 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 // SCAN_RELOCATION_ERROR                        if an error
 // SCAN_RELOCATION_NEEDS_GOT                    if the symbol requires a GOT entry
 // SCAN_RELOCATION_NEEDS_RELATIVE_RELOCATION    if the symbol needs a R_X86_64_RELATIVE in the .rela.dyn section
-int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, int is_executable, int symbol_is_from_shared_library, ElfRelocation *relocation) {
+int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, int is_executable, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
     uint64_t offset = relocation->r_offset;
     input_data += offset;
@@ -419,6 +419,12 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
                 return SCAN_RELOCATION_OK;
 
         case R_X86_64_PC32:
+            // A R_X86_64_PC32 is not a GOT-relative relocation and may not be used when making a shared library.
+            if (output_is_shared && !is_executable && symbol_is_from_shared_library)
+                error("A R_X86_64_PC32 relocation cannot be used for symbol \"%s\" when making a shared object; recompile with -fPIC", symbol_name);
+
+            return SCAN_RELOCATION_OK;
+
         case R_X86_64_TPOFF32:
         case R_X86_64_32:
         case R_X86_64_32S:
@@ -522,10 +528,10 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
 }
 
 // Returns SCAN_RELOCATION_OK=0 or SCAN_RELOCATION_OK=1
-static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int output_is_shared, int link_dynamically, int is_executable, ElfRelocation *relocation, int symbol_is_from_shared_library) {
+static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int output_is_shared, int link_dynamically, int is_executable, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
-    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, relocation);
+    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, symbol_name, relocation);
 
     if (result == SCAN_RELOCATION_OK) return SCAN_RELOCATION_OK;
 
@@ -685,7 +691,7 @@ void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, in
                 int is_executable = output_elf_file->is_executable;
 
                 if (phase == RELOCATION_PHASE_SCAN)
-                    failed_relocations += scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, output_is_shared, link_dynamically, is_executable, relocation, symbol_is_from_shared_library);
+                    failed_relocations += scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, output_is_shared, link_dynamically, is_executable, symbol_is_from_shared_library, symbol_name, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
                     failed_relocations += apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, relocation);
                 relocation++;

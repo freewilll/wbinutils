@@ -4,10 +4,13 @@
 // This also happens when accessing stdout in musl.
 extern int object_in_shared_library;
 
+int f();
+
 int main() {
     // Test use of stdout from musl's lib
     fprintf(stdout, "Hello World!\n");
 
     // Test reading a copy of an object from the shared library.
-    return object_in_shared_library - 42;
+    // as well as calling a function that reads a copy of an object from the shared library
+    return object_in_shared_library - f() * 7;
 }

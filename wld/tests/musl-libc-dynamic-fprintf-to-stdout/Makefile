@@ -15,30 +15,49 @@ test: run-main
 main.o: main.c
 	AS=${WAS} ${CC} -c main.c -o main.o
 
-libtest.o: libtest.c
-	AS=${WAS} ${CC} -c libtest.c -o libtest.o
+libtest1.o: libtest1.c
+	AS=${WAS} ${CC} -c libtest1.c -o libtest1.o -fPIC
 
-libtest.so: libtest.o ${WLD}
+libtest2.o: libtest2.c
+	AS=${WAS} ${CC} -c libtest2.c -o libtest2.o -fPIC
+
+libtest1.so: libtest1.o ${WLD}
 	${WLD} \
 		-shared \
 		-L/usr/lib \
 		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
-		-o libtest.so \
-		libtest.o \
+		-o libtest1.so \
+		libtest1.o \
 		-L/usr/lib/x86_64-linux-musl \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
 		-lc \
 
-main: main.o libtest.so
+libtest2.so: libtest2.o ${WLD}
+	${WLD} \
+		-shared \
+		-L/usr/lib \
+		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-o libtest2.so \
+		libtest2.o \
+		-L/usr/lib/x86_64-linux-musl \
+		-lc \
+		-lgcc \
+		-lgcc_eh \
+		-lc \
+		-L . \
+		-ltest1
+
+main: main.o libtest1.so libtest2.so
 	${WLD}                                                \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
 	main.o                                                \
 	-o main                                               \
 	-L .                                                  \
-	-ltest                                                \
+	-ltest1                                               \
+	-ltest2                                               \
 	-L/usr/lib/x86_64-linux-musl                          \
 	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
 	-lc                                                   \
@@ -58,3 +77,4 @@ clean:
 	@rm -f *.o
 	@rm -f main
 	@rm -f libtest.so
+	@rm -f libtest2.so

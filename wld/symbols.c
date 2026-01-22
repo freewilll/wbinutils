@@ -449,7 +449,13 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
 
         // When loading a symbol from a shared library, note that this symbol resolves an undefined symbol.
         // This is needed to add the symbol to the .dynsym section.
-        if (result && new_symbol && esc->is_shared_library) new_symbol->resolves_undefined_symbol = 1;
+        //
+        // If:
+        // - Symbol type is STT_OBJECT
+        // - Symbol is GLOBAL
+        // - Symbol is defined in a shared object
+        // - Symbol is referenced by the executable
+        if (result && new_symbol && new_symbol->type == STT_OBJECT && new_symbol->binding == STB_GLOBAL && esc->is_shared_library) new_symbol->resolves_undefined_symbol = 1;
     }
 
     return result;
@@ -1492,41 +1498,28 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (!symbol->resolves_undefined_symbol) continue;
 
-        char binding = symbol->binding;
-        char type = symbol->type;
-        char visibility = symbol->other & 3;
-        const char *type_name = SYMBOL_TYPE_NAMES[type];
-        const char *binding_name = SYMBOL_BINDING_NAMES[binding];
-        const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
+        // The alignment of the symbol is the alignment of the section it's in.
+        int align = symbol->input_section->align;
 
-        // If:
-        // - Symbol type is STT_OBJECT
-        // - Symbol is GLOBAL
-        // - Symbol is defined in a shared object
-        // - Symbol is referenced by the executable
-        if (symbol->type == STT_OBJECT && symbol->binding == STB_GLOBAL && symbol->src_is_shared_library && symbol->resolves_undefined_symbol) {
-            // The alignemtn of the symbol is the alignment of the section it's in.
-            int align = symbol->input_section->align;
+        // Create a new .data.copy section if not already existent.
+        if (!data_copy_section)
+            data_copy_section = get_or_create_extra_section(output_elf_file, DATA_COPY_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, align);
 
-            // Create a new .data.copy section if not already existent.
-            if (!data_copy_section)
-                data_copy_section = get_or_create_extra_section(output_elf_file, DATA_COPY_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, align);
+        // Increase the alignment in the section if necessary
+        if (align > data_copy_section->align) data_copy_section->align = align;
 
-            // Increase the alignment in the section if necessary
-            if (align > data_copy_section->align) data_copy_section->align = align;
+        // Disassociate the symbol with the shared library
+        // This is a bit hacky, since this pretends the symbol originated in the executable in the first place
+        // and completely removes any reference to the shared library.
+        symbol->input_section = data_copy_section;
+        symbol->src_value = data_copy_section->size;
+        symbol->needs_copy = 1;
+        symbol->needs_dynsym_entry = 1;
+        symbol->src_is_shared_library = 0;
 
-            // Disassociate the symbol with the shared library
-            // This is a bit hacky, since this pretends the symbol originated in the executable in the first place
-            // and completely removes any reference to the shared library.
-            symbol->input_section = data_copy_section;
-            symbol->src_value = data_copy_section->size;
-            symbol->needs_copy = 1;
-            symbol->needs_dynsym_entry = 1;
-            symbol->src_is_shared_library = 0;
-
-            data_copy_section->size += symbol->size;
-        }
+        data_copy_section->size += symbol->size;
     }
 
     if (data_copy_section)

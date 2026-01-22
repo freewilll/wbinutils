@@ -546,7 +546,7 @@ static char *run_was(char *assembly) {
     return strdup(object_path);
 }
 
-static char *run_wld_and_capture_stderr(List *input_filenames, const char *output_path) {
+static char *run_wld_and_capture_stderr(List *input_filenames, List *extra_args, const char *output_path) {
     int pipe_fds[2];
     if (pipe(pipe_fds) == -1) { perror("pipe"); exit(1); }
 
@@ -559,16 +559,37 @@ static char *run_wld_and_capture_stderr(List *input_filenames, const char *outpu
         close(pipe_fds[1]);
 
         int argc = 0;
-        int max_args = input_filenames->length + 6;
+        int max_args = input_filenames->length + 8;
+        if (extra_args) max_args += extra_args->length;
         char **argv = calloc(max_args, sizeof(char *));
         if (!argv) { perror("calloc"); exit(1); }
 
         argv[argc++] = "../bin/wld";
+        argv[argc++] = "-L";
+        argv[argc++] = "/tmp/";
         argv[argc++] = "-o";
         argv[argc++] = (char *) output_path;
 
-        for (int i = 0; i < input_filenames->length; i++)
-            argv[argc++] = input_filenames->elements[i];
+        for (int i = 0; i < input_filenames->length; i++) {
+            char *input_filename = input_filenames->elements[i];
+
+            if (input_filename[0] == '*') {
+                // Special case for library filenames, they start with an '*'
+                // Convert that to "-lxyz"
+                char *library_arg = malloc(strlen(input_filename + 2));
+                library_arg[0] = '-';
+                library_arg[1] = 'l';
+                strcpy(&library_arg[2], &input_filename[1]);
+                argv[argc++] = library_arg;
+            }
+            else {
+                argv[argc++] = input_filename;
+            }
+        }
+
+        if (extra_args) {
+            for (int i = 0; i < extra_args->length; i++) argv[argc++] = extra_args->elements[i];
+        }
 
         argv[argc] = NULL;
 
@@ -1202,7 +1223,7 @@ static void test_undefined_symbol() {
     if (fd == -1) { perror("mkstemp"); exit(1); }
     close(fd);
 
-    char *stderr_output = run_wld_and_capture_stderr(input_paths, output_template);
+    char *stderr_output = run_wld_and_capture_stderr(input_paths, NULL, output_template);
 
     const char *expected =
         "Undefined symbols:\n"
@@ -1212,7 +1233,6 @@ static void test_undefined_symbol() {
     assert_string(expected, stderr_output, "undefined symbol in plt call");
     free(stderr_output);
 }
-
 
 // Test adding of __start_ and __stop_ symbols for sections with C names
 static void test_automatic_start_stop_symbols() {
@@ -2093,6 +2113,49 @@ void test_dynamic_library_R_X86_64_64_relocation() {
         END);
 }
 
+// Test the case of building a shared library with code that wasn't compiled with -fPIC.
+// In this case, a R_X86_64_PC32 relocation cannot be processed
+void test_dynamic_library_illegal_R_X86_64_PC32_relocation() {
+    char *object_path1 = run_was(
+        ".globl d;"
+        ".data;"
+        ".type d, @object;"
+        ".size d, 4;"
+        "d: .long 42;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_illegal_R_X86_64_PC32_relocation");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    char *object_path2 = run_was(
+        ".text;"
+        ".globl _start;"
+        "_start: movl d(%rip), %eax;"   // Creates a R_X86_64_PC32 relocation
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path2);
+    append_to_list(input_paths, lib_name);
+
+    char output_template[] = "/tmp/asm_XXXXXX";
+    int fd = mkstemp(output_template);
+    if (fd == -1) { perror("mkstemp"); exit(1); }
+    close(fd);
+
+    List *extra_args = new_list(1);
+    append_to_list(extra_args, "-shared");
+    char *stderr_output = run_wld_and_capture_stderr(input_paths, extra_args, output_template);
+
+    const char *expected = "error: A R_X86_64_PC32 relocation cannot be used for symbol \"d\" when making a shared object; recompile with -fPIC\n";
+    assert_string(expected, stderr_output, "dynamic_library_illegal_R_X86_64_PC32_relocation");
+    free(stderr_output);
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -2122,4 +2185,5 @@ int main() {
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files();
     test_dynamic_executable_R_X86_64_64_relocation();
     test_dynamic_library_R_X86_64_64_relocation();
+    test_dynamic_library_illegal_R_X86_64_PC32_relocation();
 }

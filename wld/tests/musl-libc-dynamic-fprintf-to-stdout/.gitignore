@@ -1,3 +1,4 @@
 *.o
 main
-libtest.so
+libtest1.so
+libtest2.so
