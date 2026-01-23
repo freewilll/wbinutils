@@ -34,7 +34,7 @@ libtest1.so: libtest1.o ${WLD}
 		-lgcc_eh \
 		-lc \
 
-libtest2.so: libtest2.o ${WLD}
+libtest2.so: libtest2.o libtest1.so ${WLD}
 	${WLD} \
 		-shared \
 		-L/usr/lib \
