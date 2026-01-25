@@ -170,14 +170,14 @@ int apply_relocation(
 
     int output_is_shared = output_elf_file->type == ET_DYN;
 
-    uint32_t output_virtual_address = rw_section_address + output_offset;
+    uint64_t output_virtual_address = rw_section_address + output_offset;
 
     output_pointer += output_offset;
     int type = relocation->r_info & 0xffffffff;
 
-    uint32_t A = relocation->r_addend;
-    uint32_t P = output_virtual_address;
-    uint32_t S = value;
+    uint64_t A = relocation->r_addend;
+    uint64_t P = output_virtual_address;
+    uint64_t S = value;
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
     // unless the symbol is in the .iplt section for ifuncs.
@@ -189,7 +189,7 @@ int apply_relocation(
         S -= output_elf_file->tls_template_tls_offset;
     }
 
-    if (DEBUG_RELOCATIONS) printf("    S=%#x P=%#x A=%#x\n", S, P, A);
+    if (DEBUG_RELOCATIONS) printf("    S=%#lx P=%#lx A=%#lx\n", S, P, A);
 
     const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
 
@@ -210,22 +210,22 @@ int apply_relocation(
 
         case R_X86_64_PC32: {
             uint32_t *output = (uint32_t *) output_pointer;
-            uint32_t value = S + A - P;
+            uint64_t value = S + A - P;
 
             // Unusual case of accessing a TLS template variable directly.
             // This is mostly to make an unusual TLS test case work.
             if (is_tls_value) value += output_elf_file->tls_template_address;
 
-            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             *output = value;
             break;
         }
 
         case R_X86_64_32:
         case R_X86_64_32S: {
-            uint32_t value = S + A;
+            uint64_t value = S + A;
             uint32_t *output = (uint32_t *) output_pointer;
-            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             *output = value;
             break;
         }
@@ -237,15 +237,15 @@ int apply_relocation(
             uint8_t opcode = *popcode;
 
             if (output_offset > 1 && opcode == 0xc7) {
-                uint32_t value = S; // Ignore the addend, this is an absolute address
-                if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
+                uint64_t value = S; // Ignore the addend, this is an absolute address
+                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
                 *output = value;
                 break;
             }
 
             else if (output_offset > 1 && opcode == 0x67) {
-                uint32_t value = S + A - P;
-                if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
+                uint64_t value = S + A - P;
+                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
                 *output = value;
                 break;
             }
@@ -258,7 +258,7 @@ int apply_relocation(
             uint8_t *popcode = (uint8_t *) (output_pointer - 2);
             uint8_t opcode = *popcode;
 
-            uint32_t value = S;
+            uint64_t value = S;
 
             if (link_dynamically || (opcode != 0xc7 && opcode != 0x81)) {
                 if (value_got_offset != -1)
@@ -270,7 +270,7 @@ int apply_relocation(
                     value = S + A - P;
             }
 
-            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             uint32_t *output = (uint32_t *) output_pointer;
             *output = value;
             break;
@@ -280,8 +280,8 @@ int apply_relocation(
 
         case R_X86_64_TPOFF32: {
             uint32_t *output = (uint32_t *) output_pointer;
-            uint32_t value = S + A - output_elf_file->tls_template_tls_offset;
-            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", value);
+            uint64_t value = S + A - output_elf_file->tls_template_tls_offset;
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             *output = value;
             break;
         }
@@ -294,7 +294,7 @@ int apply_relocation(
             else
                 panic("Expected a value in the iplt, but no entry is present");
 
-            if (DEBUG_RELOCATIONS) printf("    value=%#x\n", S);
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", S);
             uint32_t *output = (uint32_t *) output_pointer;
             *output = S;
             break;
