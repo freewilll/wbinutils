@@ -22,6 +22,7 @@ test: \
 	relocation-locals \
 	relocation-got \
 	relocation-tls \
+	relocation-R_X86_64_64-in-shared-library \
 	array-lifecycle \
 	orphan-sections \
 	ifuncs \
@@ -122,6 +123,10 @@ relocation-got:
 relocation-tls:
 	+$(MAKE) -C relocation-tls
 
+.PHONY: relocation-R_X86_64_64-in-shared-library
+relocation-R_X86_64_64-in-shared-library:
+	+$(MAKE) -C relocation-R_X86_64_64-in-shared-library
+
 .PHONY: array-lifecycle
 array-lifecycle:
 	+$(MAKE) -C array-lifecycle
@@ -204,6 +209,7 @@ clean:
 	@+$(MAKE) -C relocation-locals clean
 	@+$(MAKE) -C relocation-got clean
 	@+$(MAKE) -C relocation-tls clean
+	@+$(MAKE) -C relocation-R_X86_64_64-in-shared-library clean
 	@+$(MAKE) -C array-lifecycle clean
 	@+$(MAKE) -C orphan-sections clean
 	@+$(MAKE) -C ifuncs clean

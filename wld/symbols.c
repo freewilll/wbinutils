@@ -1474,7 +1474,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     for (int j = 0; j < output_elf_file->rela_dyn_R_X86_64_64_relocations->length; j++) {
         RelativeRelaDynRelocation *rrdr = output_elf_file->rela_dyn_R_X86_64_64_relocations->elements[j];
         if (!rrdr->symbol) panic("Did not get a symbol for a R_X86_64_64 relocation\n");
-        uint64_t addend = rrdr->symbol->dst_value + rrdr->addend;
+        uint64_t addend = rrdr->addend;
 
         ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
         r->r_info = R_X86_64_64 + ((uint64_t) rrdr->symbol->dst_dynsym_index << 32);

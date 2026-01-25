@@ -411,12 +411,14 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
 
     switch (type) {
         case R_X86_64_64:
-            if (output_is_shared && symbol_is_from_shared_library)
-                return SCAN_RELOCATION_NEEDS_RELA_DYN_R_X86_64_64_RELOCATION;
-            else if (output_is_shared && is_executable && !symbol_is_from_shared_library)
-                return SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION;
-            else
-                return SCAN_RELOCATION_OK;
+            if (output_is_shared) {
+                if (symbol_is_from_shared_library || !is_executable)
+                    return SCAN_RELOCATION_NEEDS_RELA_DYN_R_X86_64_64_RELOCATION;
+                else
+                    return SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION;
+            }
+
+            return SCAN_RELOCATION_OK;
 
         case R_X86_64_PC32:
             // A R_X86_64_PC32 is not a GOT-relative relocation and may not be used when making a shared library.
@@ -676,12 +678,13 @@ void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, in
 
             while (relocation < end) {
                 // Determine if the relocation's symbol should be linked statically or dynamically
-                int symbol_is_from_shared_library = 0;
                 int symbol_index = relocation->r_info >> 32;
                 ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
                 char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
                 int version_index = 0;
                 Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
+
+                int symbol_is_from_shared_library = 0;
                 if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
 
                 // Symbols in an executable cannot be preempted/interspersed, like possible in a shared library, so link them statically when possible.
