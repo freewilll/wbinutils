@@ -9,11 +9,10 @@
 
 // scan_relocation return code. Also encodes the amount of errors.
 #define SCAN_RELOCATION_OK                                    0
-#define SCAN_RELOCATION_ERROR                                 1
-#define SCAN_RELOCATION_NEEDS_GOT                             2
-#define SCAN_RELOCATION_NEEDS_GOT_PLT                         3
-#define SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION    4
-#define SCAN_RELOCATION_NEEDS_RELA_DYN_R_X86_64_64_RELOCATION 5
+#define SCAN_RELOCATION_NEEDS_GOT                             1
+#define SCAN_RELOCATION_NEEDS_GOT_PLT                         2
+#define SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION    3
+#define SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION          4
 
 int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_files);
 int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, int is_executable, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation);

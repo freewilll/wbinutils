@@ -71,7 +71,6 @@ void run_full_relocation(int output_type, void *output_data, uint64_t output_off
     int symbol_is_from_shared_library = 0;
     char *symbol_name = "test-symbol-name";
     int result = scan_relocation(output_data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, symbol_name, &relocation);
-    if (result == SCAN_RELOCATION_ERROR) panic("Relocation scan failed with %d", result);
 
     result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, link_dynamically, &relocation,
         is_tls_value,

@@ -392,10 +392,12 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 // The instructions are rewritten in the loaded input ELF section.
 // apply_relocation() puts the relocated values in the output ELF file.
 // Returns:
-// SCAN_RELOCATION_OK                           if OK
-// SCAN_RELOCATION_ERROR                        if an error
-// SCAN_RELOCATION_NEEDS_GOT                    if the symbol requires a GOT entry
-// SCAN_RELOCATION_NEEDS_RELATIVE_RELOCATION    if the symbol needs a R_X86_64_RELATIVE in the .rela.dyn section
+// SCAN_RELOCATION_OK                                       if OK
+// SCAN_RELOCATION_ERROR                                    if an error
+// SCAN_RELOCATION_NEEDS_GOT                                if the symbol requires a GOT entry
+// SCAN_RELOCATION_NEEDS_GOT_PLT                            if the symbol requires a GOT PLT entry
+// SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION       if the symbol needs a R_X86_64_RELATIVE      in the .rela.dyn section
+// SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION             If the symbol needs a R_X86_64_64_RELOCATION in the .rela.dyn section
 int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, int is_executable, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
     int type = relocation->r_info & 0xffffffff;
     uint64_t offset = relocation->r_offset;
@@ -413,7 +415,7 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
         case R_X86_64_64:
             if (output_is_shared) {
                 if (symbol_is_from_shared_library || !is_executable)
-                    return SCAN_RELOCATION_NEEDS_RELA_DYN_R_X86_64_64_RELOCATION;
+                    return SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION;
                 else
                     return SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION;
             }
@@ -521,8 +523,7 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
 
         default: {
             const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-            printf("Unhandled relocation type %s\n", relocation_name);
-            return SCAN_RELOCATION_ERROR;
+            panic("Unhandled relocation type %s", relocation_name);
         }
     }
 
@@ -614,7 +615,7 @@ static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, Inp
             return SCAN_RELOCATION_OK;
         }
 
-        case SCAN_RELOCATION_NEEDS_RELA_DYN_R_X86_64_64_RELOCATION: {
+        case SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION: {
             // Ignore relocations for non-loadable sections, e.g. dwarf sections
             if (!(input_section->flags & SHF_ALLOC)) return SCAN_RELOCATION_OK;
 
