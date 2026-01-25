@@ -596,7 +596,7 @@ static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, Inp
                 panic("Unhandled section index %d when processing", elf_symbol->st_shndx);
             else if (is_common) {
                 // The symbol must be defined. This is the only way to get it's offset, allocated in the .bss section.
-                if (!symbol) panic("Expected %s to be defined due to a relocation referencing it", symbol);
+                if (!symbol) panic("Expected symbol to be defined due to a relocation referencing it");
             }
             else {
                 // The symbol may be unset, in which case the relocation is an offset into the relocation input section.
