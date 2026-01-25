@@ -528,10 +528,11 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
 }
 
 // Returns SCAN_RELOCATION_OK=0 or SCAN_RELOCATION_OK=1
-static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int output_is_shared, int link_dynamically, int is_executable, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
+static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int link_dynamically, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
-    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, symbol_name, relocation);
+    int output_is_shared = output_elf_file->type == ET_DYN;
+    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, output_elf_file->is_executable, symbol_is_from_shared_library, symbol_name, relocation);
 
     if (result == SCAN_RELOCATION_OK) return SCAN_RELOCATION_OK;
 
@@ -691,7 +692,7 @@ void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, in
                 int is_executable = output_elf_file->is_executable;
 
                 if (phase == RELOCATION_PHASE_SCAN)
-                    failed_relocations += scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, output_is_shared, link_dynamically, is_executable, symbol_is_from_shared_library, symbol_name, relocation);
+                    failed_relocations += scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, symbol_is_from_shared_library, symbol_name, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
                     failed_relocations += apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, relocation);
                 relocation++;
