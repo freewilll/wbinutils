@@ -35,6 +35,7 @@ test: \
 	musl-libc-dynamic-weak-strong-library-symbol \
 	musl-libc-dynamic-pointer-to-function-in-lib \
 	musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib \
+	musl-runtime-symbol-resolution-with-multiple-defines \
 	glibc-tls-alignment \
 
 .PHONY: sanity1
@@ -173,6 +174,10 @@ musl-libc-dynamic-pointer-to-function-in-lib:
 musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib:
 	+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib
 
+.PHONY: musl-runtime-symbol-resolution-with-multiple-defines
+musl-runtime-symbol-resolution-with-multiple-defines:
+	+$(MAKE) -C musl-runtime-symbol-resolution-with-multiple-defines
+
 .PHONY: glibc-tls-alignment
 glibc-tls-alignment:
 	+$(MAKE) -C glibc-tls-alignment
@@ -212,4 +217,5 @@ clean:
 	@+$(MAKE) -C musl-libc-dynamic-weak-strong-library-symbol clean
 	@+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib clean
 	@+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib clean
+	@+$(MAKE) -C musl-runtime-symbol-resolution-with-multiple-defines clean
 	@+$(MAKE) -C glibc-tls-alignment clean

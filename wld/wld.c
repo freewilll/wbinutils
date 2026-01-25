@@ -125,10 +125,10 @@ InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *
     return create_extra_section(output_elf_file, name, type, flags, align);
 }
 
-// Go down all input files which are either object files or libraries
-static void read_object_file(List *input_elf_files, const char *path, int is_shared_library) {
+// Go down all input files which are either object files or shared libraries
+static void read_object_file(List *input_elf_files, const char *path, int source) {
     InputElfFile *elf_file = open_elf_file(path);
-    process_elf_file_symbols(elf_file, 0, is_shared_library, 0);
+    process_elf_file_symbols(elf_file, source, 0);
     append_to_list(input_elf_files, elf_file);
 }
 
@@ -159,7 +159,7 @@ static int read_library(const char *path, List *input_elf_files, StrMap *read_sh
         }
 
         case FT_SHARED_LIBRARY:
-            read_object_file(input_elf_files, path, 1);
+            read_object_file(input_elf_files, path, SRC_SHARED_LIBRARY);
             break;
 
         default:
@@ -217,7 +217,7 @@ static List *read_input_files(List *library_paths, List *input_files, int output
         }
         else {
             // It's an object file
-            read_object_file(input_elf_files, input_filename, 0);
+            read_object_file(input_elf_files, input_filename, SRC_OBJECT);
         }
     }
 

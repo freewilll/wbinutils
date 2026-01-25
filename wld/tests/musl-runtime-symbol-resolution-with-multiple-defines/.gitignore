@@ -1,0 +1,5 @@
+*.o
+*.so
+main-no-def-test1-first
+main-no-def-test2-first
+main-with-def

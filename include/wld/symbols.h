@@ -18,6 +18,14 @@ typedef struct symbol_nv {
     uint16_t version_index;
 } SymbolNV;
 
+// Some constants to indicate the origin of a symbol
+#define SRC_INTERNAL       1 // Created by the linker
+#define SRC_OBJECT         2 // Seen on an object file not in an archive
+#define SRC_LIBRARY        4 // Seen in an archive
+#define SRC_SHARED_LIBRARY 8 // Seen in a library
+
+#define SRC_OBJECT_OR_LIBRARY (SRC_OBJECT | SRC_LIBRARY)
+
 typedef struct symbol {
     char *name;                     // Name
     int version;                    // Version
@@ -28,8 +36,7 @@ typedef struct symbol {
     int is_abs;                     // The src value is an absolute address
     int is_common;                  // The symbol is a common symbol. input_section is null.
     int visibility;                 // Used by the linker
-    int src_is_library;             // 1 if the symbol was found in a library, otherwise it was found in an object file
-    int src_is_shared_library;      // 1 is the symbol is a shared library. src_is_library is also 1 in this case.
+    int sources;                    // A combination of at least one of SRC_*
     int needs_got;                  // Set if the symbol needs an entry in the Global Offset Table (GOT)
     int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt table
     int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt table, for ifuncs
@@ -80,7 +87,7 @@ Symbol *lookup_symbol(InputElfFile *elf_file, char *name, int version_index);
 Symbol *get_undefined_symbol(const char *name, int version_index);
 int is_undefined_symbol(const char *name, int version_index);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
-int process_elf_file_symbols(InputElfFile *elf_file, int is_library, int is_shared_library, int read_only);
+int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only);
 void resolve_provided_symbols(OutputElfFile *output_elf_file);
 void finalize_symbols(OutputElfFile *output_elf_file);
 void dump_output_symbols(OutputElfFile *output_elf_file);
