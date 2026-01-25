@@ -71,7 +71,7 @@ static const char *RELOCATION_NAMES[] = {
 int RELOCATION_NAMES_COUNT = sizeof(RELOCATION_NAMES) / sizeof(RELOCATION_NAMES[0]) - 1;
 
 // Make set of all global symbols that have relocations
-int make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_files) {
+void make_global_symbols_in_use(OutputElfFile *output_elf_file, List *input_elf_files) {
     StrMap *global_symbols_in_use = output_elf_file->global_symbols_in_use;
 
     // Loop over all input files
