@@ -691,7 +691,6 @@ void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, in
                 int link_dynamically = symbol_is_from_shared_library;
                 if (!symbol_is_from_shared_library && output_elf_file->type == ET_DYN && !output_elf_file->is_executable) link_dynamically = 1;
 
-                int output_is_shared = output_elf_file->type == ET_DYN;
                 int is_executable = output_elf_file->is_executable;
 
                 if (phase == RELOCATION_PHASE_SCAN)
