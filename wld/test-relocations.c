@@ -72,15 +72,14 @@ void run_full_relocation(int output_type, void *output_data, uint64_t output_off
     char *symbol_name = "test-symbol-name";
     int result = scan_relocation(output_data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, symbol_name, &relocation);
 
-    result = apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, link_dynamically, &relocation,
+    apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, link_dynamically, &relocation,
         is_tls_value,
         value,
         value_plt_offset,
         value_iplt_offset,
         value_got_offset,
         value_got_iplt_offset
-);
-    if (result) panic("Relocation apply failed");
+    );
 }
 
 // Runs a relocation with TLS args

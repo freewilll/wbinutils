@@ -152,7 +152,7 @@ static void convert_Gvqp_to_Evqp(void *data, uint8_t opcode, uint8_t binary_oper
 // This function updates the values in the output ELF file. The code may already have been relaxed by
 // scan_relocation().
 // All ELF file details are abstracted away, so that function can be easily tested.
-int apply_relocation(
+void apply_relocation(
         OutputElfFile *output_elf_file,
         void *output_pointer,
         uint64_t rw_section_offset,
@@ -274,8 +274,6 @@ int apply_relocation(
             uint32_t *output = (uint32_t *) output_pointer;
             *output = value;
             break;
-
-            return 1;
         }
 
         case R_X86_64_TPOFF32: {
@@ -301,21 +299,42 @@ int apply_relocation(
         }
 
         default: {
-            if (VERBOSE_ERROR_LIST)
-                printf("Unhandled relocation type %s for a static relocation\n", relocation_name);
-            return 1;
+            panic("Unhandled relocation type %s for a relocation\n", relocation_name);
         }
     }
-
-    return 0;
 }
 
+// Lookup a symbol in the symbol table for a relocation. If null, then the relocation refers to a section..
+Symbol *get_symbol_from_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation) {
+    int symbol_index = relocation->r_info >> 32;
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+    int version_index = 0;
+    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
+}
+
+static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbol) {
+    int symbol_is_from_shared_library = 0;
+    if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
+
+    // Symbols in an executable cannot be preempted/interspersed, like possible in a shared library, so link them statically when possible.
+    int link_dynamically = symbol_is_from_shared_library;
+    if (!symbol_is_from_shared_library && output_elf_file->type == ET_DYN && !output_elf_file->is_executable) link_dynamically = 1;
+
+    return link_dynamically;
+}
+
+
 // Given an input file, output file, input section and relocation, process the relocation by modifying the output.
-static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int link_dynamically, ElfRelocation *relocation) {
+static void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+    Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
+
+    int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
+
     int type = relocation->r_info & 0xffffffff;
     int symbol_index = relocation->r_info >> 32;
 
-    // Get the symbol
+    // Get the ELF symbol
     ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
     int elf_symbol_type = elf_symbol->st_info & 0xf;
 
@@ -329,7 +348,7 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 
     // Get the output section
     OutputSection *rw_section = input_section->output_section;
-    if (!rw_section) return 0; // The section is not included
+    if (!rw_section) return; // The section is not included
 
     // Determine the value of the symbol
     if (elf_symbol_type == STT_SECTION) {
@@ -371,7 +390,7 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
 
     uint64_t output_offset = input_section->dst_offset + relocation->r_offset;
 
-    return apply_relocation(
+    apply_relocation(
         output_elf_file,
         rw_section->data,
         rw_section->offset,
@@ -387,6 +406,107 @@ static int apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, I
         got_iplt_offset
     );
 }
+
+typedef enum got_or_plt_relocation_type {
+    RT_GOT,
+    RT_PLT
+} GotOrPltRelocationType;
+
+// A .got or .got.plt entry is needed
+static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation, GotOrPltRelocationType add_got) {
+    int type = relocation->r_info & 0xffffffff;
+    int symbol_index = relocation->r_info >> 32;
+
+    // Get the symbol
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    int elf_symbol_type = elf_symbol->st_info & 0xf;
+
+    if (elf_symbol_type == STT_SECTION)
+        panic("Handling of .got.* entries that refer to a section symbol not handled");
+
+    if (elf_symbol_type == STT_GNU_IFUNC) {
+        // This symbol will get an entry in .got.iplt. There is no need to create one in the .got.
+        return;
+    }
+
+    // Lookup the symbol in the symbol table
+    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+    int version_index = 0;
+    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
+    if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol_name);
+
+    if (add_got == RT_GOT) {
+        symbol->needs_got = 1;
+        symbol->needs_dynsym_entry = 1;
+    }
+    else {
+        symbol->needs_got_plt = 1;
+        symbol->needs_dynsym_entry = 1;
+    }
+}
+
+static void add_R_X86_64_RELATIVE_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+    // Ignore relocations for non-loadable sections, e.g. dwarf sections
+    if (!(input_section->flags & SHF_ALLOC)) return;
+
+    // A .rela.dyn entry is needed
+    int symbol_index = relocation->r_info >> 32;
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+
+    InputSection *relocation_input_section = NULL;
+    int is_common = elf_symbol->st_shndx == SHN_COMMON;
+
+    int version_index = 0;
+    Symbol *symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
+
+    if (!is_common && elf_symbol->st_shndx >= SHN_LORESERVE)
+        panic("Unhandled section index %d when processing", elf_symbol->st_shndx);
+    else if (is_common) {
+        // The symbol must be defined. This is the only way to get it's offset, allocated in the .bss section.
+        if (!symbol) panic("Expected symbol to be defined due to a relocation referencing it");
+    }
+    else {
+        // The symbol may be unset, in which case the relocation is an offset into the relocation input section.
+        relocation_input_section = (InputSection *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+    }
+
+    RelativeRelaDynRelocation *rrdr = calloc(1,sizeof(RelativeRelaDynRelocation));
+    rrdr->target_section = input_section;
+    rrdr->symbol = symbol;
+    rrdr->relocation_input_section = relocation_input_section;
+    rrdr->offset = relocation->r_offset;
+    rrdr->addend = relocation->r_addend;
+
+    append_to_list(output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations, rrdr);
+}
+
+static void add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+    // Ignore relocations for non-loadable sections, e.g. dwarf sections
+    if (!(input_section->flags & SHF_ALLOC)) return;
+
+    // A .rela.dyn entry is needed
+    int symbol_index = relocation->r_info >> 32;
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+
+    InputSection *relocation_input_section = NULL;
+
+    int version_index = 0;
+    Symbol *symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
+    if (!symbol) panic("Expected %s to be defined due to a relocation referencing it", symbol_name);
+    symbol->needs_dynsym_entry = 1;
+
+    RelativeRelaDynRelocation *rrdr = calloc(1,sizeof(RelativeRelaDynRelocation));
+    rrdr->target_section = input_section;
+    rrdr->symbol = symbol;
+    rrdr->relocation_input_section = relocation_input_section;
+    rrdr->offset = relocation->r_offset;
+    rrdr->addend = relocation->r_addend;
+
+    append_to_list(output_elf_file->rela_dyn_R_X86_64_64_relocations, rrdr);
+}
+
 
 // Given an input file and a relocation, relax any instructions where possible and determine if the symbol needs to be in the GOT.
 // The instructions are rewritten in the loaded input ELF section.
@@ -530,129 +650,40 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
     return SCAN_RELOCATION_OK;
 }
 
-// Returns SCAN_RELOCATION_OK=0 or SCAN_RELOCATION_OK=1
-static int scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, int link_dynamically, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
+static void scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
+
+    Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
+    char *symbol_name = symbol ? symbol->name : NULL;
+
+    int symbol_is_from_shared_library = 0;
+    if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
+
+    int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
 
     int output_is_shared = output_elf_file->type == ET_DYN;
     int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, output_elf_file->is_executable, symbol_is_from_shared_library, symbol_name, relocation);
 
-    if (result == SCAN_RELOCATION_OK) return SCAN_RELOCATION_OK;
-
     switch (result) {
         case SCAN_RELOCATION_NEEDS_GOT:
-        case SCAN_RELOCATION_NEEDS_GOT_PLT: {
-            // A .got or .got.plt entry is needed
-
-            int type = relocation->r_info & 0xffffffff;
-            int symbol_index = relocation->r_info >> 32;
-
-            // Get the symbol
-            ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-            int elf_symbol_type = elf_symbol->st_info & 0xf;
-
-            if (elf_symbol_type == STT_SECTION)
-                panic("Handling of .got.* entries that refer to a section symbol not handled");
-
-            if (elf_symbol_type == STT_GNU_IFUNC) {
-                // This symbol will get an entry in .got.iplt. There is no need to create one in the .got.
-                return SCAN_RELOCATION_OK;
-            }
-
-            // Lookup the symbol in the symbol table
-            char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-            int version_index = 0;
-            Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
-            if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol_name);
-
-            if (result == SCAN_RELOCATION_NEEDS_GOT) {
-                symbol->needs_got = 1;
-                symbol->needs_dynsym_entry = 1;
-            }
-            else {
-                symbol->needs_got_plt = 1;
-                symbol->needs_dynsym_entry = 1;
-            }
-
+            add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
             break;
-        }
 
-        case SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION: {
-            // Ignore relocations for non-loadable sections, e.g. dwarf sections
-            if (!(input_section->flags & SHF_ALLOC)) return SCAN_RELOCATION_OK;
+        case SCAN_RELOCATION_NEEDS_GOT_PLT:
+            add_got_or_plt_relocation(input_elf_file, relocation, RT_PLT);
+            break;
 
-            // A .rela.dyn entry is needed
-            int symbol_index = relocation->r_info >> 32;
-            ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-            char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+        case SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION:
+            add_R_X86_64_RELATIVE_relocation(output_elf_file, input_elf_file, input_section, relocation);
+            break;
 
-            InputSection *relocation_input_section = NULL;
-            int is_common = elf_symbol->st_shndx == SHN_COMMON;
-
-            int version_index = 0;
-            Symbol *symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
-
-            if (!is_common && elf_symbol->st_shndx >= SHN_LORESERVE)
-                panic("Unhandled section index %d when processing", elf_symbol->st_shndx);
-            else if (is_common) {
-                // The symbol must be defined. This is the only way to get it's offset, allocated in the .bss section.
-                if (!symbol) panic("Expected symbol to be defined due to a relocation referencing it");
-            }
-            else {
-                // The symbol may be unset, in which case the relocation is an offset into the relocation input section.
-                relocation_input_section = (InputSection *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
-            }
-
-            RelativeRelaDynRelocation *rrdr = calloc(1,sizeof(RelativeRelaDynRelocation));
-            rrdr->target_section = input_section;
-            rrdr->symbol = symbol;
-            rrdr->relocation_input_section = relocation_input_section;
-            rrdr->offset = relocation->r_offset;
-            rrdr->addend = relocation->r_addend;
-
-            append_to_list(output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations, rrdr);
-
-            return SCAN_RELOCATION_OK;
-        }
-
-        case SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION: {
-            // Ignore relocations for non-loadable sections, e.g. dwarf sections
-            if (!(input_section->flags & SHF_ALLOC)) return SCAN_RELOCATION_OK;
-
-            // A .rela.dyn entry is needed
-            int symbol_index = relocation->r_info >> 32;
-            ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-            char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-
-            InputSection *relocation_input_section = NULL;
-
-            int version_index = 0;
-            Symbol *symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
-            if (!symbol) panic("Expected %s to be defined due to a relocation referencing it", symbol_name);
-            symbol->needs_dynsym_entry = 1;
-
-            RelativeRelaDynRelocation *rrdr = calloc(1,sizeof(RelativeRelaDynRelocation));
-            rrdr->target_section = input_section;
-            rrdr->symbol = symbol;
-            rrdr->relocation_input_section = relocation_input_section;
-            rrdr->offset = relocation->r_offset;
-            rrdr->addend = relocation->r_addend;
-
-            append_to_list(output_elf_file->rela_dyn_R_X86_64_64_relocations, rrdr);
-
-            return SCAN_RELOCATION_OK;
-        }
-
-        default:
-            return result;
+        case SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION:
+            add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(output_elf_file, input_elf_file, input_section, relocation);
+            break;
     }
-
-    return SCAN_RELOCATION_OK;
 }
 
 void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, int phase) {
-    int failed_relocations = 0;
-
     if (DEBUG_RELOCATIONS) printf("\nRelocations:\n");
 
     // Loop over all input files
@@ -678,36 +709,18 @@ void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, in
             ElfRelocation *end = ((void *) relocations) + rela_input_section->size;
 
             while (relocation < end) {
-                // Determine if the relocation's symbol should be linked statically or dynamically
-                int symbol_index = relocation->r_info >> 32;
-                ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-                char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-                int version_index = 0;
-                Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
+                Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
 
-                int symbol_is_from_shared_library = 0;
-                if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
-
-                // Symbols in an executable cannot be preempted/interspersed, like possible in a shared library, so link them statically when possible.
-                int link_dynamically = symbol_is_from_shared_library;
-                if (!symbol_is_from_shared_library && output_elf_file->type == ET_DYN && !output_elf_file->is_executable) link_dynamically = 1;
-
-                int is_executable = output_elf_file->is_executable;
+                int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
 
                 if (phase == RELOCATION_PHASE_SCAN)
-                    failed_relocations += scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, symbol_is_from_shared_library, symbol_name, relocation);
+                    scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
-                    failed_relocations += apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, link_dynamically, relocation);
+                    apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, relocation);
                 relocation++;
             }
 
             free(relocations);
         }
-    }
-
-    // Bail if there are any issues
-    if (failed_relocations) {
-        printf("Failed to apply relocations in phase %d: failed relocations: %d\n", phase, failed_relocations);
-        exit(1);
     }
 }
