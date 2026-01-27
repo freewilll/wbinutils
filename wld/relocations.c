@@ -60,6 +60,11 @@ static const char *RELOCATION_NAMES[] = {
     "R_X86_64_NUM",
 };
 
+typedef enum got_or_plt_relocation_type {
+    RT_GOT,
+    RT_PLT
+} GotOrPltRelocationType;
+
 // mod_rem encoding and decoding
 #define MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING 3
 
@@ -149,163 +154,8 @@ static void convert_Gvqp_to_Evqp(void *data, uint8_t opcode, uint8_t binary_oper
     *mod_rm = ENCODE_MOD_RM(MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING, binary_operation, DECODE_MOD_RM_REG(*mod_rm));
 }
 
-// This function updates the values in the output ELF file. The code may already have been relaxed by
-// scan_relocation().
-// All ELF file details are abstracted away, so that function can be easily tested.
-void apply_relocation(
-        OutputElfFile *output_elf_file,
-        void *output_pointer,
-        uint64_t rw_section_offset,
-        uint64_t rw_section_address,
-        uint64_t output_offset,
-        int link_dynamically,
-        ElfRelocation *relocation,
-        int is_tls_value,
-        uint64_t value,
-        uint64_t value_plt_offset,
-        uint64_t value_iplt_offset,
-        uint64_t value_got_offset,
-        uint64_t value_got_iplt_offset
-    ) {
-
-    int output_is_shared = output_elf_file->type == ET_DYN;
-
-    uint64_t output_virtual_address = rw_section_address + output_offset;
-
-    output_pointer += output_offset;
-    int type = relocation->r_info & 0xffffffff;
-
-    uint64_t A = relocation->r_addend;
-    uint64_t P = output_virtual_address;
-    uint64_t S = value;
-
-    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
-    // unless the symbol is in the .iplt section for ifuncs.
-    if (type == R_X86_64_PLT32 && value_iplt_offset == -1 && !link_dynamically) type = R_X86_64_PC32;
-
-    if (type == R_X86_64_GOTTPOFF) {
-        // Convert a foo@GOTTPOFF(%rip) to foo@GOTPCREL(%rip)
-        type = R_X86_64_REX_GOTPCRELX;
-        S -= output_elf_file->tls_template_tls_offset;
-    }
-
-    if (DEBUG_RELOCATIONS) printf("    S=%#lx P=%#lx A=%#lx\n", S, P, A);
-
-    const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-
-    switch (type) {
-        case R_X86_64_64: {
-            uint64_t value;
-
-            // This  value is used in static executables,
-            // This is also used in DWARF sections in dynamic executables.
-            value = S + A;
-
-            uint64_t *output = (uint64_t *) output_pointer;
-
-            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-            *output = value;
-            break;
-        }
-
-        case R_X86_64_PC32: {
-            uint32_t *output = (uint32_t *) output_pointer;
-            uint64_t value = S + A - P;
-
-            // Unusual case of accessing a TLS template variable directly.
-            // This is mostly to make an unusual TLS test case work.
-            if (is_tls_value) value += output_elf_file->tls_template_address;
-
-            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-            *output = value;
-            break;
-        }
-
-        case R_X86_64_32:
-        case R_X86_64_32S: {
-            uint64_t value = S + A;
-            uint32_t *output = (uint32_t *) output_pointer;
-            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-            *output = value;
-            break;
-        }
-        case R_X86_64_GOTPCRELX: {
-            // Relax instructions to not use the GOT
-
-            uint32_t *output = (uint32_t *) output_pointer;
-            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
-            uint8_t opcode = *popcode;
-
-            if (output_offset > 1 && opcode == 0xc7) {
-                uint64_t value = S; // Ignore the addend, this is an absolute address
-                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-                *output = value;
-                break;
-            }
-
-            else if (output_offset > 1 && opcode == 0x67) {
-                uint64_t value = S + A - P;
-                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-                *output = value;
-                break;
-            }
-
-            panic("Unhandled relocation apply for R_X86_64_GOTPCRELX: %#x\n", opcode);
-        }
-
-        case R_X86_64_GOTPCREL:
-        case R_X86_64_REX_GOTPCRELX: {
-            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
-            uint8_t opcode = *popcode;
-
-            uint64_t value = S;
-
-            if (link_dynamically || (opcode != 0xc7 && opcode != 0x81)) {
-                if (value_got_offset != -1)
-                    value = output_elf_file->got_virt_address + value_got_offset + A - P;
-                else if (value_got_iplt_offset != -1)
-                    value = output_elf_file->got_iplt_virt_address + value_got_iplt_offset + A - P;
-                else
-                    // The value has relaxed to RIP-relative addressing and has neither a GOT or PLT entry
-                    value = S + A - P;
-            }
-
-            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-            uint32_t *output = (uint32_t *) output_pointer;
-            *output = value;
-            break;
-        }
-
-        case R_X86_64_TPOFF32: {
-            uint32_t *output = (uint32_t *) output_pointer;
-            uint64_t value = S + A - output_elf_file->tls_template_tls_offset;
-            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
-            *output = value;
-            break;
-        }
-
-        case R_X86_64_PLT32: {
-            if (value_iplt_offset != -1)
-                S = output_elf_file->iplt_virt_address + value_iplt_offset + A - P;
-            else if (value_plt_offset != -1)
-                S = output_elf_file->plt_offset + value_plt_offset + A - P;
-            else
-                panic("Expected a value in the iplt, but no entry is present");
-
-            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", S);
-            uint32_t *output = (uint32_t *) output_pointer;
-            *output = S;
-            break;
-        }
-
-        default: {
-            panic("Unhandled relocation type %s for a relocation\n", relocation_name);
-        }
-    }
-}
-
 // Lookup a symbol in the symbol table for a relocation. If null, then the relocation refers to a section..
-Symbol *get_symbol_from_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation) {
+static Symbol *get_symbol_from_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation) {
     int symbol_index = relocation->r_info >> 32;
     ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
     char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
@@ -323,94 +173,6 @@ static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbo
 
     return link_dynamically;
 }
-
-
-// Given an input file, output file, input section and relocation, process the relocation by modifying the output.
-static void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
-    Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
-
-    int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
-
-    int type = relocation->r_info & 0xffffffff;
-    int symbol_index = relocation->r_info >> 32;
-
-    // Get the ELF symbol
-    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-    int elf_symbol_type = elf_symbol->st_info & 0xf;
-
-    int dst_value;
-    char *symbol_name = NULL;
-    int is_tls_value = 0;
-    uint64_t got_offset = -1;
-    uint64_t plt_offset = -1;
-    uint64_t iplt_offset = -1;
-    uint64_t got_iplt_offset = -1;
-
-    // Get the output section
-    OutputSection *rw_section = input_section->output_section;
-    if (!rw_section) return; // The section is not included
-
-    // Determine the value of the symbol
-    if (elf_symbol_type == STT_SECTION) {
-        // Handle a relocation to a section symbol
-
-        InputSection *symbol_section = (InputSection *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
-        symbol_name = symbol_section->name;
-
-        OutputSection *symbol_output_section = symbol_section->output_section;
-        if (!symbol_output_section) panic("Unexpected null section in output when applying relocations");
-
-        dst_value = symbol_output_section->address + symbol_section->dst_offset + elf_symbol->st_value;
-    }
-    else {
-        // Handle a relocation to a non-section symbol
-
-        symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-        int version_index = 0;
-
-        Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
-        if (!symbol) {
-            // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
-            dst_value = 0;
-        } else {
-            dst_value = symbol->dst_value;
-            is_tls_value = symbol->type == STT_TLS;
-            got_offset = symbol->needs_got ? symbol->got_offset : -1;
-            plt_offset = symbol->needs_got_plt ? symbol->plt_offset : -1;
-            iplt_offset = symbol->needs_got_iplt ? symbol->iplt_offset : -1;
-            got_iplt_offset = symbol->needs_got_iplt ? symbol->got_iplt_offset : -1;
-        }
-    }
-
-    if (DEBUG_RELOCATIONS) {
-        const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-        printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
-            input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
-    }
-
-    uint64_t output_offset = input_section->dst_offset + relocation->r_offset;
-
-    apply_relocation(
-        output_elf_file,
-        rw_section->data,
-        rw_section->offset,
-        rw_section->address,
-        output_offset,
-        link_dynamically,
-        relocation,
-        is_tls_value,
-        dst_value,
-        plt_offset,
-        iplt_offset,
-        got_offset,
-        got_iplt_offset
-    );
-}
-
-typedef enum got_or_plt_relocation_type {
-    RT_GOT,
-    RT_PLT
-} GotOrPltRelocationType;
 
 // A .got or .got.plt entry is needed
 static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation, GotOrPltRelocationType add_got) {
@@ -518,10 +280,26 @@ static void add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(OutputElfFile *outp
 // SCAN_RELOCATION_NEEDS_GOT_PLT                            if the symbol requires a GOT PLT entry
 // SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION       if the symbol needs a R_X86_64_RELATIVE      in the .rela.dyn section
 // SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION             If the symbol needs a R_X86_64_64_RELOCATION in the .rela.dyn section
-int scan_relocation(void *input_data, int link_dynamically, int output_is_shared, int is_executable, int symbol_is_from_shared_library, char *symbol_name, ElfRelocation *relocation) {
+int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+    load_section(input_elf_file, input_section);
+
+    Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
+    char *symbol_name = symbol ? symbol->name : NULL;
+
+    int symbol_is_from_shared_library = 0;
+    if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
+
+    int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
+
+    int output_is_shared = output_elf_file->type == ET_DYN;
+
     int type = relocation->r_info & 0xffffffff;
     uint64_t offset = relocation->r_offset;
+
+    char *input_data = input_section->data;
     input_data += offset;
+
+    int is_executable = output_elf_file->is_executable;
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32
     if (type == R_X86_64_PLT32 && !link_dynamically) type = R_X86_64_PC32;
@@ -651,18 +429,7 @@ int scan_relocation(void *input_data, int link_dynamically, int output_is_shared
 }
 
 static void scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
-    load_section(input_elf_file, input_section);
-
-    Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
-    char *symbol_name = symbol ? symbol->name : NULL;
-
-    int symbol_is_from_shared_library = 0;
-    if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
-
-    int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
-
-    int output_is_shared = output_elf_file->type == ET_DYN;
-    int result = scan_relocation(input_section->data, link_dynamically, output_is_shared, output_elf_file->is_executable, symbol_is_from_shared_library, symbol_name, relocation);
+    int result = scan_relocation(output_elf_file, input_elf_file, input_section, relocation);
 
     switch (result) {
         case SCAN_RELOCATION_NEEDS_GOT:
@@ -683,7 +450,212 @@ static void scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, In
     }
 }
 
-void apply_relocations(OutputElfFile *output_elf_file, List *input_elf_files, int phase) {
+
+// Given an input file, output file, input section and relocation, process the relocation by modifying the output.
+// This function updates the values in the output ELF file. The code may already have been relaxed by
+// scan_relocation().
+// All ELF file details are abstracted away, so that function can be easily tested.
+void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+    Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
+
+    int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
+
+    int type = relocation->r_info & 0xffffffff;
+    int symbol_index = relocation->r_info >> 32;
+
+    // Get the ELF symbol
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    int elf_symbol_type = elf_symbol->st_info & 0xf;
+
+    int dst_value;
+    char *symbol_name = NULL;
+    int is_tls_value = 0;
+    uint64_t value_got_offset = -1;
+    uint64_t value_plt_offset = -1;
+    uint64_t value_iplt_offset = -1;
+    uint64_t value_got_iplt_offset = -1;
+
+    // Get the output section
+    OutputSection *rw_section = input_section->output_section;
+    if (!rw_section) return; // The section is not included
+
+    // Set several values depending on if the symbol points at a section or a symbol
+    if (elf_symbol_type == STT_SECTION) {
+        // Handle a relocation to a section symbol
+
+        InputSection *symbol_section = (InputSection *) input_elf_file->section_list->elements[elf_symbol->st_shndx];
+        symbol_name = symbol_section->name;
+
+        OutputSection *symbol_output_section = symbol_section->output_section;
+        if (!symbol_output_section) panic("Unexpected null section in output when applying relocations");
+
+        dst_value = symbol_output_section->address + symbol_section->dst_offset + elf_symbol->st_value;
+    }
+    else {
+        // Handle a relocation to a non-section symbol
+
+        symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+        int version_index = 0;
+
+        Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
+        if (!symbol) {
+            // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
+            dst_value = 0;
+        } else {
+            dst_value             = symbol->dst_value;
+            is_tls_value          = symbol->type == STT_TLS;
+            value_got_offset      = symbol->needs_got      ? symbol->got_offset      : -1;
+            value_plt_offset      = symbol->needs_got_plt  ? symbol->plt_offset      : -1;
+            value_iplt_offset     = symbol->needs_got_iplt ? symbol->iplt_offset     : -1;
+            value_got_iplt_offset = symbol->needs_got_iplt ? symbol->got_iplt_offset : -1;
+        }
+    }
+
+    if (DEBUG_RELOCATIONS) {
+        const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
+        printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
+            input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
+    }
+
+    uint64_t output_offset = input_section->dst_offset + relocation->r_offset;
+    void *output_pointer = rw_section->data + output_offset;
+    int output_is_shared = output_elf_file->type == ET_DYN;
+
+    // Determine the relocated value and write it to the output.
+    // See table 4.9 of x86-64-ABI-1.0.pdf or
+    // https://www.ucw.cz/~hubicka/papers/abi/node19.html
+
+    uint64_t A = relocation->r_addend;
+    uint64_t P = rw_section->address + output_offset;
+    uint64_t S = dst_value;
+
+    // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
+    // unless the symbol is in the .iplt section for ifuncs.
+    if (type == R_X86_64_PLT32 && value_iplt_offset == -1 && !link_dynamically)
+        type = R_X86_64_PC32;
+
+    if (type == R_X86_64_GOTTPOFF) {
+        // Convert a foo@GOTTPOFF(%rip) to foo@GOTPCREL(%rip)
+        type = R_X86_64_REX_GOTPCRELX;
+        S -= output_elf_file->tls_template_tls_offset;
+    }
+
+    if (DEBUG_RELOCATIONS) printf("    S=%#lx P=%#lx A=%#lx\n", S, P, A);
+
+    switch (type) {
+        case R_X86_64_64: {
+            uint64_t value;
+
+            // This  value is used in static executables,
+            // This is also used in DWARF sections in dynamic executables.
+            value = S + A;
+
+            uint64_t *output = (uint64_t *) output_pointer;
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            *output = value;
+            break;
+        }
+
+        case R_X86_64_PC32: {
+            uint32_t *output = (uint32_t *) output_pointer;
+            uint64_t value = S + A - P;
+
+            // Unusual case of accessing a TLS template variable directly.
+            // This is mostly to make an unusual TLS test case work.
+            if (is_tls_value) value += output_elf_file->tls_template_address;
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            *output = value;
+            break;
+        }
+
+        case R_X86_64_32:
+        case R_X86_64_32S: {
+            uint64_t value = S + A;
+            uint32_t *output = (uint32_t *) output_pointer;
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            *output = value;
+            break;
+        }
+        case R_X86_64_GOTPCRELX: {
+            // Relax instructions to not use the GOT
+
+            uint32_t *output = (uint32_t *) output_pointer;
+            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
+            uint8_t opcode = *popcode;
+
+            if (output_offset > 1 && opcode == 0xc7) {
+                uint64_t value = S; // Ignore the addend, this is an absolute address
+                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+                *output = value;
+                break;
+            }
+
+            else if (output_offset > 1 && opcode == 0x67) {
+                uint64_t value = S + A - P;
+                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+                *output = value;
+                break;
+            }
+
+            panic("Unhandled relocation apply for R_X86_64_GOTPCRELX: %#x\n", opcode);
+        }
+
+        case R_X86_64_GOTPCREL:
+        case R_X86_64_REX_GOTPCRELX: {
+            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
+            uint8_t opcode = *popcode;
+
+            uint64_t value = S;
+
+            if (link_dynamically || (opcode != 0xc7 && opcode != 0x81)) {
+                if (value_got_offset != -1)
+                    value = output_elf_file->got_virt_address + value_got_offset + A - P;
+                else if (value_got_iplt_offset != -1)
+                    value = output_elf_file->got_iplt_virt_address + value_got_iplt_offset + A - P;
+                else
+                    // The value has relaxed to RIP-relative addressing and has neither a GOT or PLT entry
+                    value = S + A - P;
+            }
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            uint32_t *output = (uint32_t *) output_pointer;
+            *output = value;
+            break;
+        }
+
+        case R_X86_64_TPOFF32: {
+            uint32_t *output = (uint32_t *) output_pointer;
+            uint64_t value = S + A - output_elf_file->tls_template_tls_offset;
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            *output = value;
+            break;
+        }
+
+        case R_X86_64_PLT32: {
+            if (value_iplt_offset != -1)
+                S = output_elf_file->iplt_virt_address + value_iplt_offset + A - P;
+            else if (value_plt_offset != -1)
+                S = output_elf_file->plt_offset + value_plt_offset + A - P;
+            else
+                panic("Expected a value in the iplt, but no entry is present");
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", S);
+            uint32_t *output = (uint32_t *) output_pointer;
+            *output = S;
+            break;
+        }
+
+        default: {
+            const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
+            panic("Unhandled relocation type %s for a relocation\n", relocation_name);
+        }
+    }
+}
+
+void process_relocations(OutputElfFile *output_elf_file, List *input_elf_files, int phase) {
     if (DEBUG_RELOCATIONS) printf("\nRelocations:\n");
 
     // Loop over all input files

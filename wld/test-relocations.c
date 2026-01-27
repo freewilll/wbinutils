@@ -5,10 +5,29 @@
 
 #include "error.h"
 #include "elf.h"
+#include "input-elf.h"
 
 #include "wld/relocations.h"
+#include "wld/symbols.h"
 
 #define END -1
+
+typedef enum output_type {
+    OT_STATIC_EXEC,  // Statically linked executable
+    OT_DYN_EXEC,     // Dynamically linked executable
+    OT_SHLIB         // Shared library
+} OutputType;
+
+struct state {
+    OutputElfFile *output_elf_file;
+    InputElfFile *input_elf_file;
+    InputSection  *input_section;
+    OutputSection *output_section;
+    void *output_data;
+    ElfRelocation *relocation;
+    Symbol *symbol;
+    uint32_t output_virtual_address;
+} state;
 
 static void assert_uint32(uint32_t expected, uint32_t actual, const char *message) {
     if (expected != actual)
@@ -53,68 +72,129 @@ void assert_data(char *data, ...) {
     va_end(ap);
 }
 
-void run_full_relocation(int output_type, void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, uint64_t value_got_offset, uint64_t value_iplt_offset, uint64_t value_got_iplt_offset, uint64_t value_plt_offset, int link_dynamically, int output_is_shared, int is_executable) {
-    OutputElfFile *output_elf_file = new_output_elf_file("", output_type);
-    output_elf_file->tls_template_address = tls_template_address;
-    output_elf_file->tls_template_tls_offset = tls_template_tls_offset;
+static void reset(OutputType ot, void *output_data, uint64_t reloc_type, uint64_t reloc_offset, uint64_t reloc_addend) {
+    int elf_output_type;
+    int is_executable;
+
+    switch(ot) {
+        case OT_STATIC_EXEC:
+            elf_output_type = ET_EXEC;
+            is_executable = 1;
+            break;
+        case OT_DYN_EXEC:
+            elf_output_type = ET_DYN;
+            is_executable = 1;
+            break;
+        case OT_SHLIB:
+            elf_output_type = ET_DYN;
+            is_executable = 0;
+            break;
+        default:
+            printf("Bad OT value %d\n", ot);
+            exit(1);
+    }
+
+    // Make the output elf file
+    OutputElfFile *output_elf_file = new_output_elf_file("", elf_output_type);
     output_elf_file->is_executable = is_executable;
-
-    ElfRelocation relocation = {.r_offset = output_offset, .r_info = type, .r_addend = addend};
-
     output_elf_file->got_virt_address = 0x500000;
     output_elf_file->iplt_virt_address = 0x600000;
     output_elf_file->got_iplt_virt_address = 0x700000;
     output_elf_file->plt_offset = 0x8000;
-    uint64_t rw_section_address = output_virtual_address - output_offset;
-    uint64_t rw_section_offset = rw_section_address - 0x400000;
 
-    int symbol_is_from_shared_library = 0;
-    char *symbol_name = "test-symbol-name";
-    int result = scan_relocation(output_data, link_dynamically, output_is_shared, is_executable, symbol_is_from_shared_library, symbol_name, &relocation);
+    // Make the relocation
+    ElfRelocation *relocation = calloc(1, sizeof(ElfRelocation));
+    relocation->r_offset = reloc_offset;
+    relocation->r_info = reloc_type;
+    relocation->r_addend = reloc_addend;
 
-    apply_relocation(output_elf_file, output_data, rw_section_offset, rw_section_address, output_offset, link_dynamically, &relocation,
-        is_tls_value,
-        value,
-        value_plt_offset,
-        value_iplt_offset,
-        value_got_offset,
-        value_got_iplt_offset
-    );
+    // Make the input section
+    InputSection  *input_section = calloc(1, sizeof(InputSection));
+    input_section->data = output_data;
+
+    OutputSection *output_section = calloc(1, sizeof(OutputSection));
+    input_section->output_section = output_section;
+    output_section->data = output_data;
+    output_section->address = 0x400000;
+
+    // Make the input ELF file
+    InputElfFile *input_elf_file = calloc(1, sizeof(InputElfFile));
+    input_elf_file->type = ET_REL;
+    input_elf_file->filename = "test-file";
+
+    // Add one entry to the symbol table at index 0. All symbols in this test are at index zero
+    input_elf_file->symbol_table = calloc(1, sizeof(ElfSymbol));
+    char *test_symbol_name = "test-symbol";
+    input_elf_file->symbol_table_strings = test_symbol_name;
+
+    // Add symbols tables
+    local_symbol_tables = new_strmap();
+    SymbolTable *local_symbol_table = new_symbol_table();
+    strmap_put(local_symbol_tables, input_elf_file->filename, local_symbol_table);
+    global_symbol_table = new_symbol_table();
+
+    // Add a symbol
+    int other = 0;
+    int size = 8;
+    int version_index = 0;
+    Symbol *symbol = new_symbol(strdup(test_symbol_name), STT_OBJECT, STB_GLOBAL, other, size, SRC_INTERNAL);
+    symbol->src_elf_file = input_elf_file;
+    SymbolNV *snv = new_symbolnv(strdup(test_symbol_name), version_index);
+    map_ordered_put(global_symbol_table->defined_symbols, snv, symbol);
+
+    state.output_elf_file = output_elf_file;
+    state.input_elf_file = input_elf_file;
+    state.input_section = input_section;
+    state.output_section = output_section;
+    state.output_data = output_data;
+    state.relocation = relocation;
+    state.symbol = symbol;
+    state.output_virtual_address = output_section->address;
 }
 
-// Runs a relocation with TLS args
-void run_tls_relocation(void *output_data, uint64_t output_offset, uint64_t tls_template_address, int tls_template_tls_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, int is_tls_value, int output_is_shared) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, tls_template_address, tls_template_tls_offset, type, addend, output_virtual_address, value, is_tls_value, -1, -1, -1, -1, 0, output_is_shared, 0);
+static void set_output_section_address(uint64_t address) {
+    state.output_section->address = address;
 }
 
-// Runs a relocation with a GOT value
-void run_got_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_got_offset) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, value_got_offset, -1, -1, -1, 0, 0, 0);
+static void set_output_virtual_address(uint32_t output_virtual_address) {
+    state.output_virtual_address = output_virtual_address;
 }
 
-// Runs a relocation with a .got.iplt value
-void run_got_iplt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_got_iplt_offset) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -1, -1, value_got_iplt_offset, -1, 0, 0, 0);
+static void set_value(uint64_t value) {
+    state.symbol->dst_value = value;
 }
 
-// Runs a relocation with an .iplt value
-void run_iplt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_iplt_offset) {
-    run_full_relocation(ET_EXEC, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, value_iplt_offset, -1, -1, 0, 0, 0);
+static void set_plt_offset(uint64_t plt_offset) {
+    state.symbol->needs_got_plt = 1;
+    state.symbol->plt_offset = plt_offset;
 }
 
-// Runs a relocation with an .plt value
-void run_plt_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value, uint64_t value_plt_offset, int link_dynamically) {
-    run_full_relocation(ET_DYN, output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, 0, -4, -1, -1, value_plt_offset, link_dynamically, 0, 0);
+static void set_iplt_offset(uint64_t iplt_offset) {
+    state.symbol->needs_got_iplt = 1;
+    state.symbol->iplt_offset = iplt_offset;
 }
 
-// Runs a regular relocation
-void run_relocation(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value) {
-    run_tls_relocation(output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, -1, 0);
+static void set_got_iplt_offset(uint64_t got_iplt_offset) {
+    state.symbol->needs_got_iplt = 1;
+    state.symbol->got_iplt_offset = got_iplt_offset;
 }
 
-// Runs a regular relocation on ET_DYN output
-void run_relocation_on_shared_object(void *output_data, uint64_t output_offset, int type, int addend, uint32_t output_virtual_address, uint64_t value) {
-    run_tls_relocation(output_data, output_offset, 0, 0, type, addend, output_virtual_address, value, -1, 1);
+static void set_got_offset(uint64_t got_offset) {
+    state.symbol->needs_got = 1;
+    state.symbol->got_offset = got_offset;
+}
+
+static void set_tls_template_address(uint64_t tls_template_address) {
+    state.output_elf_file->tls_template_address = tls_template_address;
+}
+
+static void set_tls_template_tls_offset(uint64_t tls_template_tls_offset) {
+    state.output_elf_file->tls_template_tls_offset = tls_template_tls_offset;
+}
+
+static void run() {
+    scan_relocation(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);
+    apply_relocation_to_output_elf_file(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);
 }
 
 void test_R_X86_64_64(void) {
@@ -122,88 +202,40 @@ void test_R_X86_64_64(void) {
     memset(output_data, -1, 32);
 
     // The relocation must be applied to a statically linked executable
-    run_full_relocation(
-        ET_EXEC,        // ELF type
-        output_data,    // ELF section data
-        8,              // output_offset,
-        0,              // tls_template_address
-        0,              // tls_template_tls_offset
-        R_X86_64_64,    // type
-        0x10,           // addend,
-        0x400000,       // output_virtual_address
-        0x401000,       // value
-        0,              // is_tls_value,
-        -1,             // value_got_offset
-        -1,             // value_iplt_offset
-        -1,             // value_got_iplt_offset
-        -1,             // value_plt_offset
-        0,              // link_dynamically
-        0,              // output_is_shared,
-        1               // is_executable
-    );
-
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_64, 8, 0x10);
+    set_value(0x401000);
+    run();
     assert_uint64(-1, output_data[0], "R_X86_64_64");
     assert_uint64(0x401010, output_data[1], "R_X86_64_64");
     assert_uint64(-1, output_data[2], "R_X86_64_64");
 
     // The relocation must be applied to a dynamically linked executable
     memset(output_data, -1, 32);
-
-    run_full_relocation(
-        ET_DYN,        // ELF type
-        output_data,    // ELF section data
-        8,              // output_offset,
-        0,              // tls_template_address
-        0,              // tls_template_tls_offset
-        R_X86_64_64,    // type
-        0x10,           // addend,
-        0x400000,       // output_virtual_address
-        0x401000,       // value
-        0,              // is_tls_value,
-        -1,             // value_got_offset
-        -1,             // value_iplt_offset
-        -1,             // value_got_iplt_offset
-        -1,             // value_plt_offset
-        0,              // link_dynamically
-        0,              // output_is_shared,
-        1               // is_executable
-    );
+    reset(OT_DYN_EXEC, output_data, R_X86_64_64, 8, 0x10);
+    set_value(0x401000);
+    run();
     assert_uint64(-1, output_data[0], "R_X86_64_64");
     assert_uint64(0x401010, output_data[1], "R_X86_64_64");
     assert_uint64(-1, output_data[2], "R_X86_64_64");
 
     // The relocation must be applied to a dynamically linked shared library
     memset(output_data, -1, 32);
-
-    run_full_relocation(
-        ET_DYN,        // ELF type
-        output_data,    // ELF section data
-        8,              // output_offset,
-        0,              // tls_template_address
-        0,              // tls_template_tls_offset
-        R_X86_64_64,    // type
-        0x10,           // addend,
-        0x400000,       // output_virtual_address
-        0x401000,       // value
-        0,              // is_tls_value,
-        -1,             // value_got_offset
-        -1,             // value_iplt_offset
-        -1,             // value_got_iplt_offset
-        -1,             // value_plt_offset
-        0,              // link_dynamically
-        0,              // output_is_shared,
-        0               // is_executable
-    );
+    reset(OT_SHLIB, output_data, R_X86_64_64, 8, 0x10);
+    set_value(0x401000);
+    run();
     assert_uint64(-1, output_data[0], "R_X86_64_64");
     assert_uint64(0x401010, output_data[1], "R_X86_64_64");
     assert_uint64(-1, output_data[2], "R_X86_64_64");
 }
 
 void test_R_X86_64_PC32(void) {
+    // S + A - P = 0x401000 + 0x10 - 0x400008 = 0x1008
     uint32_t output_data[4]; memset(output_data, -1, 16);
-    run_relocation(output_data, 8, R_X86_64_PC32, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_PC32, 8, 0x10);
+    set_value(0x401000);
+    run();
     assert_uint32(-1, (output_data)[1], "R_X86_64_PC32");
-    assert_uint32(0x1010, (output_data)[2], "R_X86_64_PC32");
+    assert_uint32(0x1008, (output_data)[2], "R_X86_64_PC32");
     assert_uint32(-1, (output_data)[3], "R_X86_64_PC32");
 
     // Unusual case of accessing a TLS template variable directly.
@@ -212,18 +244,30 @@ void test_R_X86_64_PC32(void) {
     // The address of the TLS template is 0x402000
     // So the relative address is 0x402000 - 0x401000 = 0x1000
     uint8_t output_data2[16]; memset(output_data, -1, 16);
-    run_tls_relocation(output_data2, 0, 0x402000, 8, R_X86_64_PC32, 0, 0x401000, 0, 1, 0);
+    reset(OT_STATIC_EXEC, output_data2, R_X86_64_PC32, 0, 0);
+    set_value(0x401000);
+    set_tls_template_address(0x402000);
+    set_tls_template_tls_offset(8);
+    set_plt_offset(8);
+    run();
     assert_data(output_data2, 0x00, 0x10, 0x00, 0x00, END);
 
     // Same as above, but with an addend of 1
     uint8_t output_data3[16]; memset(output_data, -1, 16);
-    run_tls_relocation(output_data3, 0, 0x402000, 8, R_X86_64_PC32, 1, 0x401000, 0, 1, 0);
+    reset(OT_STATIC_EXEC, output_data3, R_X86_64_PC32, 0, 1);
+    set_value(0x401000);
+    set_tls_template_address(0x402000);
+    set_tls_template_tls_offset(8);
+    set_plt_offset(8);
+    run();
     assert_data(output_data3, 0x01, 0x10, 0x00, 0x00, END);
 }
 
 void test_R_X86_64_32s(int type) {
     uint32_t output_data[4]; memset(output_data, -1, 16);
-    run_relocation(output_data, 8,  type, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data, type, 8, 0x10);
+    set_value(0x401000);
+    run();
     assert_uint32(-1, (output_data)[1], "R_X86_64_32*");
     assert_uint32(0x401010, (output_data)[2], "R_X86_64_32*");
     assert_uint32(-1, (output_data)[3], "R_X86_64_32*");
@@ -231,83 +275,120 @@ void test_R_X86_64_32s(int type) {
 
 int test_R_X86_64_GOTPCRELX(void) {
     uint8_t output_data[] = {0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};                   // mov 0x0(%rip), %ecx
-    run_relocation(output_data, 2, R_X86_64_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_GOTPCRELX, 2, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data, 0xc7, 0xc1, 0x00, 0x10, 0x40, 0x00, END);              // mov $0x401000, %ecx
 
+    // S + A - P =  0x401000 + 0x10 - 0x401002 = 0x100e
     uint8_t output_data2[] = {0xff, 0x15, 0x00, 0x00, 0x00, 0x00};                  // callq *0x0(%rip)
-    run_relocation(output_data2, 2, R_X86_64_GOTPCRELX, 0x10, 0x400000, 0x401000);
-    assert_data(output_data2, 0x67, 0xe8, 0x10, 0x10, 0x00, 0x00, END);             // addr32 callq 401000
+    reset(OT_STATIC_EXEC, output_data2, R_X86_64_GOTPCRELX, 2, 0x10);
+    set_value(0x401000);
+    run();
+    assert_data(output_data2, 0x67, 0xe8, 0x0e, 0x10, 0x00, 0x00, END);             // addr32 callq 401000
 }
 
 int test_R_X86_64_REX_GOTPCRELX() {
     // mov
     uint8_t output_data[] = {0x48, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};             // mov 0x0(%rip), %rcx
-    run_relocation(output_data, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data, 0x48, 0xc7, 0xc1, 0x00, 0x10, 0x40, 0x00, END);        // mov $0x401000, %rcx
 
     uint8_t output_data2[] = {0x4c, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};            // mov 0x0(%rip), %r9
-    run_relocation(output_data2, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data2, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data2, 0x49, 0xc7, 0xc1, 0x00, 0x10, 0x40, 0x00, END);       // mov $0x401000, %r9
 
     // cmp
     uint8_t output_data3[] = {0x4c, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};            // cmp 0x0(%rip), %rcx
-    run_relocation(output_data3, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data3, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data3, 0x49, 0xc7, 0xc1, 0x00, 0x10, 0x40, 0x00, END);       // cmp $0x401000, %rcx
 
     uint8_t output_data4[] = {0x4c, 0x3b, 0x0d, 0x00, 0x00, 0x00, 0x00};            // cmp 0x0(%rip), %r9
-    run_relocation(output_data4, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data4, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data4, 0x49, 0x81, 0xf9, 0x00, 0x10, 0x40, 0x00, END);       // cmp $0x401000, %r9
 
     // sub
     uint8_t output_data5[] = {0x48, 0x2b, 0x0d, 0x00, 0x00, 0x00, 0x00};            // sub 0x0(%rip), %rcx
-    run_relocation(output_data5, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data5, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data5, 0x48, 0x81, 0xe9, 0x00, 0x10, 0x40, 0x00, END);       // sub $0x401000, %rcx
 
     uint8_t output_data6[] = {0x4c, 0x2b, 0x0d, 0x00, 0x00, 0x00, 0x00};            // sub 0x0(%rip), %r9
-    run_relocation(output_data6, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data6, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
     assert_data(output_data6, 0x49, 0x81, 0xe9, 0x00, 0x10, 0x40, 0x00, END);       // sub $0x401000, %r9
 }
 
 int test_R_X86_64_REX_GOTPCRELX_on_shared_object() {
-    // S=401000 + A=10 - P=400000 = 0x1010
-    uint8_t output_data[] = {0x48, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};             // mov 0x0(%rip), %rcx
-    run_relocation_on_shared_object(output_data, 3, R_X86_64_REX_GOTPCRELX, 0x10, 0x400000, 0x401000);
-    assert_data(output_data, 0x48, 0x8d, 0x0d, 0x10, 0x10, 0x00, 0x00, END);        // lea 0x1010(%rip), %rcx
+    // S=401000 + A=10 - P=400003 = 0x100d
+    uint8_t output_data1[] = {0x48, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};             // mov 0x0(%rip), %rcx
+    reset(OT_DYN_EXEC, output_data1, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
+    assert_data(output_data1, 0x48, 0x8d, 0x0d, 0x0d, 0x10, 0x00, 0x00, END);        // lea 0x100d(%rip), %rcx
 }
 
 void test_R_X86_64_TPOFF32() {
     // With a TLS template size of 8, and symbol value of 0, the relative offset to the end of the TLS template is -8.
-    uint8_t output_data1[] = {0x00, 0x00, 0x00, 0x00};
-    run_tls_relocation(output_data1, 0, 0, 8, R_X86_64_TPOFF32, 0, 0x400000, 0, 1, 0);
-    assert_data(output_data1, 0xf8, 0xff, 0xff, 0xff, END);
+    // S + A - tls_template_tls_offset = 0 + 0 - 8
+    uint8_t output_data[] = {0x00, 0x00, 0x00, 0x00};
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_TPOFF32, 0, 0);
+    set_tls_template_tls_offset(8);
+    set_plt_offset(8);
+    run();
+    assert_data(output_data, 0xf8, 0xff, 0xff, 0xff, END);
 }
 
 void test_R_X86_64_GOTPCREL_with_GOT_entry() {
     // This instruction cannot be relaxed, so a GOT entry has to be added for the symbol
     uint8_t output_data[] = {0x48, 0x83, 0x3d, 0xf8, 0x00, 0x00, 0x00, 0x00};      // cmpq $0, foo@GOTPCREL(%rip)
-    run_got_relocation(output_data, 4, R_X86_64_GOTPCREL, 0, 0x400000, 0x401000, 0x20);
-    assert_data(output_data, 0x48, 0x83, 0x3d, 0xf8, 0x20, 0x00, 0x10, 0x00, END); // 0x500000 - 0x400000 + 0x20 = 0x00100020
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_GOTPCREL, 4, 0);
+    set_value(0x401000);
+    set_got_offset(0x20);
+    run();
+    assert_data(output_data, 0x48, 0x83, 0x3d, 0xf8, 0x1c, 0x00, 0x10, 0x00, END); // 0x500000 - 0x400004 + 0x20 = 0x0010001c
 }
 
 void test_R_X86_64_GOTPCREL_with_GOT_iplt_entry() {
-    // This instruction references something in the .got.plt.
+    // This instruction references something in the .got.iplt.
     uint8_t output_data[] = {0x48, 0x83, 0x3d, 0xf8, 0x00, 0x00, 0x00, 0x00};      // cmpq $0, foo@GOTPCREL(%rip)
-    run_got_iplt_relocation(output_data, 4, R_X86_64_GOTPCREL, 0, 0x400000, 0x401000, 0x20);
-    assert_data(output_data, 0x48, 0x83, 0x3d, 0xf8, 0x20, 0x00, 0x30, 0x00, END); // 0x700000 - 0x400000 + 0x20 = 0x00100020
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_GOTPCREL, 4, 0);
+    set_value(0x401000);
+    set_got_iplt_offset(0x20);
+    run();
+    assert_data(output_data, 0x48, 0x83, 0x3d, 0xf8, 0x1c, 0x00, 0x30, 0x00, END); // 0x700000 - 0x400004 + 0x20 = 0x0010001c
 }
 
 void test_R_X86_64_PLT32_in_static(void) {
     // For entries not in the PLT, R_X86_64_PLT32 behaves like a R_X86_64_PC32
+    // S + A - P = 0x401000 + 0x10 - 0x400008 = 0x1008
     uint32_t output_data[4]; memset(output_data, -1, 16);
-    run_relocation(output_data, 8, R_X86_64_PLT32, 0x10, 0x400000, 0x401000);
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_PLT32, 8, 0x10);
+    set_value(0x401000);
+    run();
+
     assert_uint32(-1, (output_data)[1], "R_X86_64_PLT32");
-    assert_uint32(0x1010, (output_data)[2], "R_X86_64_PLT32");
+    assert_uint32(0x1008, (output_data)[2], "R_X86_64_PLT32");
     assert_uint32(-1, (output_data)[3], "R_X86_64_PLT32");
 
     // The symbol value is in the .iplt section
+    // iplt_address + iplt_offset + A - P = 0x600000 + 0 + 0x20 - 0x400001 = 0x20001F
     uint8_t output_data2[] = {0xe8, 0x00, 0x00, 0x00, 0x00};      // callq foo@PLT and callq foo
-    run_iplt_relocation(output_data2, 1, R_X86_64_PLT32, 0, 0x400000, 0x401000, 0x20);
-    assert_data(output_data2, 0xe8, 0x20, 0x00, 0x20, 0x00, END); // 0x600000 - 0x400000 + 0x20 = 0x00200020
+    reset(OT_STATIC_EXEC, output_data2, R_X86_64_PLT32, 1, 0);
+    set_value(0x401000);
+    set_iplt_offset(0x20);
+    run();
+    assert_data(output_data2, 0xe8, 0x1f, 0x00, 0x20, 0x00, END);
 }
 
 // ET_DYN outputs are either executables or shared libraries.
@@ -315,13 +396,21 @@ void test_R_X86_64_PLT32_in_static(void) {
 void test_R_X86_64_PLT32_in_shared(void) {
     // When linking dynamically, the symbol value is in the .plt section
     uint8_t output_data1[] = {0xe8, 0x00, 0x00, 0x00, 0x00};      // callq foo@PLT and callq foo
-    run_plt_relocation(output_data1, 1, R_X86_64_PLT32, 0, 0x0, 0x10, 0x20, 1);
-    assert_data(output_data1, 0xe8, 0x20, 0x80, 0x00, 0x00, END); // S(0x8020) = plt_offset(0x8000) + value_plt_offset(0x20) + A(0) - P(0);
+    reset(OT_SHLIB, output_data1, R_X86_64_PLT32, 1, 0);
+    set_output_section_address(0);
+    set_value(0x10);
+    set_plt_offset(0x20);
+    run();
+    assert_data(output_data1, 0xe8, 0x1f, 0x80, 0x00, 0x00, END); // S(0x801f) = plt_offset(0x8000) + value_plt_offset(0x20) + A(0) - P(1);
 
     // When linking statically, R_X86_64_PLT32 is converted to R_X86_64_PC32
+    // S + A - P = 0x401000 + 0 - 0x400001 = 0xfff
     uint8_t output_data2[] = {0xe8, 0x00, 0x00, 0x00, 0x00};      // callq foo@PLT and callq foo
-    run_plt_relocation(output_data2, 1, R_X86_64_PLT32, 0, 0x0, 0x10, 0x20, 0);
-    assert_data(output_data2, 0xe8, 0x10, 0x00, 0x00, 0x00, END); // The symbol value of 0x10 is used
+    reset(OT_STATIC_EXEC, output_data2, R_X86_64_PLT32, 1, 0);
+    set_value(0x401000);
+    set_plt_offset(-1); // wtf, really?
+    run();
+    assert_data(output_data2, 0xe8, 0xff, 0x0f, 0x00, 0x00, END);
 }
 
 int main() {

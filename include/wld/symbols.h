@@ -38,8 +38,8 @@ typedef struct symbol {
     int visibility;                 // Used by the linker
     int sources;                    // A combination of at least one of SRC_*
     int needs_got;                  // Set if the symbol needs an entry in the Global Offset Table (GOT)
-    int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt table
-    int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt table, for ifuncs
+    int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt and .plt tables
+    int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt and .iplt tables, for ifuncs
     int needs_copy;                 // Uses a R_X86_64_COPY relocation to copy data from a shared lib to an executable
     int needs_dynsym_entry;         // Set to 1 if the symbol needs a dynsym entry. 0 doesn't exclude it from the .dynsym.
     uint64_t got_offset;            // Offset in the .got section, if present
@@ -76,6 +76,7 @@ extern StrMap *local_symbol_tables;
 
 extern char *last_error_message;
 
+SymbolNV *new_symbolnv(const char *name, int version_index);
 SymbolTable *new_symbol_table(void);
 void init_symbols(OutputElfFile *output_elf_file);
 Symbol *get_defined_symbol(SymbolTable *st, const char *name, int version_index);
@@ -84,6 +85,7 @@ Symbol *must_get_defined_symbol(SymbolTable *st, const char *name, int version_i
 Symbol *must_get_global_defined_symbol(const char *name, int version_index);
 SymbolTable *get_local_symbol_table(InputElfFile *elf_file);
 Symbol *lookup_symbol(InputElfFile *elf_file, char *name, int version_index);
+Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t size, int source);
 Symbol *get_undefined_symbol(const char *name, int version_index);
 int is_undefined_symbol(const char *name, int version_index);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);

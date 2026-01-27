@@ -793,7 +793,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     finalize_symbols(output_elf_file);
 
     // Relax instructions where possible and determine which symbols need to be in the GOT
-    apply_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_SCAN);
+    process_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_SCAN);
 
     // Create the .got, .got.plt, .plt, .rela.plt sections, as needed
     create_got_plt_and_rela_sections(output_elf_file);
@@ -906,7 +906,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     copy_extra_sections_to_output(output_elf_file);
 
     // Write relocated symbol values to the output ELF file
-    apply_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_APPLY);
+    process_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_APPLY);
 
     // Write the ELF file
     write_elf_file(output_elf_file);

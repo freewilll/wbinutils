@@ -100,7 +100,7 @@ static SymbolNV make_symbolnv(const char *name, int version_index) {
     return snv;
 }
 
-static SymbolNV *new_symbolnv(const char *name, int version_index) {
+SymbolNV *new_symbolnv(const char *name, int version_index) {
     SymbolNV *snv = malloc(sizeof(SymbolNV));
     snv->name = strdup(name);
     snv->version_index = version_index;
@@ -182,7 +182,7 @@ static void remove_undefined_symbol(const char *name, int version_index) {
     map_ordered_delete(global_symbol_table->undefined_symbols, &snv);
 }
 
-static Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t size, int source) {
+Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t size, int source) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
     symbol->name                  = strdup(name);
