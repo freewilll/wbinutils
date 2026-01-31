@@ -905,7 +905,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
         dynsym_symbol_count++;
 
-        if (symbol->needs_got || symbol->needs_copy) rela_dyn_entry_count++;
+        if (symbol->extra == SE_IN_GOT || symbol->extra == SE_COPY_RELOCATION) rela_dyn_entry_count++;
     }
 
     rela_dyn_entry_count += output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations->length;
@@ -995,8 +995,8 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
-        if (symbol->needs_got) got_entries_count++;
-        if (symbol->needs_got_plt) got_plt_entries_count++;
+        if (symbol->extra == SE_IN_GOT) got_entries_count++;
+        if (symbol->extra == SE_IN_GOT_PLT) got_plt_entries_count++;
     }
 
     output_elf_file->got_entries_count = got_entries_count;
@@ -1052,7 +1052,7 @@ void update_got_values(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
-        if (!symbol->needs_got) continue;
+        if (symbol->extra != SE_IN_GOT) continue;
 
         if (got_index * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in .got");
         got_entries[got_index] = symbol->dst_value;
@@ -1128,7 +1128,7 @@ void update_dynamic_relocatable_values(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
-        if (!symbol->needs_got_plt) continue;
+        if (symbol->extra != SE_IN_GOT_PLT) continue;
 
         symbol->plt_offset = plt_index * 16;
 
@@ -1210,7 +1210,7 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
             append_to_list(output_elf_file->ifunc_symbols, symbol);
 
             // Reserve .got.iplt entry
-            symbol->needs_got_iplt = 1;
+            symbol->extra = SE_IN_GOT_IPLT;
             symbol->needs_dynsym_entry = 1;
 
             if (!section_got_iplt) {
@@ -1409,7 +1409,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
 
-        if (symbol->needs_got) {
+        if (symbol->extra == SE_IN_GOT) {
             if (!section_got) panic("GOT is NULL");
 
             int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
@@ -1433,7 +1433,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
-        if (!symbol->needs_copy) continue;
+        if (symbol->extra != SE_COPY_RELOCATION) continue;
 
         if (i >= output_elf_file->rela_dyn_entry_count)
             panic("Symbol %s has a .rela.dyn offset that exceeds the size of .rela.dyn table: %d >= %d",
@@ -1515,7 +1515,7 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
         // and completely removes any reference to the shared library.
         symbol->input_section = data_copy_section;
         symbol->src_value = data_copy_section->size;
-        symbol->needs_copy = 1;
+        symbol->extra = SE_COPY_RELOCATION;
         symbol->needs_dynsym_entry = 1;
         symbol->sources = SRC_OBJECT;
 

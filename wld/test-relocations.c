@@ -165,22 +165,22 @@ static void set_value(uint64_t value) {
 }
 
 static void set_plt_offset(uint64_t plt_offset) {
-    state.symbol->needs_got_plt = 1;
+    state.symbol->extra = SE_IN_GOT_PLT;
     state.symbol->plt_offset = plt_offset;
 }
 
 static void set_iplt_offset(uint64_t iplt_offset) {
-    state.symbol->needs_got_iplt = 1;
+    state.symbol->extra = SE_IN_GOT_IPLT;
     state.symbol->iplt_offset = iplt_offset;
 }
 
 static void set_got_iplt_offset(uint64_t got_iplt_offset) {
-    state.symbol->needs_got_iplt = 1;
+    state.symbol->extra = SE_IN_GOT_IPLT;
     state.symbol->got_iplt_offset = got_iplt_offset;
 }
 
 static void set_got_offset(uint64_t got_offset) {
-    state.symbol->needs_got = 1;
+    state.symbol->extra = SE_IN_GOT;
     state.symbol->got_offset = got_offset;
 }
 

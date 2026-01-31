@@ -26,6 +26,13 @@ typedef struct symbol_nv {
 
 #define SRC_OBJECT_OR_LIBRARY (SRC_OBJECT | SRC_LIBRARY)
 
+// Symbol extra behavior for symbols based on relocations, ifuncs, etc.
+#define SE_NONE            0
+#define SE_IN_GOT          1
+#define SE_IN_GOT_PLT      2
+#define SE_IN_GOT_IPLT     3
+#define SE_COPY_RELOCATION 4
+
 typedef struct symbol {
     char *name;                     // Name
     int version;                    // Version
@@ -37,10 +44,7 @@ typedef struct symbol {
     int is_common;                  // The symbol is a common symbol. input_section is null.
     int visibility;                 // Used by the linker
     int sources;                    // A combination of at least one of SRC_*
-    int needs_got;                  // Set if the symbol needs an entry in the Global Offset Table (GOT)
-    int needs_got_plt;              // Set if the symbol needs an entry in the .got.plt and .plt tables
-    int needs_got_iplt;             // Set if the symbol needs an entry in the .got.iplt and .iplt tables, for ifuncs
-    int needs_copy;                 // Uses a R_X86_64_COPY relocation to copy data from a shared lib to an executable
+    int extra;                      // One of SE_*
     int needs_dynsym_entry;         // Set to 1 if the symbol needs a dynsym entry. 0 doesn't exclude it from the .dynsym.
     uint64_t got_offset;            // Offset in the .got section, if present
     uint64_t got_plt_offset;        // Offset in the .got.plt section, if present

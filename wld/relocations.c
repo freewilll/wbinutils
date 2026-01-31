@@ -198,11 +198,11 @@ static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocatio
     if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol_name);
 
     if (add_got == RT_GOT) {
-        symbol->needs_got = 1;
+        symbol->extra = SE_IN_GOT;
         symbol->needs_dynsym_entry = 1;
     }
     else {
-        symbol->needs_got_plt = 1;
+        symbol->extra = SE_IN_GOT_PLT;
         symbol->needs_dynsym_entry = 1;
     }
 }
@@ -504,10 +504,19 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
         } else {
             dst_value             = symbol->dst_value;
             is_tls_value          = symbol->type == STT_TLS;
-            value_got_offset      = symbol->needs_got      ? symbol->got_offset      : -1;
-            value_plt_offset      = symbol->needs_got_plt  ? symbol->plt_offset      : -1;
-            value_iplt_offset     = symbol->needs_got_iplt ? symbol->iplt_offset     : -1;
-            value_got_iplt_offset = symbol->needs_got_iplt ? symbol->got_iplt_offset : -1;
+
+            switch (symbol->extra) {
+                case SE_IN_GOT:
+                    value_got_offset = symbol->got_offset;
+                    break;
+                case SE_IN_GOT_PLT:
+                    value_plt_offset = symbol->plt_offset;
+                    break;
+                case SE_IN_GOT_IPLT:
+                    value_iplt_offset = symbol->iplt_offset;
+                    value_got_iplt_offset = symbol->got_iplt_offset;
+                    break;
+            }
         }
     }
 
