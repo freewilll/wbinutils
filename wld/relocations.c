@@ -467,13 +467,8 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
     ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
     int elf_symbol_type = elf_symbol->st_info & 0xf;
 
-    int dst_value;
+    int dst_value = 0;
     char *symbol_name = NULL;
-    int is_tls_value = 0;
-    uint64_t value_got_offset = -1;
-    uint64_t value_plt_offset = -1;
-    uint64_t value_iplt_offset = -1;
-    uint64_t value_got_iplt_offset = -1;
 
     // Get the output section
     OutputSection *rw_section = input_section->output_section;
@@ -498,26 +493,8 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
         int version_index = 0;
 
         Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
-        if (!symbol) {
-            // It's a weak symbol; they are allowed to be undefined. Their value defaults to zero.
-            dst_value = 0;
-        } else {
-            dst_value             = symbol->dst_value;
-            is_tls_value          = symbol->type == STT_TLS;
-
-            switch (symbol->extra) {
-                case SE_IN_GOT:
-                    value_got_offset = symbol->got_offset;
-                    break;
-                case SE_IN_GOT_PLT:
-                    value_plt_offset = symbol->plt_offset;
-                    break;
-                case SE_IN_GOT_IPLT:
-                    value_iplt_offset = symbol->iplt_offset;
-                    value_got_iplt_offset = symbol->got_iplt_offset;
-                    break;
-            }
-        }
+        // Weak symbols are allowed to be undefined. The value defaults to zero.
+        if (symbol) dst_value = symbol->dst_value;
     }
 
     if (DEBUG_RELOCATIONS) {
@@ -540,7 +517,7 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
     // unless the symbol is in the .iplt section for ifuncs.
-    if (type == R_X86_64_PLT32 && value_iplt_offset == -1 && !link_dynamically)
+    if (type == R_X86_64_PLT32 && symbol->extra != SE_IN_GOT_IPLT && !link_dynamically)
         type = R_X86_64_PC32;
 
     if (type == R_X86_64_GOTTPOFF) {
@@ -572,7 +549,7 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
 
             // Unusual case of accessing a TLS template variable directly.
             // This is mostly to make an unusual TLS test case work.
-            if (is_tls_value) value += output_elf_file->tls_template_address;
+            if (symbol && symbol->type == STT_TLS) value += output_elf_file->tls_template_address;
 
             if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             *output = value;
@@ -619,10 +596,10 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
             uint64_t value = S;
 
             if (link_dynamically || (opcode != 0xc7 && opcode != 0x81)) {
-                if (value_got_offset != -1)
-                    value = output_elf_file->got_virt_address + value_got_offset + A - P;
-                else if (value_got_iplt_offset != -1)
-                    value = output_elf_file->got_iplt_virt_address + value_got_iplt_offset + A - P;
+                if (symbol->extra == SE_IN_GOT)
+                    value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
+                else if (symbol->extra == SE_IN_GOT_IPLT)
+                    value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
                 else
                     // The value has relaxed to RIP-relative addressing and has neither a GOT or PLT entry
                     value = S + A - P;
@@ -644,10 +621,10 @@ void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputEl
         }
 
         case R_X86_64_PLT32: {
-            if (value_iplt_offset != -1)
-                S = output_elf_file->iplt_virt_address + value_iplt_offset + A - P;
-            else if (value_plt_offset != -1)
-                S = output_elf_file->plt_offset + value_plt_offset + A - P;
+            if (symbol->extra == SE_IN_GOT_IPLT)
+                S = output_elf_file->iplt_virt_address + symbol->iplt_offset + A - P;
+            else if (symbol->extra == SE_IN_GOT_PLT)
+                S = output_elf_file->plt_offset + symbol->plt_offset + A - P;
             else
                 panic("Expected a value in the iplt, but no entry is present");
 
