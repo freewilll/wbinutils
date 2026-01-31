@@ -193,8 +193,11 @@ static void set_tls_template_tls_offset(uint64_t tls_template_tls_offset) {
 }
 
 static void run() {
+    // In normal execution, SE_IN_GOT_IPLT is set in between scan and apply. This needs simulating here by resetting it in between.
+    int in_got_iplt = state.symbol->extra == SE_IN_GOT_IPLT;
     scan_relocation(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);
-    apply_relocation_to_output_elf_file(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);
+    if (in_got_iplt) state.symbol->extra = SE_IN_GOT_IPLT;
+    apply_relocation(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);
 }
 
 void test_R_X86_64_64(void) {

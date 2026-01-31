@@ -269,18 +269,10 @@ static void add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(OutputElfFile *outp
     append_to_list(output_elf_file->rela_dyn_R_X86_64_64_relocations, rrdr);
 }
 
-
 // Given an input file and a relocation, relax any instructions where possible and determine if the symbol needs to be in the GOT.
 // The instructions are rewritten in the loaded input ELF section.
 // apply_relocation() puts the relocated values in the output ELF file.
-// Returns:
-// SCAN_RELOCATION_OK                                       if OK
-// SCAN_RELOCATION_ERROR                                    if an error
-// SCAN_RELOCATION_NEEDS_GOT                                if the symbol requires a GOT entry
-// SCAN_RELOCATION_NEEDS_GOT_PLT                            if the symbol requires a GOT PLT entry
-// SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION       if the symbol needs a R_X86_64_RELATIVE      in the .rela.dyn section
-// SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION             If the symbol needs a R_X86_64_64_RELOCATION in the .rela.dyn section
-int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
     load_section(input_elf_file, input_section);
 
     Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
@@ -313,27 +305,30 @@ int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file
         case R_X86_64_64:
             if (output_is_shared) {
                 if (symbol_is_from_shared_library || !is_executable)
-                    return SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION;
+                    add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(output_elf_file, input_elf_file, input_section, relocation);
                 else
-                    return SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION;
+                    add_R_X86_64_RELATIVE_relocation(output_elf_file, input_elf_file, input_section, relocation);
             }
 
-            return SCAN_RELOCATION_OK;
+            return;
 
         case R_X86_64_PC32:
             // A R_X86_64_PC32 is not a GOT-relative relocation and may not be used when making a shared library.
             if (output_is_shared && !is_executable && symbol_is_from_shared_library)
                 error("A R_X86_64_PC32 relocation cannot be used for symbol \"%s\" when making a shared object; recompile with -fPIC", symbol_name);
 
-            return SCAN_RELOCATION_OK;
+            return;
 
         case R_X86_64_TPOFF32:
         case R_X86_64_32:
         case R_X86_64_32S:
-            return SCAN_RELOCATION_OK;
+            return;
 
         case R_X86_64_GOTPCRELX: {
-            if (link_dynamically) return SCAN_RELOCATION_NEEDS_GOT;
+            if (link_dynamically) {
+                add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+                return;
+            }
 
             // Relax instructions to not use the GOT
 
@@ -354,7 +349,7 @@ int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file
                 *popcode = 0xc7;
                 *pmod_rm = 0xc0 | (*pmod_rm & 0x38) >> 3;
 
-                return SCAN_RELOCATION_OK;
+                return;
             }
 
             else if (offset > 1 && opcode == 0xff) {
@@ -366,7 +361,7 @@ int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file
                 else
                     panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *pmod_rm);
 
-                return SCAN_RELOCATION_OK;
+                return;
             }
 
             panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
@@ -374,7 +369,10 @@ int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file
 
         case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
-            if (link_dynamically) return SCAN_RELOCATION_NEEDS_GOT;
+            if (link_dynamically) {
+                add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+                return;
+            }
 
             // Relax instructions to not use the GOT
 
@@ -388,32 +386,35 @@ int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file
                     // The RIP-relative value of foo will be used rather than a GOT slot.
                     *popcode = 0x8d; // lea
 
-                    return SCAN_RELOCATION_OK;
+                    return;
                 }
 
                 // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo, %rax
                 convert_Gvqp_to_Evqp(input_data, 0xc7, 0);
-                return SCAN_RELOCATION_OK;
+                return;
             }
 
             else if (offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
                 // Convert cmpq foo@GOTPCREL(%rip), %rax to cmpq $foo, %rax
                 convert_Gvqp_to_Evqp(input_data, 0x81, 7);
-                return SCAN_RELOCATION_OK;
+                return;
             }
 
             else if (offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
                 // Convert subq foo@GOTPCREL(%rip), %rax to subq $foo, %rax
                 convert_Gvqp_to_Evqp(input_data, 0x81, 5);
-                return SCAN_RELOCATION_OK;
+                return;
             }
 
-            return SCAN_RELOCATION_NEEDS_GOT;
+            add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+            return;
         }
 
         case R_X86_64_PLT32:
-            if (link_dynamically)
-                return SCAN_RELOCATION_NEEDS_GOT_PLT;
+            if (link_dynamically) {
+                add_got_or_plt_relocation(input_elf_file, relocation, RT_PLT);
+                return;
+            }
             else
                 panic("Unhandled R_X86_64_PLT32");
 
@@ -424,38 +425,13 @@ int scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file
             panic("Unhandled relocation type %s", relocation_name);
         }
     }
-
-    return SCAN_RELOCATION_OK;
 }
-
-static void scan_relocation_in_input_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
-    int result = scan_relocation(output_elf_file, input_elf_file, input_section, relocation);
-
-    switch (result) {
-        case SCAN_RELOCATION_NEEDS_GOT:
-            add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
-            break;
-
-        case SCAN_RELOCATION_NEEDS_GOT_PLT:
-            add_got_or_plt_relocation(input_elf_file, relocation, RT_PLT);
-            break;
-
-        case SCAN_RELOCATION_NEEDS_R_X86_64_RELATIVE_RELOCATION:
-            add_R_X86_64_RELATIVE_relocation(output_elf_file, input_elf_file, input_section, relocation);
-            break;
-
-        case SCAN_RELOCATION_NEEDS_R_X86_64_64_RELOCATION:
-            add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(output_elf_file, input_elf_file, input_section, relocation);
-            break;
-    }
-}
-
 
 // Given an input file, output file, input section and relocation, process the relocation by modifying the output.
 // This function updates the values in the output ELF file. The code may already have been relaxed by
 // scan_relocation().
 // All ELF file details are abstracted away, so that function can be easily tested.
-void apply_relocation_to_output_elf_file(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
     Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
 
     int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
@@ -672,9 +648,9 @@ void process_relocations(OutputElfFile *output_elf_file, List *input_elf_files, 
                 int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
 
                 if (phase == RELOCATION_PHASE_SCAN)
-                    scan_relocation_in_input_elf_file(output_elf_file, input_elf_file, input_section, relocation);
+                    scan_relocation(output_elf_file, input_elf_file, input_section, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)
-                    apply_relocation_to_output_elf_file(output_elf_file, input_elf_file, input_section, relocation);
+                    apply_relocation(output_elf_file, input_elf_file, input_section, relocation);
                 relocation++;
             }
 
