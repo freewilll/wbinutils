@@ -1,8 +1,10 @@
 # Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
 
-CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
 WAS = ../../../bin/was
 WLD = ../../../bin/wld
+
+# Use musl-wcc if available, otherwise fall back to gcc
+CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
 
 all: test
 
