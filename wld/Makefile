@@ -62,6 +62,7 @@ default-shared.ld.h: default-linker-script.template.h
 	gcc -E default-linker-script.template.h -D SHARED > default-shared.ld.h
 
 libwld.a: ${OBJECTS} ${LIBS_PATH} ${LINKER_SCRIPTS_HEADERS}
+	rm -f libwld.a
 	ar rcsT libwld.a ${OBJECTS} ${LIBS_PATH}
 
 ${TARGET}: libwld.a main.o ${LIBS_PATH}

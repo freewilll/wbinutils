@@ -19,6 +19,7 @@ CFLAGS = -g -Wunused -I ../../include -MMD -MP
 	gcc ${CFLAGS} -c $< -o $@
 
 ${TARGET}: ${OBJECTS} ${OBJECTS}
+	rm -f ${TARGET}
 	ar rcs ${TARGET} ${OBJECTS}
 
 -include ${DEPFILES}
