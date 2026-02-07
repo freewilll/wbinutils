@@ -197,7 +197,10 @@ int process_library_symbols(ArchiveFile *ar_file, List *input_elf_files) {
             if (strmap_get(included_objects_map, obj->filename)) continue;
 
             InputElfFile *elf_file = open_elf_file_in_archive(ar_file->file, obj->filename, obj->offset);
-            if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s in archive %s\n", elf_file->filename, ar_file->filename);
+
+            if (DEBUG_SYMBOL_RESOLUTION || DEBUG_SYMBOL_VERSIONS)
+                printf("Examining file %s in archive %s\n", elf_file->filename, ar_file->filename);
+
             int resolved_symbols = process_elf_file_symbols(elf_file, SRC_LIBRARY, 1);
             if (resolved_symbols) {
                 // Use the object file

@@ -38,6 +38,7 @@ test: \
 	musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib \
 	musl-runtime-symbol-resolution-with-multiple-defines \
 	glibc-tls-alignment \
+	symbol-versioning\
 
 .PHONY: sanity1
 sanity1:
@@ -187,6 +188,10 @@ musl-runtime-symbol-resolution-with-multiple-defines:
 glibc-tls-alignment:
 	+$(MAKE) -C glibc-tls-alignment
 
+.PHONY: symbol-versioning
+symbol-versioning:
+	+$(MAKE) -C symbol-versioning
+
 clean:
 	@+$(MAKE) -C sanity1 clean
 	@+$(MAKE) -C sanity2 clean
@@ -225,3 +230,4 @@ clean:
 	@+$(MAKE) -C musl-libc-dynamic-pointer-to-function-in-lib-called-from-lib clean
 	@+$(MAKE) -C musl-runtime-symbol-resolution-with-multiple-defines clean
 	@+$(MAKE) -C glibc-tls-alignment clean
+	@+$(MAKE) -C symbol-versioning clean

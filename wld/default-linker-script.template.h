@@ -14,10 +14,13 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    .interp :   { *(.interp)                                               }\n"
 
 #ifdef SHARED
-    "    .hash :     { *(.hash)                                                 }\n"
-    "    .dynsym :   { *(.dynsym)                                               }\n"
-    "    .dynstr :   { *(.dynstr)                                               }\n"
-    "    .rela.dyn : { *(.rela.dyn)                                             }\n"
+    "    .hash :          { *(.hash)                                            }\n"
+    "    .dynsym :        { *(.dynsym)                                          }\n"
+    "    .dynstr :        { *(.dynstr)                                          }\n"
+    "    .gnu.version :   { *(.gnu.version)                                     }\n"
+    "    .gnu.version_d : { *(.gnu.version_d)                                   }\n"
+    "    .gnu.version_r : { *(.gnu.version_r)                                   }\n"
+    "    .rela.dyn :      { *(.rela.dyn)                                        }\n"
 #else
 #endif
     "    .rela.plt : {                                                           \n"

@@ -154,13 +154,28 @@ static void convert_Gvqp_to_Evqp(void *data, uint8_t opcode, uint8_t binary_oper
     *mod_rm = ENCODE_MOD_RM(MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING, binary_operation, DECODE_MOD_RM_REG(*mod_rm));
 }
 
+// Lookup a symbol in the symbol table for from an ELF symbol
+// Looking up versioned symbols isn't implemented.
+static Symbol *get_symbol_from_elf_symbol_index(InputElfFile *input_elf_file, int symbol_index) {
+    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
+    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
+
+    int elf_file_local_version_index = input_elf_file->symbol_table_version_indexes
+        ? input_elf_file->symbol_table_version_indexes[symbol_index]
+        : 0;
+
+    int global_version_index = GLOBAL_SYMBOL_INDEX_NONE;
+
+    if (elf_file_local_version_index >= 2)
+        panic("Relocations to versioned symbols not implemented");
+
+    return lookup_symbol(input_elf_file, symbol_name, global_version_index);
+}
+
 // Lookup a symbol in the symbol table for a relocation. If null, then the relocation refers to a section..
 static Symbol *get_symbol_from_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation) {
     int symbol_index = relocation->r_info >> 32;
-    ElfSymbol *elf_symbol = &input_elf_file->symbol_table[symbol_index];
-    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-    int version_index = 0;
-    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
+    return get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
 }
 
 static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbol) {
@@ -192,10 +207,8 @@ static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocatio
     }
 
     // Lookup the symbol in the symbol table
-    char *symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-    int version_index = 0;
-    Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
-    if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol_name);
+    Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
+    if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol->name);
 
     if (add_got == RT_GOT) {
         symbol->extra = SE_IN_GOT;
@@ -219,8 +232,7 @@ static void add_R_X86_64_RELATIVE_relocation(OutputElfFile *output_elf_file, Inp
     InputSection *relocation_input_section = NULL;
     int is_common = elf_symbol->st_shndx == SHN_COMMON;
 
-    int version_index = 0;
-    Symbol *symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
+    Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
 
     if (!is_common && elf_symbol->st_shndx >= SHN_LORESERVE)
         panic("Unhandled section index %d when processing", elf_symbol->st_shndx);
@@ -254,8 +266,7 @@ static void add_SCAN_RELOCATION_NEEDS_R_X86_64_64_relocation(OutputElfFile *outp
 
     InputSection *relocation_input_section = NULL;
 
-    int version_index = 0;
-    Symbol *symbol = get_defined_symbol(global_symbol_table, symbol_name, version_index);
+    Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
     if (!symbol) panic("Expected %s to be defined due to a relocation referencing it", symbol_name);
     symbol->needs_dynsym_entry = 1;
 
@@ -465,10 +476,8 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
     else {
         // Handle a relocation to a non-section symbol
 
-        symbol_name = &input_elf_file->symbol_table_strings[elf_symbol->st_name];
-        int version_index = 0;
+        Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
 
-        Symbol *symbol = lookup_symbol(input_elf_file, symbol_name, version_index);
         // Weak symbols are allowed to be undefined. The value defaults to zero.
         if (symbol) dst_value = symbol->dst_value;
     }
@@ -493,7 +502,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
     // unless the symbol is in the .iplt section for ifuncs.
-    if (type == R_X86_64_PLT32 && symbol->extra != SE_IN_GOT_IPLT && !link_dynamically)
+    if (type == R_X86_64_PLT32 && symbol && symbol->extra != SE_IN_GOT_IPLT && !link_dynamically)
         type = R_X86_64_PC32;
 
     if (type == R_X86_64_GOTTPOFF) {
@@ -597,12 +606,12 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
         }
 
         case R_X86_64_PLT32: {
-            if (symbol->extra == SE_IN_GOT_IPLT)
+            if (symbol && symbol->extra == SE_IN_GOT_IPLT)
                 S = output_elf_file->iplt_virt_address + symbol->iplt_offset + A - P;
-            else if (symbol->extra == SE_IN_GOT_PLT)
+            else if (symbol && symbol->extra == SE_IN_GOT_PLT)
                 S = output_elf_file->plt_offset + symbol->plt_offset + A - P;
             else
-                panic("Expected a value in the iplt, but no entry is present");
+                panic("R_X86_64_PLT32 relocation symbol not in plt nor iplt");
 
             if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", S);
             uint32_t *output = (uint32_t *) output_pointer;
@@ -643,10 +652,6 @@ void process_relocations(OutputElfFile *output_elf_file, List *input_elf_files, 
             ElfRelocation *end = ((void *) relocations) + rela_input_section->size;
 
             while (relocation < end) {
-                Symbol *symbol = get_symbol_from_relocation(input_elf_file, relocation);
-
-                int link_dynamically = link_symbol_dynamically(output_elf_file, symbol);
-
                 if (phase == RELOCATION_PHASE_SCAN)
                     scan_relocation(output_elf_file, input_elf_file, input_section, relocation);
                 else if (phase == RELOCATION_PHASE_APPLY)

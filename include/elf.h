@@ -47,24 +47,27 @@
 #define SHF_TLS           (1 << 10)	// TLS
 
 // Section header types
-#define SHT_NULL           0    // Unused
-#define SHT_PROGBITS       1    // Program data
-#define SHT_SYMTAB         2    // Symbol table
-#define SHT_STRTAB         3    // String table
-#define SHT_RELA           4    // Relocation entries with addends
-#define SHT_HASH           5    // Symbol hash table
-#define SHT_DYNAMIC        6    // Dynamic linking information
-#define SHT_NOTE	       7    // Notes
-#define SHT_NOBITS         8    // Program space with no data (bss)
-#define SHT_REL            9    // Relocation entries, no addends
-#define SHT_SHLIB         10    // Reserved
-#define SHT_DYNSYM        11    // Dynamic linker symbol table
-#define SHT_INIT_ARRAY    14    // Array of constructors
-#define SHT_FINI_ARRAY    15    // Array of destructors
-#define SHT_PREINIT_ARRAY 16    // Array of pre-constructors
-#define SHT_GROUP         17    // Section group
-#define SHT_SYMTAB_SHNDX  18    // Extended section indeces
-#define	SHT_NUM           19    // Number of defined types.
+#define SHT_NULL           0          // Unused
+#define SHT_PROGBITS       1          // Program data
+#define SHT_SYMTAB         2          // Symbol table
+#define SHT_STRTAB         3          // String table
+#define SHT_RELA           4          // Relocation entries with addends
+#define SHT_HASH           5          // Symbol hash table
+#define SHT_DYNAMIC        6          // Dynamic linking information
+#define SHT_NOTE           7          // Notes
+#define SHT_NOBITS         8          // Program space with no data (bss)
+#define SHT_REL            9          // Relocation entries, no addends
+#define SHT_SHLIB         10          // Reserved
+#define SHT_DYNSYM        11          // Dynamic linker symbol table
+#define SHT_INIT_ARRAY    14          // Array of constructors
+#define SHT_FINI_ARRAY    15          // Array of destructors
+#define SHT_PREINIT_ARRAY 16          // Array of pre-constructors
+#define SHT_GROUP         17          // Section group
+#define SHT_SYMTAB_SHNDX  18          // Extended section indeces
+#define	SHT_NUM           19          // Number of defined types.
+#define SHT_GNU_VERDEF    0x6ffffffd  // GNU Version definition section.
+#define SHT_GNU_VERNEED   0x6ffffffe  // GNU Version needs section
+#define SHT_GNU_VERSYM    0x6fffffff  // GNU Version symbol table
 
 // Program segment types
 #define	PT_NULL           0     // Program header table entry unused
@@ -144,47 +147,57 @@
 #define STV_PROTECTED   3 // Not preemptible, not exported
 
 // Dynamic section tags
-#define DT_NULL            0    // Marks end of dynamic section
-#define DT_NEEDED          1    // Name of needed library
-#define DT_PLTRELSZ        2    // Size in bytes of PLT relocs
-#define DT_PLTGOT          3    // Processor defined value
-#define DT_HASH            4    // Address of symbol hash table
-#define DT_STRTAB          5    // Address of string table
-#define DT_SYMTAB          6    // Address of symbol table
-#define DT_RELA            7    // Address of Rela relocs
-#define DT_RELASZ          8    // Total size of Rela relocs
-#define DT_RELAENT         9    // Size of one Rela reloc
-#define DT_STRSZ           10   // Size of string table
-#define DT_SYMENT          11   // Size of one symbol table entry
-#define DT_INIT            12   // Address of init function
-#define DT_FINI            13   // Address of termination function
-#define DT_SONAME          14   // Name of shared object
-#define DT_RPATH           15   // Library search path (deprecated)
-#define DT_SYMBOLIC        16   // Start symbol search here
-#define DT_REL             17   // Address of Rel relocs
-#define DT_RELSZ           18   // Total size of Rel relocs
-#define DT_RELENT          19   // Size of one Rel reloc
-#define DT_PLTREL          20   // Type of reloc in PLT
-#define DT_DEBUG           21   // For debugging; unspecified
-#define DT_TEXTREL         22   // Reloc might modify .text
-#define DT_JMPREL          23   // Address of PLT relocs
-#define DT_BIND_NOW        24   // Process relocations of object
-#define DT_INIT_ARRAY      25   // Array with addresses of init fct
-#define DT_FINI_ARRAY      26   // Array with addresses of fini fct
-#define DT_INIT_ARRAYSZ    27   // Size in bytes of DT_INIT_ARRAY
-#define DT_FINI_ARRAYSZ    28   // Size in bytes of DT_FINI_ARRAY
-#define DT_RUNPATH         29   // Library search path
-#define DT_FLAGS           30   // Flags for the object being loaded
-#define DT_ENCODING        32   // Start of encoded range
-#define DT_PREINIT_ARRAY   32   // Array with addresses of preinit fct
-#define DT_PREINIT_ARRAYSZ 33   // size in bytes of DT_PREINIT_ARRAY
-#define DT_SYMTAB_SHNDX    34   // Address of SYMTAB_SHNDX section
+#define DT_NULL            0          // Marks end of dynamic section
+#define DT_NEEDED          1          // Name of needed library
+#define DT_PLTRELSZ        2          // Size in bytes of PLT relocs
+#define DT_PLTGOT          3          // Processor defined value
+#define DT_HASH            4          // Address of symbol hash table
+#define DT_STRTAB          5          // Address of string table
+#define DT_SYMTAB          6          // Address of symbol table
+#define DT_RELA            7          // Address of Rela relocs
+#define DT_RELASZ          8          // Total size of Rela relocs
+#define DT_RELAENT         9          // Size of one Rela reloc
+#define DT_STRSZ           10         // Size of string table
+#define DT_SYMENT          11         // Size of one symbol table entry
+#define DT_INIT            12         // Address of init function
+#define DT_FINI            13         // Address of termination function
+#define DT_SONAME          14         // Name of shared object
+#define DT_RPATH           15         // Library search path (deprecated)
+#define DT_SYMBOLIC        16         // Start symbol search here
+#define DT_REL             17         // Address of Rel relocs
+#define DT_RELSZ           18         // Total size of Rel relocs
+#define DT_RELENT          19         // Size of one Rel reloc
+#define DT_PLTREL          20         // Type of reloc in PLT
+#define DT_DEBUG           21         // For debugging; unspecified
+#define DT_TEXTREL         22         // Reloc might modify .text
+#define DT_JMPREL          23         // Address of PLT relocs
+#define DT_BIND_NOW        24         // Process relocations of object
+#define DT_INIT_ARRAY      25         // Array with addresses of init fct
+#define DT_FINI_ARRAY      26         // Array with addresses of fini fct
+#define DT_INIT_ARRAYSZ    27         // Size in bytes of DT_INIT_ARRAY
+#define DT_FINI_ARRAYSZ    28         // Size in bytes of DT_FINI_ARRAY
+#define DT_RUNPATH         29         // Library search path
+#define DT_FLAGS           30         // Flags for the object being loaded
+#define DT_ENCODING        32         // Start of encoded range
+#define DT_PREINIT_ARRAY   32         // Array with addresses of preinit fct
+#define DT_PREINIT_ARRAYSZ 33         // size in bytes of DT_PREINIT_ARRAY
+#define DT_SYMTAB_SHNDX    34         // Address of SYMTAB_SHNDX section
+#define DT_VERSYM          0x6ffffff0 // Address of the version symbol table
+#define DT_VERNEED         0x6ffffffe // Address of the version dependency table
+#define DT_VERNEEDNUM      0x6fffffff // Number of entries in the version dependency table
 
 // Legal values for vd_flags (version information flags)
 #define VER_FLG_BASE    0x1 // Version definition of file itself
 #define VER_FLG_WEAK    0x2 // Weak version identifier
 
 #define VERSYM_HIDDEN 0x8000
+
+// Versym symbol index values
+#define VER_NDX_LOCAL              0    // Symbol is local
+#define VER_NDX_GLOBAL             1    // Symbol is global
+#define VER_NDX_LORESERVE     0xff00    // Beginning of reserved entries
+#define VER_NDX_ELIMINATE     0xff01    // Symbol is to be eliminated
+
 
 typedef struct elf_header {
     uint8_t   ei_magic0;        // 0x7F followed by ELF(45 4c 46) in ASCII; these four bytes constitute the magic number.

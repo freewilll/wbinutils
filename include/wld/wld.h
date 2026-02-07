@@ -31,10 +31,14 @@
 #define HASH_SECTION_NAME       ".hash"
 #define INTERP_SECTION_NAME     ".interp"
 #define DATA_COPY_SECTION_NAME  ".data.copy"
+#define VERSYM_SECTION_NAME     ".gnu.version"
+#define VERNEED_SECTION_NAME    ".gnu.version_r"
+#define VERDEF_SECTION_NAME     ".gnu.version_d"
 
 #define DEBUG_SYMBOL_RESOLUTION 0
-#define DEBUG_RELOCATIONS 0
-#define DEBUG_LAYOUT 0
+#define DEBUG_SYMBOL_VERSIONS   0
+#define DEBUG_RELOCATIONS       0
+#define DEBUG_LAYOUT            0
 
 // Section types that are included when not referenced in the linker script
 #define ORPHANED_SECTION_TYPE(type) \
@@ -50,6 +54,8 @@ typedef struct input_file {
 
 extern const char *DYNAMIC_SECTION_TYPE_NAMES[];
 
+const char *dynamic_section_name(uint64_t tag);
+const char *section_type_name(uint64_t type);
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type);
 InputSection *get_extra_section(OutputElfFile *output_elf_file, char *name);
 InputSection *create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align);

@@ -24,7 +24,11 @@ typedef struct {
     SymbolTable *local_symbol_table;
     int source;    // One of SRC_*
     int read_only;
+    int is_default_version;
 } ElfSymbolContext;
+
+StrMap *global_symbol_version_indexes_map;
+List *global_symbol_version_indexes_list;
 
 unsigned int symbol_nv_hash(const void *ptr) {
     const SymbolNV *key = ptr;
@@ -59,6 +63,9 @@ static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, c
     int is_exported_binding = symbol->binding == STB_GLOBAL || symbol->binding == STB_WEAK;
     int is_undefined = is_undefined_symbol(symbol->name, snv->version_index);
     if (!is_exported_binding && !is_undefined) return 0;
+
+    // This symbol is a duplicate of another versioned symbol
+    if (snv->is_proxy_for_default) return 0;
 
     // Include symbols with relocations
     if (symbol->needs_dynsym_entry) return 1;
@@ -100,21 +107,29 @@ static SymbolNV make_symbolnv(const char *name, int version_index) {
     return snv;
 }
 
-SymbolNV *new_symbolnv(const char *name, int version_index) {
+static void make_snv_full_name(SymbolNV *snv) {
+    if (snv->version_index > GLOBAL_SYMBOL_INDEX_DEFAULT) {
+        char *separator = snv->is_default ? "@@" : "@";
+
+        if (snv->version_index >= global_symbol_version_indexes_list->length)
+            panic("Symvol version index %d exceeds seen symbol versions %d",
+                snv->version_index, global_symbol_version_indexes_list->length);
+
+        char *version_name = global_symbol_version_indexes_list->elements[snv->version_index];
+        snv->full_name = malloc(strlen(snv->name) + strlen(separator) + strlen(version_name) + 1);
+        sprintf(snv->full_name, "%s%s%s", snv->name, separator, version_name);
+    }
+    else {
+        snv->full_name = strdup(snv->name);
+    }
+}
+
+SymbolNV *new_symbolnv(const char *name, int version_index, int is_default) {
     SymbolNV *snv = malloc(sizeof(SymbolNV));
     snv->name = strdup(name);
     snv->version_index = version_index;
-}
-
-static SymbolNV *new_symbolnv_from_symbol_index(InputElfFile *elf_file, int symbol_index) {
-    ElfSymbol *symbol = &elf_file->symbol_table[symbol_index];
-
-    char *name = symbol->st_name ? &elf_file->symbol_table_strings[symbol->st_name] : NULL;
-
-    SymbolNV *snv = malloc(sizeof(SymbolNV));
-    snv->name =name;
-    snv->version_index = elf_file->symbol_table_version_indexes ? elf_file->symbol_table_version_indexes[symbol_index] : 0;
-
+    snv->is_default = is_default;
+    make_snv_full_name(snv);
     return snv;
 }
 
@@ -128,8 +143,8 @@ SymbolTable *new_symbol_table(void) {
 
 // Get a symbol from the defined symbol table. Returns NULL if not present.
 Symbol *get_defined_symbol(SymbolTable *st, const char *name, int version_index) {
-    SymbolNV snv = make_symbolnv(name, version_index);
-    return (Symbol *) map_ordered_get(st->defined_symbols, &snv);
+    SymbolNV snv = make_symbolnv(name, version_index); // inefficient. No need to make and alloc full_name
+    return map_ordered_get(st->defined_symbols, &snv);
 }
 
 // Get a symbol from the global defined symbol table. Returns NULL if not present.
@@ -166,7 +181,7 @@ Symbol *lookup_symbol(InputElfFile *elf_file, char *name, int version_index) {
 
 // Get an undefined symbol. Returns NULL if not present.
 Symbol *get_undefined_symbol(const char *name, int version_index) {
-    SymbolNV snv = make_symbolnv(name, version_index);
+    SymbolNV snv = make_symbolnv(name, version_index); // inefficient. No need to make and alloc full_name
     return map_ordered_get(global_symbol_table->undefined_symbols, &snv);
 }
 
@@ -177,7 +192,7 @@ int is_undefined_symbol(const char *name, int version_index) {
 
 // Remove a symbol from the undefined symbols set
 static void remove_undefined_symbol(const char *name, int version_index) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s\n", name);
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s (%d)\n", name, version_index);
     SymbolNV snv = make_symbolnv(name, version_index);
     map_ordered_delete(global_symbol_table->undefined_symbols, &snv);
 }
@@ -196,9 +211,9 @@ Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t 
 }
 
 static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s binding=%s\n", name, SYMBOL_BINDING_NAMES[binding]);
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s version=%d binding=%s\n", name, version_index, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
-    SymbolNV *snv = new_symbolnv(name, version_index);
+    SymbolNV *snv = new_symbolnv(name, version_index, 0);
     map_ordered_put(st->defined_symbols, snv, symbol);
 
     return symbol;
@@ -206,12 +221,21 @@ static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version
 
 // Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
 // Returns 1 if an undefined symbol has been resolved.
-static int resolve_undefined_symbol(const char *name, int version_index, int is_library, int read_only) {
+static int resolve_undefined_symbol(const char *name, int version_index, int is_default_version, int is_library, int read_only) {
     Symbol *undefined_symbol = get_undefined_symbol(name, version_index);
+
+    int undefined_symbol_version_index = version_index;
+
+    // If the symbol hasn't been found and we are resolving a default symbol, try to find an undefined symbol without a version
+    if (!undefined_symbol && is_default_version) {
+        undefined_symbol = get_undefined_symbol(name, GLOBAL_SYMBOL_INDEX_NONE);
+        if (undefined_symbol) undefined_symbol_version_index = 0;
+    }
+
     if (!undefined_symbol) return 0;
 
     // Resolve the undefined symbol.
-    if (!read_only) remove_undefined_symbol(name, version_index);
+    if (!read_only) remove_undefined_symbol(name, undefined_symbol_version_index);
 
     // Weak undefined symbols don't get resolved if also found in a library.
     if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
@@ -222,7 +246,7 @@ static int resolve_undefined_symbol(const char *name, int version_index, int is_
 static Symbol *add_undefined_symbol(const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
-    SymbolNV *snv = new_symbolnv(name, version_index);
+    SymbolNV *snv = new_symbolnv(name, version_index, 0);
     map_ordered_put(global_symbol_table->undefined_symbols, snv, symbol);
 
     return symbol;
@@ -250,9 +274,10 @@ Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment) {
         symbol->is_abs = 1;
     }
     else {
-        symbol = add_defined_symbol(global_symbol_table, name, 0, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, SRC_INTERNAL);
+        int version_index = 0;
+        symbol = add_defined_symbol(global_symbol_table, name, version_index, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, SRC_INTERNAL);
         symbol->is_abs = 1;
-        resolve_undefined_symbol(name, 0, 0, 0);
+        resolve_undefined_symbol(name, 0, 0, 0, 0);
     }
 
     return symbol;
@@ -288,7 +313,7 @@ static int handle_local_symbol(ElfSymbolContext *esc) {
         new_symbol->src_value = esc->elf_symbol->st_value;
     }
 
-    return resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->source == SRC_LIBRARY, esc->read_only);
+    return resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
 }
 
 // Handle a symbol where either the found symbol or symbol is common
@@ -339,7 +364,7 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
             new_symbol->is_common = 1;
         }
 
-        result = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->source == SRC_LIBRARY, esc->read_only);
+        result = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
     }
 
     return result;
@@ -366,7 +391,7 @@ static int handle_abs_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
             new_symbol->is_abs = 1;
         }
 
-        return resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->source == SRC_LIBRARY, esc->read_only);
+        return resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
     }
 
     return 0;
@@ -393,7 +418,7 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
 
             // printf("strong strong %d %d %d - %d %d %d\n", esc->is_object, esc->is_library, esc->is_shared_library, found_symbol->src_is_object, found_symbol->src_is_library, found_symbol->src_is_shared_library);
             if ((found_symbol->sources & SRC_OBJECT_OR_LIBRARY) && esc->source == SRC_OBJECT)
-                fail(esc->elf_file, "Multiple definition of %s", esc->snv->name);
+                fail(esc->elf_file, "Multiple definition of %s", esc->snv->full_name);
 
             // Update the existing symbol sources
             found_symbol->sources |= esc->source;
@@ -447,7 +472,7 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
             new_symbol->is_common = 0;
         }
 
-        result = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->source == SRC_LIBRARY, esc->read_only);
+        result = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
 
         // When loading a symbol from a shared library, note that this symbol resolves an undefined symbol.
         // This is needed to add the symbol to the .dynsym section.
@@ -461,6 +486,14 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
     }
 
     return result;
+}
+
+void debug_print_global_symbol_version_indexes() {
+    printf("Global symbol version indexes:\n");
+    for (int i = 0; i < global_symbol_version_indexes_list->length; i++) {
+        char *name =  global_symbol_version_indexes_list->elements[i];
+        printf("%d %s\n", i, name);
+    }
 }
 
 // Process all symbols in a file. Returns the amount of undefined symbols in
@@ -481,9 +514,40 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
         uint64_t size = symbol->st_size;
         int other = symbol->st_other;
 
-        if (!symbol->st_name) continue;
+        if (type == STT_FILE) continue;
 
-        SymbolNV *snv = new_symbolnv_from_symbol_index(elf_file, i);
+        if (!symbol->st_name) continue;
+        char *symbol_name = symbol->st_name ? &elf_file->symbol_table_strings[symbol->st_name] : NULL;
+        if (!symbol_name) continue;
+
+        int is_abs = symbol->st_shndx == SHN_ABS;
+        int is_common = symbol->st_shndx == SHN_COMMON;
+        int is_undef = symbol->st_shndx == SHN_UNDEF;
+
+        int elf_file_local_version_index = elf_file->symbol_table_version_indexes ? elf_file->symbol_table_version_indexes[i] : 0;
+
+        int global_version_index = 0;
+        int is_default_version = 0;
+
+        if (elf_file_local_version_index >= 2) {
+            char *version_name = elf_file->symbol_version_names->elements[elf_file_local_version_index];
+            int is_non_default_version = (int) (uint64_t) elf_file->non_default_versioned_symbols[i];
+
+            // Set the default from what is set in .gnu.version, unless the symbol is undefined,
+            // in which case it is always non-default.
+            is_default_version = !is_non_default_version && !is_undef;
+
+            global_version_index = (int) (uint64_t) strmap_get(global_symbol_version_indexes_map, version_name);
+            if (!global_version_index) {
+                append_to_list(global_symbol_version_indexes_list, version_name);
+                global_version_index = global_symbol_version_indexes_list->length - 1;
+                strmap_put(global_symbol_version_indexes_map, version_name, (void *) (uint64_t) global_version_index);
+            }
+
+            elf_file->global_version_indexes[elf_file_local_version_index] = global_version_index;
+        }
+
+        SymbolNV *snv = new_symbolnv(symbol_name, global_version_index, is_default_version);
 
         // Create a ElfSymbolContext
         ElfSymbolContext esc;
@@ -497,23 +561,17 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
         esc.local_symbol_table = local_symbol_table;
         esc.source = source;
         esc.read_only = read_only;
-
-        if (!snv->name) continue;
+        esc.is_default_version = is_default_version;
 
         int is_local = binding == STB_LOCAL;
 
-        if (type == STT_FILE) continue;
+        InputSection *input_section = NULL;
 
-        if (snv->version_index >= 2) {
-            char *version_name = elf_file->symbol_version_names->elements[snv->version_index];
-            if (DEBUG_SYMBOL_RESOLUTION)
-                printf("Got versioned symbol in %s: %s %s (%d)\n", elf_file->filename, snv->name, version_name, snv->version_index);
+        if (DEBUG_SYMBOL_VERSIONS && global_version_index > GLOBAL_SYMBOL_INDEX_DEFAULT) {
+            char *is_default_string = is_default_version ? " (default)" : "";
+            printf("  Found versioned symbol: idx=%d %s%s (%d) is_undef=%d binding=%s is_default_version=%d\n", i, snv->full_name, is_default_string, global_version_index, is_undef, SYMBOL_BINDING_NAMES[binding], is_default_version);
         }
 
-        InputSection *input_section = NULL;
-        int is_abs = symbol->st_shndx == SHN_ABS;
-        int is_common = symbol->st_shndx == SHN_COMMON;
-        int is_undef = symbol->st_shndx == SHN_UNDEF;
 
         // Look up the input_section unless the symbol is common
         if (!is_abs && !is_common) {
@@ -560,6 +618,15 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
             else
                 resolved_symbols += handle_non_common_symbol(&esc, found_symbol);
         }
+
+        if (is_default_version) {
+            // Add an entry to the symbol table GLOBAL_SYMBOL_INDEX_NONE, so that unversioned symbols
+            // resolve to the default.
+            Symbol *symbol = must_get_defined_symbol(global_symbol_table, symbol_name, global_version_index);
+            SymbolNV *snv = new_symbolnv(symbol_name, GLOBAL_SYMBOL_INDEX_NONE, 0);
+            map_ordered_put(global_symbol_table->defined_symbols, snv, symbol);
+            snv->is_proxy_for_default = 1;
+        }
     }
 
     return resolved_symbols;
@@ -571,14 +638,13 @@ void resolve_provided_symbols(OutputElfFile *output_elf_file) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *provided_symbol = strmap_ordered_get(provided_symbols, name);
         int version_index = 0;
-        SymbolNV *snv = new_symbolnv(name, version_index);
+        SymbolNV *snv = new_symbolnv(name, version_index, 0);
         Symbol *symbol = get_undefined_symbol(name, version_index);
         if (symbol) {
-            resolve_undefined_symbol(name, 0, 0, 0);
+            resolve_undefined_symbol(name, 0, 0, 0, 0);
             map_ordered_put(global_symbol_table->defined_symbols, snv, provided_symbol);
         }
     }
-
 }
 
 // Treat all weak symbols as defined, with value zero. Fail if any undefined symbols are left
@@ -603,15 +669,16 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
         // Weak undefined symbols become defined with value zero
         else if (symbol->binding == STB_WEAK) {
             symbol->dst_value = 0;
-            SymbolNV *new_snv = new_symbolnv(snv->name, snv->version_index);
+            SymbolNV *new_snv = new_symbolnv(snv->name, snv->version_index, 0);
             map_ordered_put(global_symbol_table->defined_symbols, new_snv, symbol);
         }
-        else if (!strmap_get(global_symbols_in_use, snv->name))  {
-            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring unused undefined symbol %s\n", snv->name);
+        else if (!strmap_get(global_symbols_in_use, snv->name)) {
+            // Note: this doesn't take symbol versions into account.
+            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring unused undefined symbol %s\n", snv->full_name);
             continue;
         }
         else {
-            append_to_list(undefined_symbol_names, (char *) snv->name);
+            append_to_list(undefined_symbol_names, (char *) snv->full_name);
         }
     }
 
@@ -706,7 +773,7 @@ void debug_summarize_symbols(void) {
 
         printf("%6d: %016lx  %4lx %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
         print_section_string(symbol);
-        printf(" %s\n", snv->name);
+        printf(" %s\n", snv->full_name);
 
         i++;
     }
@@ -778,13 +845,13 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
                 if (!symbol->input_section->output_section) panic("Unexpectedly got null output_section for %s from %s\n", symbol->name, symbol->input_section->name);
 
                 OutputSection *rw_section = symbol->input_section->output_section;
-                if (!rw_section) panic("Unexpected empty output section for %s", snv->name);
+                if (!rw_section) panic("Unexpected empty output section for %s", snv->full_name);
                 symbol->output_section = rw_section;
 
                 if (!symbol->input_section)
-                    panic("Unexpected null symbol->input_section for %s", snv->name);
+                    panic("Unexpected null symbol->input_section for %s", snv->full_name);
                 if (!symbol->input_section->output_section)
-                    panic("Unexpected null symbol->input_section->output_section for symbol %s in section %s", snv->name, symbol->input_section->name);
+                    panic("Unexpected null symbol->input_section->output_section for symbol %s in section %s", snv->full_name, symbol->input_section->name);
 
                 if (symbol->type == STT_TLS)
                     symbol->dst_value = symbol->input_section->output_section->offset + symbol->input_section->dst_offset + symbol->src_value - output_elf_file->tls_template_offset;
@@ -885,6 +952,8 @@ static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, 
 void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
 
+    int *seen_version_indexes = calloc(1, global_symbol_version_indexes_list->length * sizeof(int));
+
     output_elf_file->section_dynstr = create_extra_section(output_elf_file, DYNSTR_SECTION_NAME, SHT_STRTAB, SHF_ALLOC, 1);
     add_to_input_section(output_elf_file->section_dynstr, "", 1);
 
@@ -900,6 +969,8 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
 
+        seen_version_indexes[snv->version_index] = 1;
+
         int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
         symbol->dst_dynsym_index = add_elf_dyn_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
 
@@ -913,6 +984,22 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
     output_elf_file->dynsym_symbol_count = dynsym_symbol_count;
     output_elf_file->rela_dyn_entry_count = rela_dyn_entry_count;
+
+    // Make verneed_names and mapping from global version index to output version index
+    output_elf_file->verneed_names = new_list(global_symbol_version_indexes_list->length);
+    output_elf_file->verneed_indexes = calloc(1, global_symbol_version_indexes_list->length * sizeof(int));
+
+    if (DEBUG_SYMBOL_VERSIONS) printf("\nMaking mapping from global to output version index\n");
+    for (int i = 2; i < global_symbol_version_indexes_list->length; i++) {
+        char *version_name = global_symbol_version_indexes_list->elements[i];
+        if (!seen_version_indexes[i]) continue;
+        int output_version_index = output_elf_file->verneed_names->length + 2;
+        append_to_list(output_elf_file->verneed_names, version_name);
+        output_elf_file->verneed_indexes[i] = output_version_index;
+        if (DEBUG_SYMBOL_VERSIONS) printf("%3d -> %3d for %s \n", i, output_version_index, version_name);
+    }
+
+    free(seen_version_indexes);
 }
 
 // Set the symbol's value and section indexes
@@ -984,6 +1071,10 @@ void init_symbols(OutputElfFile *output_elf_file) {
     global_symbol_table = new_symbol_table();
     local_symbol_tables = new_strmap();
     provided_symbols = new_strmap_ordered();
+    global_symbol_version_indexes_map = new_strmap();
+    global_symbol_version_indexes_list = new_list(32);
+    append_to_list(global_symbol_version_indexes_list, NULL); // Skip first element, the zeroth element means not versioned
+    append_to_list(global_symbol_version_indexes_list, "__DEFAULT"); // Add default symbol version
 }
 
 // Create the .got, .got.plt, .plt, .rela.plt sections, as needed
@@ -1531,6 +1622,143 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
 void add_dynamic_symbol(OutputElfFile *output_elf_file) {
     if (output_elf_file->type == ET_DYN) {
         add_defined_symbol(global_symbol_table, DYNAMIC_SYMBOL_NAME, 0, STT_OBJECT, STB_LOCAL, STV_DEFAULT, 0, SRC_INTERNAL);
-        resolve_undefined_symbol(DYNAMIC_SYMBOL_NAME, 0, 0, 0);
+        resolve_undefined_symbol(DYNAMIC_SYMBOL_NAME, 0, 0, 0, 0);
+    }
+}
+
+// Create the .gnu.version_r section with filenames and names of all symbol versions
+void make_verneed_section(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+
+    int verneed_names_count = output_elf_file->verneed_names->length;
+    if (verneed_names_count == 0) return;
+
+    InputSection *extra_section = create_extra_section(output_elf_file, VERNEED_SECTION_NAME, SHT_GNU_VERNEED, SHF_ALLOC, 8);
+    // The section header link will be set after output sections are created.
+
+    if (DEBUG_SYMBOL_VERSIONS) printf("\nCreating .gnu.version_r entries:\n");
+
+    // Make a map of version index to filename
+    char **version_index_filenames = calloc(1, global_symbol_version_indexes_list->length * sizeof(char *));
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->version_index <= GLOBAL_SYMBOL_INDEX_DEFAULT) continue;
+        if (version_index_filenames[snv->version_index]) continue;
+
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (!(symbol->sources & SRC_SHARED_LIBRARY)) continue;
+        if (!symbol->src_elf_file || symbol->src_elf_file->type != ET_DYN) continue;
+
+        // Get the basename of the lib
+        char *filename = strdup(symbol->src_elf_file->filename);
+        char *basename = strrchr(filename, '/');
+        version_index_filenames[snv->version_index] = basename ? basename + 1 : filename;
+    }
+
+    // Make a map of library version names to a list of versions in that library
+    StrMap *library_versions = new_strmap();
+    List *libraries = new_list(8);
+
+    for (int i = 0; i < verneed_names_count; i++) {
+        char *version_name = output_elf_file->verneed_names->elements[i];
+        int global_version_index = (int) (uint64_t) strmap_get(global_symbol_version_indexes_map, version_name);
+        char *filename = version_index_filenames[global_version_index];
+
+        List *versions = strmap_get(library_versions, filename);
+        if (!versions) {
+            versions = new_list(8);
+            strmap_put(library_versions, filename, versions);
+            append_to_list(libraries, filename);
+        }
+        append_to_list(versions, version_name);
+    }
+
+    for (int i = 0; i < libraries->length; i++) {
+        char *filename = libraries->elements[i];
+        List *versions = strmap_get(library_versions, filename);
+        int versions_count = versions->length;
+
+        if (DEBUG_SYMBOL_VERSIONS) printf("%s\n", filename);
+
+        uint32_t entry_size = sizeof(ElfVerneed) + versions_count * sizeof(ElfVernaux);
+        char *entry = allocate_in_section(extra_section, entry_size);
+        memset(entry, 0, entry_size);
+
+        ElfVerneed *vn = (ElfVerneed *) entry;
+        ElfVernaux *vna = (ElfVernaux *) (entry + sizeof(ElfVerneed));
+
+        vn->vn_version = 1;
+        vn->vn_cnt = versions_count;
+        vn->vn_file = add_dynstr_string(output_elf_file, filename);
+        vn->vn_aux = sizeof(ElfVerneed);
+        vn->vn_next = (i < libraries->length - 1) ? entry_size : 0;
+
+        for (int j = 0; j < versions_count; j++) {
+            char *version_name = versions->elements[j];
+            int dynstr_index = add_dynstr_string(output_elf_file, version_name);
+
+            int global_version_index = (int) (uint64_t) strmap_get(global_symbol_version_indexes_map, version_name);
+            int output_version_index = output_elf_file->verneed_indexes[global_version_index];
+            uint16_t vna_other = output_version_index;
+
+            vna[j].vna_hash = elf_hash(version_name);
+            vna[j].vna_flags = 0;
+            vna[j].vna_other = vna_other;
+            vna[j].vna_name = dynstr_index;
+            vna[j].vna_next = (j + 1 < versions_count) ? sizeof(ElfVernaux) : 0;
+
+            if (DEBUG_SYMBOL_VERSIONS) printf("   %3d %s\n", output_version_index, version_name);
+        }
+    }
+
+    extra_section->info = libraries->length;
+
+    for (int i = 0; i < libraries->length; i++) {
+        char *needed_library = libraries->elements[i];
+        List *versions = strmap_get(library_versions, needed_library);
+        if (versions) free_list(versions);
+    }
+
+    free_list(libraries);
+    free_strmap(library_versions);
+    free(version_index_filenames);
+}
+
+// Create the .gnu.version section
+void make_versym_section(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN) return;
+    if (!output_elf_file->section_dynsym) return;
+    if (!output_elf_file->verneed_names || output_elf_file->verneed_names->length == 0) return;
+
+    InputSection *section_versym = create_extra_section(output_elf_file, VERSYM_SECTION_NAME, SHT_GNU_VERSYM, SHF_ALLOC, 2);
+
+    int entry_count = output_elf_file->dynsym_symbol_count + 1; // Include first null entry
+    section_versym->size = entry_count * sizeof(uint16_t);
+    section_versym->data = calloc(1, section_versym->size);
+
+    if (DEBUG_SYMBOL_VERSIONS) printf("\nWriting %d .gnu.version entries\n", entry_count);
+
+    uint16_t *entries = (uint16_t *) section_versym->data;
+
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
+
+        uint16_t version_index = VER_NDX_GLOBAL;
+
+        if (snv->version_index > GLOBAL_SYMBOL_INDEX_DEFAULT) {
+            int output_version_index = output_elf_file->verneed_indexes[snv->version_index];
+            if (!output_version_index)
+                panic("Missing verneed index for symbol version %d (%s)", snv->version_index, snv->full_name);
+
+            version_index = (uint16_t) output_version_index;
+        }
+
+        if (DEBUG_SYMBOL_VERSIONS) {
+            char *version_name = global_symbol_version_indexes_list->elements[version_index];
+            printf("%3d: %-16s %3d  %s\n", symbol->dst_dynsym_index, version_name, version_index, snv->name);
+        }
+        entries[symbol->dst_dynsym_index] = version_index;
     }
 }

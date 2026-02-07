@@ -16,6 +16,9 @@
 typedef struct symbol_nv {
     const char *name;
     uint16_t version_index;
+    char *full_name;            // Name with version, e,g foo, foo@V1, foo@@V2
+    int is_default;             // Set if this symbol is the default for a name
+    int is_proxy_for_default;   // Set if this SymbolNV is a duplicate that points to a default symbol
 } SymbolNV;
 
 // Some constants to indicate the origin of a symbol
@@ -33,33 +36,36 @@ typedef struct symbol_nv {
 #define SE_IN_GOT_IPLT     3
 #define SE_COPY_RELOCATION 4
 
+#define GLOBAL_SYMBOL_INDEX_NONE    0
+#define GLOBAL_SYMBOL_INDEX_DEFAULT 1
+
 typedef struct symbol {
-    char *name;                     // Name
-    int version;                    // Version
-    int binding;                    // Binding, e.g. local or global
-    int type;                       // Type, e.g. function or object
-    int other;                      // Visibility
+    char *name;                         // Name
+    int version;                        // Version
+    int binding;                        // Binding, e.g. local or global
+    int type;                           // Type, e.g. function or object
+    int other;                          // Visibility
     uint64_t size;
-    int is_abs;                     // The src value is an absolute address
-    int is_common;                  // The symbol is a common symbol. input_section is null.
-    int visibility;                 // Used by the linker
-    int sources;                    // A combination of at least one of SRC_*
-    int extra;                      // One of SE_*
-    int needs_dynsym_entry;         // Set to 1 if the symbol needs a dynsym entry. 0 doesn't exclude it from the .dynsym.
-    uint64_t got_offset;            // Offset in the .got section, if present
-    uint64_t got_plt_offset;        // Offset in the .got.plt section, if present
-    uint64_t got_iplt_offset;       // Offset in the .got.iplt section, if present
-    uint64_t plt_offset;            // Offset in the .plt section, if present
-    uint64_t iplt_offset;           // Offset in the .iplt section, if present
-    uint64_t rela_iplt_offset;      // Offset in the .rela.iplt section, if present
-    InputElfFile *src_elf_file;     // File symbol is defined in. NULL if undefined.
-    InputSection *input_section;    // Section the symbol is defined in. NULL if the symbol is undefined or common.
+    int is_abs;                         // The src value is an absolute address
+    int is_common;                      // The symbol is a common symbol. input_section is null.
+    int visibility;                     // Used by the linker
+    int sources;                        // A combination of at least one of SRC_*
+    int extra;                          // One of SE_*
+    int needs_dynsym_entry;             // Set to 1 if the symbol needs a dynsym entry. 0 doesn't exclude it from the .dynsym.
+    uint64_t got_offset;                // Offset in the .got section, if present
+    uint64_t got_plt_offset;            // Offset in the .got.plt section, if present
+    uint64_t got_iplt_offset;           // Offset in the .got.iplt section, if present
+    uint64_t plt_offset;                // Offset in the .plt section, if present
+    uint64_t iplt_offset;               // Offset in the .iplt section, if present
+    uint64_t rela_iplt_offset;          // Offset in the .rela.iplt section, if present
+    InputElfFile *src_elf_file;         // File symbol is defined in. NULL if undefined.
+    InputSection *input_section;        // Section the symbol is defined in. NULL if the symbol is undefined or common.
     OutputSection *output_section;
-    uint64_t src_value;             // Value in the original ELF section
-    uint64_t dst_value;             // Value in the final ELF section
-    int dst_index;                  // Index in the final ELF symbol table
-    int dst_dynsym_index;           // Index in the final ELF dynsyn table (for libraries)
-    int resolves_undefined_symbol;  // Set to 1 if the symbol is from a shared library and resolves an undefined symbol in an object file
+    uint64_t src_value;                 // Value in the original ELF section
+    uint64_t dst_value;                 // Value in the final ELF section
+    int dst_index;                      // Index in the final ELF symbol table
+    int dst_dynsym_index;               // Index in the final ELF dynsyn table (for libraries)
+    int resolves_undefined_symbol;      // Set to 1 if the symbol is from a shared library and resolves an undefined symbol in an object file
 } Symbol;
 
 typedef struct symbol_table {
@@ -80,7 +86,7 @@ extern StrMap *local_symbol_tables;
 
 extern char *last_error_message;
 
-SymbolNV *new_symbolnv(const char *name, int version_index);
+SymbolNV *new_symbolnv(const char *name, int version_index, int is_default);
 SymbolTable *new_symbol_table(void);
 void init_symbols(OutputElfFile *output_elf_file);
 Symbol *get_defined_symbol(SymbolTable *st, const char *name, int version_index);
@@ -93,6 +99,7 @@ Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t 
 Symbol *get_undefined_symbol(const char *name, int version_index);
 int is_undefined_symbol(const char *name, int version_index);
 Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment);
+void debug_print_global_symbol_version_indexes();
 int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only);
 void resolve_provided_symbols(OutputElfFile *output_elf_file);
 void finalize_symbols(OutputElfFile *output_elf_file);
@@ -119,5 +126,7 @@ void create_dyn_rela_section(OutputElfFile *output_elf_file);
 void update_dyn_rela_section(OutputElfFile *output_elf_file);
 void layout_data_copy_section(OutputElfFile *output_elf_file);
 void add_dynamic_symbol(OutputElfFile *output_elf_file);
+void make_verneed_section(OutputElfFile *output_elf_file);
+void make_versym_section(OutputElfFile *output_elf_file);
 
 #endif

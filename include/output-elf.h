@@ -78,6 +78,8 @@ typedef struct output_elf  {
     List *shared_libraries;                                 // Used by wld
     List *rela_dyn_R_X86_64_RELATIVE_relocations;           // Used by wld
     List *rela_dyn_R_X86_64_64_relocations;                 // Used by wld
+    List* verneed_names;                                    // Version names needed in the verneed section
+    int *verneed_indexes;                                   // Mapping from global version index to output version index
     int elf_program_segments_count;                         // ELF: Amount of program segment headers
     uint64_t elf_program_segments_header_size;              // ELF: Size of the program segment headers
     ElfProgramSegmentHeader *elf_program_segment_headers;   // ELF: The encoded of the program segment headers

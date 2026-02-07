@@ -82,6 +82,24 @@ const char *DYNAMIC_SECTION_TYPE_NAMES[] = {
     "SYMTAB_SHNDX",
 };
 
+const char *dynamic_section_name(uint64_t tag) {
+    uint64_t count = sizeof(DYNAMIC_SECTION_TYPE_NAMES) / sizeof(DYNAMIC_SECTION_TYPE_NAMES[0]);
+    if (tag < count) return DYNAMIC_SECTION_TYPE_NAMES[tag];
+    if (tag == DT_VERSYM) return "VERSYM";
+    if (tag == DT_VERNEED) return "VERNEED";
+    if (tag == DT_VERNEEDNUM) return "VERNEEDNUM";
+    return "UNKNOWN";
+}
+
+const char *section_type_name(uint64_t type) {
+    uint64_t count = sizeof(SECTION_TYPE_NAMES) / sizeof(SECTION_TYPE_NAMES[0]);
+    if (type < count) return SECTION_TYPE_NAMES[type];
+    if (type == SHT_GNU_VERSYM) return "GNU_VERSYM";
+    if (type == SHT_GNU_VERNEED) return "GNU_VERNEED";
+    if (type == SHT_GNU_VERDEF) return "GNU_VERDEF";
+    return "UNKNOWN";
+}
+
 static void run_archive_file_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files);
 
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type) {
@@ -223,6 +241,8 @@ static List *read_input_files(List *library_paths, List *input_files, int output
 
     free_strmap(read_shared_object_files);
 
+    if (DEBUG_SYMBOL_VERSIONS) debug_print_global_symbol_version_indexes();
+
     return input_elf_files;
 }
 
@@ -275,7 +295,7 @@ void dump_dynamic_section(OutputElfFile *output_elf_file) {
         uint64_t tag = dyn->d_tag & 0xffffffff;
         uint64_t val = dyn->d_un.d_val;
 
-        const char *tag_name = DYNAMIC_SECTION_TYPE_NAMES[tag];
+        const char *tag_name = dynamic_section_name(tag);
 
         if (tag == DT_NEEDED) {
             char *symbol_name = &((char *) section_dynstr->data)[val];
@@ -300,6 +320,8 @@ void dump_relocations(OutputSection* section) {
 
 static int make_dynamic_section_entry_count(OutputElfFile *output_elf_file) {
     int dynamic_section_entry_count = BASE_DYNAMIC_SECTION_ENTRY_COUNT + output_elf_file->shared_libraries->length;
+    if (output_elf_file->verneed_names && output_elf_file->verneed_names->length > 0) dynamic_section_entry_count += 2;
+    if (get_extra_section(output_elf_file, VERSYM_SECTION_NAME)) dynamic_section_entry_count += 1;
     if (output_elf_file->rela_dyn_entry_count > 0) dynamic_section_entry_count += 3;
     if (output_elf_file->got_plt_entries_count > 0) dynamic_section_entry_count += 4;
     return dynamic_section_entry_count;
@@ -359,6 +381,8 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
     InputSection *section_rela_dyn = output_elf_file->section_rela_dyn;
     InputSection *section_rela_plt = output_elf_file->section_rela_plt;
     InputSection *section_got_plt = output_elf_file->section_got_plt;
+    InputSection *section_verneed = get_extra_section(output_elf_file, VERNEED_SECTION_NAME);
+    InputSection *section_versym = get_extra_section(output_elf_file, VERSYM_SECTION_NAME);
 
     int pos = output_elf_file->shared_libraries->length;
 
@@ -368,6 +392,14 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
     set_in_dynamic_section(output_elf_file, pos++, DT_SYMENT, sizeof(ElfSymbol));
     set_in_dynamic_section(output_elf_file, pos++, DT_HASH, section_hash->output_section->address);
 
+    if (section_verneed && section_verneed->size > 0 && section_verneed->output_section) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_VERNEED, section_verneed->output_section->address);
+        set_in_dynamic_section(output_elf_file, pos++, DT_VERNEEDNUM, section_verneed->info);
+    }
+
+    if (section_versym && section_versym->size > 0 && section_versym->output_section) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_VERSYM, section_versym->output_section->address);
+    }
 
     if (output_elf_file->got_plt_entries_count > 0) {
         set_in_dynamic_section(output_elf_file, pos++, DT_PLTGOT,   section_got_plt->output_section->address);
@@ -407,6 +439,24 @@ static void associate_sections(OutputElfFile *output_elf_file) {
         InputSection *section_hash = output_elf_file->section_hash;
         h = &output_elf_file->elf_section_headers[section_hash->output_section->index];
         h->sh_link = section_dynsym->output_section->index;
+
+        InputSection *section_verneed = get_extra_section(output_elf_file, VERNEED_SECTION_NAME);
+        if (section_verneed) {
+            section_verneed->output_section->link = section_dynstr->output_section->index;
+            section_verneed->output_section->info = section_verneed->info;
+            h = &output_elf_file->elf_section_headers[section_verneed->output_section->index];
+            h->sh_link = section_verneed->output_section->link;
+            h->sh_info = section_verneed->output_section->info;
+            h->sh_entsize = sizeof(ElfVerneed);
+        }
+
+        InputSection *section_versym = get_extra_section(output_elf_file, VERSYM_SECTION_NAME);
+        if (section_versym) {
+            section_versym->output_section->link = section_dynsym->output_section->index;
+            h = &output_elf_file->elf_section_headers[section_versym->output_section->index];
+            h->sh_link = section_versym->output_section->link;
+            h->sh_entsize = sizeof(uint16_t);
+        }
     }
 }
 
@@ -483,7 +533,7 @@ void dump_sections(OutputElfFile *output_elf_file) {
         *p = '\0';
 
         printf("%4d %-29s %-14s  %016lx %08lx %08lx %02lx %-3s %2d %2d %3d\n",
-            i, section->name, SECTION_TYPE_NAMES[section->type], section->address, section->offset,
+            i, section->name, section_type_name(section->type), section->address, section->offset,
             section->size, section->entsize, flags, section->link, section->info, section->align);
     }
 }
@@ -812,6 +862,12 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
 
     // For libraries, add the symbols to the ELF dynsym table
     make_elf_dyn_symbols(output_elf_file);
+
+    // Create the .gnu.version section, if needed
+    make_versym_section(output_elf_file);
+
+    // Create the .gnu.version_r section, if needed
+    make_verneed_section(output_elf_file);
 
     // For ET_DYN files, allocate space for relocation entries in the GOT table
     create_dyn_rela_section(output_elf_file);

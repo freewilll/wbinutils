@@ -34,7 +34,6 @@ static void assert_string(const char *expected, const char *actual, const char *
     }
 }
 
-
 static void fail_sections(OutputElfFile *elf_file, List *expected_sections) {
     printf("Got sections:\n");
     dump_sections(elf_file);
@@ -295,7 +294,7 @@ static void assert_dynamic(OutputElfFile *elf_file, ...) {
     OutputSection *dynamic_section = get_output_section(elf_file, DYNAMIC_SECTION_NAME);
     if (!dynamic_section) panic("No .dynamic section");
 
-        OutputSection *dynstr_section = get_output_section(elf_file, DYNSTR_SECTION_NAME);
+    OutputSection *dynstr_section = get_output_section(elf_file, DYNSTR_SECTION_NAME);
     if (!dynstr_section) panic("No .dynstr section");
 
     uint64_t length = dynamic_section->size / sizeof(ElfDyn);
@@ -318,8 +317,8 @@ static void assert_dynamic(OutputElfFile *elf_file, ...) {
             got_dynstr = &dynstr_section->data[got_value];
         }
 
-        const char *expected_tag_name = DYNAMIC_SECTION_TYPE_NAMES[expected_tag];
-        const char *got_tag_name = DYNAMIC_SECTION_TYPE_NAMES[got_tag];
+        const char *expected_tag_name = dynamic_section_name(expected_tag);
+        const char *got_tag_name = section_type_name(got_tag);
 
         int value_matches = expected_dynstr
             ? expected_dynstr && !strcmp(expected_dynstr, got_dynstr)
@@ -328,7 +327,7 @@ static void assert_dynamic(OutputElfFile *elf_file, ...) {
         if (expected_tag != got_tag || !value_matches) {
             dump_dynamic_section(elf_file);
             printf("Mismatch at position %d\n"
-                "Expected tag:   %3d,  got tag:   %#lx\n"
+                "Expected tag:   %#x , got tag:   %#lx\n"
                 "Expected value: %#x,  got value: %#lx\n"
                 "Expected dynstr: %s,  got dynstr: %s\n",
                 pos,
@@ -2200,6 +2199,128 @@ void test_dynamic_library_illegal_R_X86_64_PC32_relocation() {
     free(stderr_output);
 }
 
+void test_versioning_default_symbol() {
+    char *object_path1 = run_as(
+        ".text;"
+        ".globl f1_1;"
+        ".type f1_1, @function;"
+        "f1_1:"
+        "    mov $1, %eax;"
+        "    ret;"
+        ".globl f1_2;"
+        ".type f1_2, @function;"
+        "f1_2:"
+        "    mov $2, %eax;"
+        "    ret;"
+        ".symver f1_1,f1@@V1;"
+        ".symver f1_2,f1@V2;"
+    );
+
+    char map_path[] = "/tmp/vermap_XXXXXX";
+    int fd = mkstemp(map_path);
+    if (fd == -1) { perror("mkstemp"); exit(1); }
+    FILE *map_file = fdopen(fd, "w");
+    if (!map_file) { perror("fdopen"); exit(1); }
+    fprintf(map_file,
+        "V1 {\n"
+        "    global:\n"
+        "        f1;\n"
+        "};\n"
+        "\n"
+        "V2 {\n"
+        "    global:\n"
+        "        f1;\n"
+        "};\n"
+    );
+    fclose(map_file);
+
+    char lib_path[] = "/tmp/libtest.so.XXXXXX";
+    int lib_fd = mkstemp(lib_path);
+    if (lib_fd < 0) { perror("mkstemp failed"); exit(1); }
+    close(lib_fd);
+
+    char command[512];
+    snprintf(command, sizeof(command), "ld -shared -o %s %s --soname libtest.so --version-script=%s", lib_path, object_path1, map_path);
+    int result = system(command);
+    if (result) {
+        printf("ld failed with exit code %d\n", result >> 8);
+        exit(1);
+    }
+
+    char *object_path2 = run_as(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    call f1;"
+    );
+
+    List *input_paths = new_list(2);
+    append_to_list(input_paths, object_path2);
+    append_to_list(input_paths, "*test");
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "versioning_default_symbol");
+
+    assert_sections(elf_file,
+        // Name            Type             Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,        0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,      0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,      0x1044,   0x1044, 0x1d,  SHF_ALLOC,                 1,
+        ".gnu.version",    SHT_GNU_VERSYM,  0x1062,   0x1062, 0x04,  SHF_ALLOC,                 2,
+        ".gnu.version_r",  SHT_GNU_VERNEED, 0x1068,   0x1068, 0x20,  SHF_ALLOC,                 8,
+        ".rela.plt",       SHT_RELA,        0x2000,   0x2000, 0x30,  SHF_ALLOC | SHF_INFO_LINK, 8,
+        ".plt",            SHT_PROGBITS,    0x3000,   0x3000, 0x30,  SHF_ALLOC | SHF_EXECINSTR, 8,
+        ".text",           SHT_PROGBITS,    0x3030,   0x3030, 0x05,  SHF_ALLOC | SHF_EXECINSTR, 1,
+        ".dynamic",        SHT_DYNAMIC,     0x4000,   0x4000, 0xe0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,    0x40e0,   0x40e0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
+        NULL
+    );
+
+    assert_dynamic(elf_file,
+        DT_NEEDED,      0,      "libtest.so",
+        DT_STRTAB,      0x1044, NULL,
+        DT_SYMTAB,      0x1014, NULL,
+        DT_STRSZ,       0x1d,   NULL,
+        DT_SYMENT,      0x18,   NULL,
+        DT_HASH,        0x1000, NULL,
+        DT_VERNEED,     0x1068, NULL,
+        DT_VERNEEDNUM,  0x1,    NULL,
+        DT_VERSYM,      0x1062, NULL,
+        DT_PLTGOT,      0x40e0, NULL,
+        DT_PLTRELSZ,    0x30,   NULL,
+        DT_PLTREL,      0x7,    NULL,
+        DT_JMPREL,      0x2000, NULL,
+        DT_NULL,        0,      NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x0000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, "UND",     "f1",
+        END);
+
+    // Check versym .gnu.version entries
+    assert_section_data(elf_file, ".gnu.version",
+        0x00, 0x00, // null
+        0x02, 0x00, // f1 has V1, index 2
+        END);
+
+    // Check verneed .gnu.version_r
+    OutputSection* verneed_section = get_output_section(elf_file, ".gnu.version_r");
+    if (!verneed_section) panic("Did not find .gnu.version_r");
+    OutputSection *dynstr_section = get_output_section(elf_file, DYNSTR_SECTION_NAME);
+    if (!dynstr_section) panic("No .dynstr section");
+
+    // Expect one filename "libtest.so", with one version "V1"
+    ElfVerneed *vn = (ElfVerneed *) verneed_section->data;
+    ElfVernaux *vna = (ElfVernaux *) (verneed_section->data + sizeof(ElfVerneed));
+
+    assert_string("libtest.so", &dynstr_section->data[vn->vn_file], "Filename is libtest.so");
+    assert_int(1, vn->vn_cnt, "1 .gnu_version_r entry");
+    assert_int(0, vn->vn_next, ".gnu_version_r has one filename");
+    assert_string("V1", &dynstr_section->data[vna->vna_name], "Version is V1");
+    assert_int(2, vna->vna_other, "libtest.so V1 has index 2");
+    assert_int(0, vna->vna_next, "libtest.so has one version");
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -2231,4 +2352,5 @@ int main() {
     test_dynamic_library_R_X86_64_64_relocation_for_function_pointer();
     test_dynamic_library_illegal_R_X86_64_PC32_relocation();
     test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library();
+    test_versioning_default_symbol();
 }
