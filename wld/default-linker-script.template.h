@@ -50,31 +50,19 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    .tdata : { *(.tdata .tdata.*)                                          }\n"
     "    .tbss :  { *(.tbss .tbss.*)                                            }\n"
     "    .preinit_array : {                                                      \n"
-#ifdef STATIC
     "        PROVIDE_HIDDEN(__preinit_array_start = .);                          \n"
-#endif
     "        KEEP(*(.preinit_array .preinit_array.*))                            \n"
-#ifdef STATIC
     "        PROVIDE_HIDDEN(__preinit_array_end = .);                            \n"
-#endif
     "     }                                                                      \n"
     "    .init_array : {                                                         \n"
-#ifdef STATIC
     "        PROVIDE_HIDDEN(__init_array_start = .);                             \n"
-#endif
     "        KEEP(*(.init_array .init_array.*))                                  \n"
-#ifdef STATIC
     "        PROVIDE_HIDDEN(__init_array_end = .);                               \n"
-#endif
     "    }                                                                       \n"
     "    .fini_array : {                                                         \n"
-#ifdef STATIC
     "        PROVIDE_HIDDEN(__fini_array_start = .);                             \n"
-#endif
     "        KEEP(*(.fini_array .fini_array.*))                                  \n"
-#ifdef STATIC
     "        PROVIDE_HIDDEN(__fini_array_end = .);                               \n"
-#endif
     "     }                                                                      \n"
 #ifdef SHARED
     "    .dynamic :  { *(.dynamic)                                              }\n"
