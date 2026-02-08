@@ -289,7 +289,17 @@ int test_R_X86_64_GOTPCRELX(void) {
     reset(OT_STATIC_EXEC, output_data2, R_X86_64_GOTPCRELX, 2, 0x10);
     set_value(0x401000);
     run();
-    assert_data(output_data2, 0x67, 0xe8, 0x0e, 0x10, 0x00, 0x00, END);             // addr32 callq 401000
+    assert_data(output_data2, 0x67, 0xe8, 0x0e, 0x10, 0x00, 0x00, END);             // addr32 callq *0x100e(%rip)
+}
+
+int test_R_X86_64_GOTPCRELX_in_shared_object(void) {
+    uint8_t output_data[] = {0xff, 0x15, 0x00, 0x00, 0x00, 0x00};                   // call *foo(%rip)
+    reset(OT_DYN_EXEC, output_data, R_X86_64_GOTPCRELX, 2, 0);
+    state.symbol->src_elf_file->type = ET_DYN;
+    set_got_offset(0x20);
+    run();
+    // got_address + got_offset + A - P = 0x500000 + 0x20 + 0 - 0x400002 = 0x10001e
+    assert_data(output_data, 0xff, 0x15, 0x1e, 0x00, 0x10, 0x00, END);              // call 0x10001e(%rip)
 }
 
 int test_R_X86_64_REX_GOTPCRELX() {
@@ -333,7 +343,7 @@ int test_R_X86_64_REX_GOTPCRELX() {
     assert_data(output_data6, 0x49, 0x81, 0xe9, 0x00, 0x10, 0x40, 0x00, END);       // sub $0x401000, %r9
 }
 
-int test_R_X86_64_REX_GOTPCRELX_on_shared_object() {
+int test_R_X86_64_REX_GOTPCRELX_in_shared_object() {
     // S=401000 + A=10 - P=400003 = 0x100d
     uint8_t output_data1[] = {0x48, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};             // mov 0x0(%rip), %rcx
     reset(OT_DYN_EXEC, output_data1, R_X86_64_REX_GOTPCRELX, 3, 0x10);
@@ -423,8 +433,9 @@ int main() {
     test_R_X86_64_32s(R_X86_64_32);
     test_R_X86_64_32s(R_X86_64_32S);
     test_R_X86_64_GOTPCRELX();
+    test_R_X86_64_GOTPCRELX_in_shared_object();
     test_R_X86_64_REX_GOTPCRELX();
-    test_R_X86_64_REX_GOTPCRELX_on_shared_object();
+    test_R_X86_64_REX_GOTPCRELX_in_shared_object();
     test_R_X86_64_TPOFF32();
     test_R_X86_64_GOTPCREL_with_GOT_entry();
     test_R_X86_64_GOTPCREL_with_GOT_iplt_entry();

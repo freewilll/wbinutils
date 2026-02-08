@@ -92,11 +92,20 @@ stack_ok:
     cmp $200, %rax
     jne exit_with_not_ok
 
+    # Check callq *func(%rip)
+    call *func@GOTPCREL(%rip)
+    cmp $202, %rax
+    jne exit_with_not_ok
+
     movl $0, %eax;
     ret
 
 main:
     call relaxed_relocation_testing
+    ret
+
+func:
+    movq $202, %rax
     ret
 
 .section .data

@@ -711,7 +711,7 @@ static void make_symbol_values(OutputElfFile *output_elf_file, List *input_elf_f
     for (int i = 0; i < input_elf_files->length; i++) {
         InputElfFile *elf_file = input_elf_files->elements[i];
         SymbolTable *local_symbol_table = get_local_symbol_table(elf_file);
-        if (DEBUG_RELOCATIONS) printf("\nMaking symbol values for %s local_symbol_table=%p:\n", elf_file->filename, local_symbol_table);
+        if (DEBUG_RELOCATIONS) printf("\nMaking symbol values for %s\n", elf_file->filename);
         make_symbol_values_from_symbol_table(output_elf_file, local_symbol_table);
     }
 }

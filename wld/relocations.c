@@ -336,12 +336,14 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             return;
 
         case R_X86_64_GOTPCRELX: {
+            // Relax instructions to not use the GOT, where possible
+
             if (link_dynamically) {
                 add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
                 return;
             }
 
-            // Relax instructions to not use the GOT
+            // Rewrite instructions
 
             uint32_t *output = (uint32_t *) input_data;
 
@@ -350,9 +352,10 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             uint8_t *pprefix = (uint8_t *) (input_data - 3);
             uint8_t opcode = *popcode;
 
+            // movl foo@GOTPCREL@(%rip)
             if (offset > 1 && opcode == 0x8b) {
                 if (output_is_shared) {
-                    // TODO Convert movl foo@GOTPCREL@(%rip) to lea foo(%rip).
+                    // TODO Convert movl foo@GOTPCREL@(%rip), ... to lea foo(%rip), ....
                     panic("Relaxing to relative-RIP load for R_X86_64_GOTPCRELX for not implemented for ET_DYN\n");
                 }
 
@@ -363,11 +366,12 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
+            // callq foo(%rip)
             else if (offset > 1 && opcode == 0xff) {
-                if (*pmod_rm == 0x15) {
-                    // Convert callq foo(%rip) to addr32 callq foo
-                    *popcode = 0x67;
-                    *pmod_rm = 0xe8;
+                // Convert callq foo(%rip) to addr32 callq foo RIP-relative
+                if (*pmod_rm == 0x15) { // reg=2, the opcode extension r/m=5 is [rip + disp32]. So mod/rm = reg << 3 + r/m = 0x15
+                    *popcode = 0x67; // Replace the opcode with the address size override prefix 0x67
+                    *pmod_rm = 0xe8; // Replace mod/rm with the new opcode 0xe8
                 }
                 else
                     panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *pmod_rm);
@@ -380,12 +384,14 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
 
         case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
+            // Relax instructions to not use the GOT, where possible
+
             if (link_dynamically) {
                 add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
                 return;
             }
 
-            // Relax instructions to not use the GOT
+            // Rewrite instructions
 
             uint8_t *pprefix = (uint8_t *) (input_data - 3);
             uint8_t *popcode = (uint8_t *) (input_data - 2);
@@ -550,44 +556,64 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             break;
         }
         case R_X86_64_GOTPCRELX: {
-            // Relax instructions to not use the GOT
+            // Relax instructions to not use the GOT, where possible
 
             uint32_t *output = (uint32_t *) output_pointer;
-            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
-            uint8_t opcode = *popcode;
+            uint8_t *output1 = (uint8_t *) (output_pointer - 1);
+            uint8_t *output2 = (uint8_t *) (output_pointer - 2);
 
-            if (output_offset > 1 && opcode == 0xc7) {
+            // If a symbol is the GOT, then write the PC-relative offset to the GOT entry
+            if (symbol->extra == SE_IN_GOT) {
+                uint64_t value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
+                uint32_t *output = (uint32_t *) output_pointer;
+                *output = value;
+                break;
+            }
+
+            // opcode 0xc7 is mov $foo, %eax, which was converted from foo@GOTPCREL@(%rip), %eax in the scan phase
+            // Make an absolute address
+            else if (output_offset > 1 && (*output2 == 0xc7)) {
                 uint64_t value = S; // Ignore the addend, this is an absolute address
                 if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
                 *output = value;
                 break;
             }
 
-            else if (output_offset > 1 && opcode == 0x67) {
+            // addr32 callq foo RIP-relative encoded as 0x67 0xe8 which was converted from callq foo(%rip)
+            // Make a RIP-relative address
+            else if (output_offset > 1 && *output2 == 0x67 && *output1 == 0xe8) {
                 uint64_t value = S + A - P;
                 if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
                 *output = value;
                 break;
             }
 
-            panic("Unhandled relocation apply for R_X86_64_GOTPCRELX: %#x\n", opcode);
+            panic("Unhandled relocation apply for R_X86_64_GOTPCRELX: %#x %#x\n", *output2, *output1);
         }
 
         case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
-            uint8_t *popcode = (uint8_t *) (output_pointer - 2);
-            uint8_t opcode = *popcode;
+            // Relax instructions to not use the GOT, where possible
+
+            uint8_t *output1 = (uint8_t *) (output_pointer - 1);
+            uint8_t *output2 = (uint8_t *) (output_pointer - 2);
 
             uint64_t value = S;
 
-            if (link_dynamically || (opcode != 0xc7 && opcode != 0x81)) {
+            // The instruction has been rewritten to use an PC-relative address using a lea
+            if (*output2 == 0x8d) value = S + A - P;
+
+            // The instruction has been rewritten to use an absolute address
+            // 0xc7 is mov $foo, %eax
+            // 0x81 is a binop $foo, %rax
+            int need_absolute_address = ((*output2 == 0xc7 || *output2 == 0x81));
+
+            if (!need_absolute_address) {
+                // mov or binop
                 if (symbol->extra == SE_IN_GOT)
                     value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
                 else if (symbol->extra == SE_IN_GOT_IPLT)
                     value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
-                else
-                    // The value has relaxed to RIP-relative addressing and has neither a GOT or PLT entry
-                    value = S + A - P;
             }
 
             if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
