@@ -4,9 +4,14 @@
 .section .text
 .globl main
 
-# Test linker opcode rewriting. The instructions are changed by the linker to not use a GOT.
-relaxed_relocation_testing:
-    # Test R_X86_64_GOTPCREL aka R_X86_64_GOTPCRELX
+exit_with_not_ok:
+    movl $1, %eax;
+    ret
+
+# Test linker opcode rewriting.
+# In the static case, the instructions are changed by the linker to not use a GOT.
+main:
+    # Test R_X86_64_GOTPCRELX relocations
     movl reg00@GOTPCREL(%rip), %eax
     movq (%rax), %rax ; cmp $100, %rax
     jne exit_with_not_ok
@@ -43,10 +48,6 @@ relaxed_relocation_testing:
 restore_stack_and_exit_with_not_ok:
     mov %rbx, %rsp  # Restore the stack registers
     mov %rcx, %rbp
-
-exit_with_not_ok:
-    movl $1, %eax;
-    ret
 
 stack_ok:
     mov %rbx, %rsp  # Restore the stack registers
@@ -97,11 +98,13 @@ stack_ok:
     cmp $202, %rax
     jne exit_with_not_ok
 
-    movl $0, %eax;
-    ret
+    # Check a GOTPCREL for an undefined weak symbol works as it should
+    .weak weak_fn        # undefined weak symbol
+    movq weak_fn@GOTPCREL(%rip), %rax
+    test %rax, %rax
+    jne exit_with_not_ok
 
-main:
-    call relaxed_relocation_testing
+    movl $0, %eax;
     ret
 
 func:

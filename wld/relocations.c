@@ -347,6 +347,10 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
         case R_X86_64_32S:
             return;
 
+        case R_X86_64_GOTPCREL:
+            add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+            return;
+
         case R_X86_64_GOTPCRELX: {
             // Relax instructions to not use the GOT, where possible
 
@@ -397,7 +401,6 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
         }
 
-        case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
             // Relax instructions to not use the GOT, where possible
 
@@ -573,6 +576,25 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             *output = value;
             break;
         }
+
+        case R_X86_64_GOTPCREL: {
+            uint64_t value;
+
+            if (symbol->extra == SE_IN_GOT)
+                value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
+            else if (symbol->extra == SE_IN_GOT_PLT)
+                S = output_elf_file->plt_offset + symbol->plt_offset + A - P;
+            else if (symbol->extra == SE_IN_GOT_IPLT)
+                value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
+            else
+                panic("Got a R_X86_64_GOTPCREL relocation without the symbol being in any of the GOT tables. symbol->extra=%d", symbol->extra);
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            uint32_t *output = (uint32_t *) output_pointer;
+            *output = value;
+            break;
+        }
+
         case R_X86_64_GOTPCRELX: {
             // Relax instructions to not use the GOT, where possible
 
@@ -609,7 +631,6 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             panic("Unhandled relocation apply for R_X86_64_GOTPCRELX: %#x %#x\n", *output2, *output1);
         }
 
-        case R_X86_64_GOTPCREL:
         case R_X86_64_REX_GOTPCRELX: {
             // Relax instructions to not use the GOT, where possible
 
