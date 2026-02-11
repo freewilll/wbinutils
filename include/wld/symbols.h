@@ -66,6 +66,7 @@ typedef struct symbol {
     int dst_index;                      // Index in the final ELF symbol table
     int dst_dynsym_index;               // Index in the final ELF dynsyn table (for libraries)
     int resolves_undefined_symbol;      // Set to 1 if the symbol is from a shared library and resolves an undefined symbol in an object file
+    int is_undefined;                   // Set to 1 at a later stage if the symbol is undefined
 } Symbol;
 
 typedef struct symbol_table {

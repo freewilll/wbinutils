@@ -189,6 +189,18 @@ static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbo
     return link_dynamically;
 }
 
+// Determine if a symbol can have its instructions rewritten due to a GOTPCRELX relocation
+// A symbol that can be preempted must be accessed indirectly
+// GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
+static int may_relax_symbol_for_GOTPCRELX(OutputElfFile *output_elf_file, Symbol *symbol) {
+    if (!symbol) return 0;
+    if (symbol->is_undefined) return 0; // Cannot relax undefined symbols
+    if (symbol->binding == STB_WEAK) return 0; // Cannot relax weak symbols
+    if (!output_elf_file->is_executable) return 0; // Is not preemptible
+
+    return 1;
+}
+
 // A .got or .got.plt entry is needed
 static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation, GotOrPltRelocationType add_got) {
     int type = relocation->r_info & 0xffffffff;
@@ -343,6 +355,9 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
+            // GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
+            int may_relax = may_relax_symbol_for_GOTPCRELX(output_elf_file, symbol);
+
             // Rewrite instructions
 
             uint32_t *output = (uint32_t *) input_data;
@@ -356,7 +371,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             if (offset > 1 && opcode == 0x8b) {
                 if (output_is_shared) {
                     // TODO Convert movl foo@GOTPCREL@(%rip), ... to lea foo(%rip), ....
-                    panic("Relaxing to relative-RIP load for R_X86_64_GOTPCRELX for not implemented for ET_DYN\n");
+                    panic("Relaxing to relative-RIP load for R_X86_64_GOTPCRELX not implemented for ET_DYN\n");
                 }
 
                 // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo, %eax
@@ -367,7 +382,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             }
 
             // callq foo(%rip)
-            else if (offset > 1 && opcode == 0xff) {
+            else if (may_relax && offset > 1 && opcode == 0xff) {
                 // Convert callq foo(%rip) to addr32 callq foo RIP-relative
                 if (*pmod_rm == 0x15) { // reg=2, the opcode extension r/m=5 is [rip + disp32]. So mod/rm = reg << 3 + r/m = 0x15
                     *popcode = 0x67; // Replace the opcode with the address size override prefix 0x67
@@ -391,6 +406,9 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
+            // GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
+            int may_relax = may_relax_symbol_for_GOTPCRELX(output_elf_file, symbol);
+
             // Rewrite instructions
 
             uint8_t *pprefix = (uint8_t *) (input_data - 3);
@@ -398,7 +416,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             uint8_t opcode = *popcode;
 
             if (offset > 2 && opcode == 0x8b) {
-                if (output_is_shared) {
+                if (may_relax && output_is_shared) {
                     // Convert mov foo@GOTPCREL@(%rip) to lea foo(%rip).
                     // The RIP-relative value of foo will be used rather than a GOT slot.
                     *popcode = 0x8d; // lea
@@ -411,13 +429,13 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
-            else if (offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
+            else if (may_relax && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
                 // Convert cmpq foo@GOTPCREL(%rip), %rax to cmpq $foo, %rax
                 convert_Gvqp_to_Evqp(input_data, 0x81, 7);
                 return;
             }
 
-            else if (offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
+            else if (may_relax && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
                 // Convert subq foo@GOTPCREL(%rip), %rax to subq $foo, %rax
                 convert_Gvqp_to_Evqp(input_data, 0x81, 5);
                 return;

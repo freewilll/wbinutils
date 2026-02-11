@@ -656,6 +656,7 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->undefined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->undefined_symbols, snv);
+        symbol->is_undefined = 1;
 
         // Don't resovle a _DYNAMIC WEAK symbol. It may be included through a .o crt file
         // but is only needed for an ET_DYN ELF file.

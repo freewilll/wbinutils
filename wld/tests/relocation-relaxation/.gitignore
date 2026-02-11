@@ -1,5 +1,4 @@
 *.o
 *.a
-main_*
-main_*
-main
+main-static
+main-dynamic
