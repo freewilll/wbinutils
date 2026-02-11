@@ -128,9 +128,9 @@ static void reset(OutputType ot, void *output_data, uint64_t reloc_type, uint64_
     input_elf_file->symbol_table_strings = test_symbol_name;
 
     // Add symbols tables
-    local_symbol_tables = new_strmap();
+    local_symbol_tables = new_strmap_ordered();
     SymbolTable *local_symbol_table = new_symbol_table();
-    strmap_put(local_symbol_tables, input_elf_file->filename, local_symbol_table);
+    strmap_ordered_put(local_symbol_tables, input_elf_file->filename, local_symbol_table);
     global_symbol_table = new_symbol_table();
 
     // Add a symbol

@@ -1,4 +1,5 @@
 *.o
 *.a
-main-static
+main-static-relaxed
+main-static-unrelaxed
 main-dynamic

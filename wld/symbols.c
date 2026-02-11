@@ -94,7 +94,7 @@ static const char *SYMBOL_VISIBILITY_NAMES[] = {
 };
 
 SymbolTable *global_symbol_table;
-StrMap *local_symbol_tables; // Map from filename to symbol table
+StrMapOrdered *local_symbol_tables; // Map from filename to symbol table
 StrMapOrdered *provided_symbols; // symbols from linker script PROVIDE() and PROVIDE_HIDDEN. Map from symbol name to Symbol
 
 char *last_error_message;
@@ -166,7 +166,7 @@ Symbol *must_get_global_defined_symbol(const char *name, int version_index) {
 
 // Get an input elf file's local symbol table. Panic if it doesn't exist.
 SymbolTable *get_local_symbol_table(InputElfFile *elf_file) {
-    SymbolTable *local_symbol_table = strmap_get(local_symbol_tables, elf_file->filename);
+    SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, elf_file->filename);
     if (!local_symbol_table) panic("Missing local symbol table for %s", elf_file->filename);
     return local_symbol_table;
 }
@@ -504,7 +504,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
 
     SymbolTable *local_symbol_table = new_symbol_table();
 
-    if (!read_only) strmap_put(local_symbol_tables, elf_file->filename, local_symbol_table);
+    if (!read_only) strmap_ordered_put(local_symbol_tables, elf_file->filename, local_symbol_table);
 
     for (int i = 0; i < elf_file->symbol_count; i++) {
         ElfSymbol *symbol = &elf_file->symbol_table[i];
@@ -756,14 +756,17 @@ void debug_print_symbol(Symbol *symbol) {
     printf(" %s\n", symbol->name);
 }
 
-void debug_summarize_symbols(void) {
-    printf("Defined symbols:\n");
-    printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
-
+static void print_symbol_table_symbols(SymbolTable *symbol_table, const char *filename) {
+    int printed_filename = 0;
     int i = 0;
-    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+    map_ordered_foreach(symbol_table->defined_symbols, it) {
+        if (!printed_filename && filename) {
+            printf("\n%s:\n", filename);
+            printed_filename = 1;
+        }
+
         const SymbolNV *snv = map_ordered_iterator_key(&it);
-        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
 
         char binding = symbol->binding;
         char type = symbol->type;
@@ -772,14 +775,28 @@ void debug_summarize_symbols(void) {
         const char *binding_name = SYMBOL_BINDING_NAMES[binding];
         const char *visibility_name = SYMBOL_VISIBILITY_NAMES[visibility];
 
-        printf("%6d: %016lx  %4lx %-8s%-7s%-9s  ", i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
+        printf("%6d: %016lx  %4lx %-8s%-7s%-9s",
+            i, symbol->dst_value, symbol->size, type_name, binding_name, visibility_name);
         print_section_string(symbol);
         printf(" %s\n", snv->full_name);
 
         i++;
     }
+}
 
-    printf("Undefined symbols:\n");
+void debug_summarize_symbols() {
+    printf("Defined symbols:\n");
+    printf("   Num:    Value          Size Type    Bind   Vis        Ndx Name\n");
+
+    print_symbol_table_symbols(global_symbol_table, NULL);
+
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        print_symbol_table_symbols(local_symbol_table, filename);
+    }
+
+    printf("\nUndefined symbols:\n");
     map_ordered_foreach(global_symbol_table->undefined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->undefined_symbols, snv);
@@ -1070,7 +1087,7 @@ static Symbol *add_hidden_symbol(char *name) {
 
 void init_symbols(OutputElfFile *output_elf_file) {
     global_symbol_table = new_symbol_table();
-    local_symbol_tables = new_strmap();
+    local_symbol_tables = new_strmap_ordered();
     provided_symbols = new_strmap_ordered();
     global_symbol_version_indexes_map = new_strmap();
     global_symbol_version_indexes_list = new_list(32);
@@ -1084,11 +1101,24 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
     int got_entries_count = 0;
     int got_plt_entries_count = 0;
 
+    // Process global symbols
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (symbol->extra == SE_IN_GOT) got_entries_count++;
         if (symbol->extra == SE_IN_GOT_PLT) got_plt_entries_count++;
+    }
+
+    // Process local symbols
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        map_ordered_foreach(local_symbol_table->defined_symbols, it) {
+            const SymbolNV *snv = map_ordered_iterator_key(&it);
+            Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
+            if (symbol->extra == SE_IN_GOT) got_entries_count++;
+            if (symbol->extra == SE_IN_GOT_PLT) got_plt_entries_count++;
+        }
     }
 
     output_elf_file->got_entries_count = got_entries_count;
@@ -1127,6 +1157,21 @@ void create_got_symbol(OutputElfFile *output_elf_file) {
         add_defined_symbol(global_symbol_table, GLOBAL_OFFSET_TABLE_SYMBOL_NAME, 0, STT_OBJECT, STB_LOCAL, 0, 0, SRC_INTERNAL);
 }
 
+static void update_got_values_from_symbol_table(InputSection *section_got, SymbolTable *symbol_table, int *pgot_index) {
+    uint64_t *got_entries = (uint64_t *) section_got->data;
+
+    map_ordered_foreach(symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
+        if (symbol->extra != SE_IN_GOT) continue;
+
+        if (*pgot_index * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in .got");
+        got_entries[*pgot_index] = symbol->dst_value;
+        symbol->got_offset = *pgot_index * 8;
+        (*pgot_index)++;
+    }
+}
+
 // Set the symbol values in the .got
 void update_got_values(OutputElfFile *output_elf_file) {
     InputSection *section_got = get_extra_section(output_elf_file, GOT_SECTION_NAME);
@@ -1141,15 +1186,15 @@ void update_got_values(OutputElfFile *output_elf_file) {
 
     // Add the .got entries
     int got_index = 0;
-    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
-        const SymbolNV *snv = map_ordered_iterator_key(&it);
-        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
-        if (symbol->extra != SE_IN_GOT) continue;
 
-        if (got_index * 8 >= section_got ->size) panic("Trying to write beyond the allocated space in .got");
-        got_entries[got_index] = symbol->dst_value;
-        symbol->got_offset = got_index * 8;
-        got_index++;
+    // Process global symbols
+    update_got_values_from_symbol_table(section_got, global_symbol_table, &got_index);
+
+    // Process local symbols
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        update_got_values_from_symbol_table(section_got, local_symbol_table, &got_index);
     }
 }
 

@@ -83,7 +83,7 @@ typedef struct relative_rela_dyn_relocation {
 } RelativeRelaDynRelocation;
 
 extern SymbolTable *global_symbol_table;
-extern StrMap *local_symbol_tables;
+extern StrMapOrdered *local_symbol_tables;
 
 extern char *last_error_message;
 
