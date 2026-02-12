@@ -16,14 +16,47 @@ main-dynamic.o: main-dynamic.s
 	# Use -mrelax-relocations=no to get a R_X86_64_GOTPCREL, otherwise gas makes a R_X86_64_GOTPCRELX
 	as $< -o $@ -mrelax-relocations=no
 
-main-static-relaxed: main-static-relaxed.o libc.o
-	${WLD} -o main-static-relaxed main-static-relaxed.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o -static
+main-static-relaxed: main-static-relaxed.o libtest.o
+	${WLD}                                                \
+	-static                                               \
+	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
+	/usr/lib/x86_64-linux-musl/crti.o                     \
+	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	-L/usr/lib/x86_64-linux-musl                          \
+	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	main-static-relaxed.o                                 \
+	libtest.o                                             \
+	-o main-static-relaxed                                \
+	-lc -lgcc -lgcc_eh                                    \
+	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
-main-static-unrelaxed: main-static-unrelaxed.o libc.o
-	${WLD} -o main-static-unrelaxed main-static-unrelaxed.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o -static
+main-static-unrelaxed: main-static-unrelaxed.o libtest.o
+	${WLD}                                                \
+	-static                                               \
+	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
+	/usr/lib/x86_64-linux-musl/crti.o                     \
+	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	-L/usr/lib/x86_64-linux-musl                          \
+	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	libtest.o                                             \
+	main-static-unrelaxed.o                               \
+	-o main-static-unrelaxed                              \
+	-lc -lgcc -lgcc_eh                                    \
+	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
-main-dynamic: main-dynamic.o libc.o
-	${WLD} -o main-dynamic main-dynamic.o libc.o /usr/lib/x86_64-linux-gnu/crt1.o /usr/lib/x86_64-linux-gnu/crti.o -dynamic-linker /lib/ld-musl-x86_64.so.1
+main-dynamic: main-dynamic.o libtest.o
+	${WLD}                                                \
+	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
+	/usr/lib/x86_64-linux-musl/crti.o                     \
+	libtest.o                                             \
+	main-dynamic.o                                        \
+	-o main-dynamic                                       \
+	-L/usr/lib/x86_64-linux-musl                          \
+	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
+	-lc                                                   \
+	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
 run-main-static-relaxed: main-static-relaxed
 	./main-static-relaxed
