@@ -8,6 +8,7 @@
 #include "list.h"
 #include "error.h"
 
+#include "wld/relocations.h"
 #include "wld/symbols.h"
 #include "wld/wld.h"
 
@@ -389,15 +390,19 @@ void assert_relocations(OutputElfFile *elf_file, OutputSection *section, va_list
                 expected_addend != got_addend) {
 
             dump_relocations(section);
+
+            const char *expected_type_name = expected_type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[expected_type] : "UNKNOWN";
+            const char *got_type_name = got_type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[got_type] : "UNKNOWN";
+
             panic("Relocations mismatch at position %d:\n"
-                "expected type=%#08x, symbol index=%4d, offset=%#08x, addend=%#08lx\n"
-                "got      type=%#08x, symbol index=%4d, offset=%#08x, addend=%#08lx",
+                "expected type=%30s, symbol index=%4d, offset=%#08x, addend=%#08lx\n"
+                "got      type=%30s, symbol index=%4d, offset=%#08x, addend=%#08lx",
                 pos / sizeof(ElfRelocation),
-                expected_type,
+                expected_type_name,
                 expected_symbol_index,
                 expected_offset,
                 expected_addend,
-                got_type,
+                got_type_name,
                 got_symbol_index,
                 got_offset,
                 got_addend
@@ -491,7 +496,7 @@ static void *write_file(const char *filename, const char *contents) {
 
 // Run GNU as. This is fragile as GNU as output can't be expected to be consistent
 // in different versions.
-static char *run_as(char *assembly) {
+static char *run_as(char *extra_args, char *assembly) {
     // Write out assembly to a temp file
     char source_path[] = "/tmp/asm_XXXXXX";
     int fd = mkstemp(source_path);
@@ -508,7 +513,12 @@ static char *run_as(char *assembly) {
 
     // Assemble using ../bin/was
     char command[512];
-    snprintf(command, sizeof(command), "as -o %s %s", object_path, source_path);
+    // snprintf(command, sizeof(command), "as -o %s %s", object_path, source_path);
+    snprintf(command, sizeof(command), "as -mrelax-relocations=no -o %s %s %s",
+        object_path, source_path,
+        extra_args ? extra_args : ""
+    );
+
     int result = system(command);
     if (result) {
         printf("Was failed with exit code %d\n", result >> 8);
@@ -727,7 +737,8 @@ static void test_sanity() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
-        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
+        0x402000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",  "code",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",  "_start",
         END);
 }
 
@@ -944,7 +955,7 @@ static void test_tls() {
 
 // Test the start of the TLS template is a multiple of the TLS section's alignment
 static void test_tls_aligment() {
-    char *object_path1 = run_as(
+    char *object_path1 = run_as(NULL,
         "    .globl	data2;"
         "    .section .tdata,\"awT\",@progbits;"
         "    .align 8;"
@@ -953,7 +964,7 @@ static void test_tls_aligment() {
         "data2: .quad 43"
     );
 
-    char *object_path2 = run_as(
+    char *object_path2 = run_as(NULL,
         "    .globl	data1;"
         "    .section .tdata,\"awT\",@progbits;"
         "    .align 4;"
@@ -1433,7 +1444,7 @@ static void test_two_shared_libs_with_data() {
         END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_GLOB_DAT, 1,                0x30a0,  0,
         R_X86_64_GLOB_DAT, 2,                0x30a8,  0,
         END);
@@ -1521,7 +1532,7 @@ static void test_two_shared_libs_with_functions() {
         END);
 
     assert_rela_plt_relocations(elf_file,
-        // Tag              Dyn symtab index  Address  Offset
+        // Tag              Dyn symtab index  Offset   Addend
         R_X86_64_JUMP_SLOT, 1,                0x40c8,  0,
         R_X86_64_JUMP_SLOT, 2,                0x40d0,  0,
         END);
@@ -1592,13 +1603,13 @@ static void test_shared_lib_with_two_objects() {
 
     // Relocation for i
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_GLOB_DAT, 2,                0x40d0,  0,
         END);
 
     // Relocation for f
     assert_rela_plt_relocations(elf_file,
-        // Tag              Dyn symtab index  Address  Offset
+        // Tag              Dyn symtab index  Offset   Addend
         R_X86_64_JUMP_SLOT, 1,                0x40f0,  0,
         END);
 
@@ -1606,6 +1617,55 @@ static void test_shared_lib_with_two_objects() {
     //  Value      Size   Type        Binding     Visibility   Section    Name
         0x3030,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f",
         0x40f8,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        END);
+}
+
+static void test_dynamic_executable_with_GOT_entry_for_local_symbol() {
+    // Run with -mrelax-relocations=no to get a GOTPCREL relocation instead of the default GOTPCRELX.
+    char *object_path = run_as("-mrelax-relocations=no",
+        ".type _start, @function;"
+        ".globl _start;"
+        ".section .text;"
+        "_start:;"
+        "    movq foo@GOTPCREL(%rip), %rax;"
+        ".section .data;"
+        "    foo: .quad 100;"
+
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_with_GOT_entry_for_local_symbol");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x10,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1010,   0x1010, 0x18,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1028,   0x1028, 0x01,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1030,   0x1030, 0x18,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x07,  SHF_ALLOC | SHF_EXECINSTR, 1,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x3090,   0x3090, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x3098,   0x3098, 0x08,  SHF_ALLOC | SHF_WRITE,     1,
+        NULL
+    );
+
+    // Relocation for foo
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Offset   Addend
+        R_X86_64_RELATIVE, 0,                0x3090,  0x3098,
+        END);
+
+    // Check foo is in the symtab, but not the dynsym
+    assert_dynsym(elf_file, END);
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section     Name
+        0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x3090,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
+        0x3098,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "foo",
+        0x2000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
 }
 
@@ -1774,8 +1834,9 @@ static void test_dynamic_executable_sanity() {
     );
 
     assert_symtab(elf_file,
-    //  Value      Size   Type        Binding     Visibility   Section  Name
+    //  Value      Size   Type        Binding     Visibility   Section     Name
         0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x3060,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "code",
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
 
@@ -1828,7 +1889,7 @@ void test_dynamic_executable_using_an_object_in_a_library() {
         END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_COPY,     1,                0x30a0,  0,
         END);
 }
@@ -1871,7 +1932,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
     assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_RELATIVE, 0,                0x4090,  0x3000,
         END);
 }
@@ -1905,7 +1966,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data
     assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_RELATIVE, 0,                0x3098,  0x3090,
         END);
 }
@@ -1935,7 +1996,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_da
     assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_RELATIVE, 0,                0x3090,  0x3098,
         END);
 }
@@ -1976,7 +2037,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
     assert_dynsym(elf_file, END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_RELATIVE, 0,                0x4090,  0x3000,
         R_X86_64_RELATIVE, 0,                0x4098,  0x3004,
         END);
@@ -2044,7 +2105,7 @@ void test_dynamic_executable_R_X86_64_64_relocation() {
         END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_64,       1,                0x30a0,  0x0000,
         END);
 }
@@ -2107,7 +2168,7 @@ void test_dynamic_library_R_X86_64_64_relocation_for_function_pointer() {
         END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_64,       1,                0x30a0,  0x0000,
         END);
 }
@@ -2151,7 +2212,7 @@ void test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library() 
         END);
 
     assert_rela_dyn_relocations(elf_file,
-        // Tag             Dyn symtab index  Address  Offset
+        // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_64,       1,                0x2094,  0x0000,
         END);
 }
@@ -2200,7 +2261,7 @@ void test_dynamic_library_illegal_R_X86_64_PC32_relocation() {
 }
 
 void test_versioning_default_symbol() {
-    char *object_path1 = run_as(
+    char *object_path1 = run_as(NULL,
         ".text;"
         ".globl f1_1;"
         ".type f1_1, @function;"
@@ -2247,7 +2308,7 @@ void test_versioning_default_symbol() {
         exit(1);
     }
 
-    char *object_path2 = run_as(
+    char *object_path2 = run_as(NULL,
         ".globl _start;"
         ".text;"
         "_start:;"
@@ -2340,6 +2401,7 @@ int main() {
     test_two_shared_libs_with_data();
     test_two_shared_libs_with_functions();
     test_shared_lib_with_two_objects();
+    test_dynamic_executable_with_GOT_entry_for_local_symbol();
     test_dwarf();
     test_gnu_ld_script_archive();
     test_dynamic_executable_sanity();

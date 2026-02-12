@@ -894,12 +894,11 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
 }
 
 // Add a local or global symbol to the ELF file
-static void add_elf_symbols(OutputElfFile *output_elf_file, int binding) {
-    // Add local symbols
-    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+static void add_elf_symbols_from_symbol_table (OutputElfFile *output_elf_file, SymbolTable *symbol_table, int binding) {
+    map_ordered_foreach(symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         if (!strcmp(snv->name, ".")) continue;
-        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
         if (symbol->binding != binding) continue;
 
         // Don't add a symbol if it has only been seen in a shared library
@@ -931,9 +930,19 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
         output_elf_file->section_symtab->info = dst_index + 1;
     }
 
-    // Add local and global symbols
-    add_elf_symbols(output_elf_file, STB_LOCAL);
-    add_elf_symbols(output_elf_file, STB_GLOBAL);
+    // Add global "local" builtin special symbols
+    add_elf_symbols_from_symbol_table(output_elf_file, global_symbol_table, STB_LOCAL);
+
+    // Add local symbols
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        add_elf_symbols_from_symbol_table(output_elf_file, local_symbol_table, STB_LOCAL);
+    }
+
+    // Add global symbols
+    add_elf_symbols_from_symbol_table(output_elf_file, global_symbol_table, STB_GLOBAL);
+
 }
 
 // Add a string to the dynstr section unless name is "".
@@ -981,6 +990,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
     int dynsym_symbol_count = 0;
     int rela_dyn_entry_count = 0;
 
+    // Process global symbols
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
@@ -995,6 +1005,18 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
         dynsym_symbol_count++;
 
         if (symbol->extra == SE_IN_GOT || symbol->extra == SE_COPY_RELOCATION) rela_dyn_entry_count++;
+    }
+
+    // Process local symbols. There are no .dynsym entries for them, but they can be in the .rela.dyn table
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        map_ordered_foreach(local_symbol_table->defined_symbols, it) {
+            const SymbolNV *snv = map_ordered_iterator_key(&it);
+            Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
+            seen_version_indexes[snv->version_index] = 1;
+            if (symbol->extra == SE_IN_GOT || symbol->extra == SE_COPY_RELOCATION) rela_dyn_entry_count++;
+        }
     }
 
     rela_dyn_entry_count += output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations->length;
@@ -1022,6 +1044,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
 // Set the symbol's value and section indexes
 void update_elf_symbols(OutputElfFile *output_elf_file) {
+    // Global symbols
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         if (!strcmp(snv->name, ".")) continue;
@@ -1074,6 +1097,23 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
             ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
             elf_symbol->st_value = symbol->dst_value;
             elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
+        }
+    }
+
+    // Local symbols
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        map_ordered_foreach(local_symbol_table->defined_symbols, it) {
+            const SymbolNV *snv = map_ordered_iterator_key(&it);
+            Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
+
+            if (symbol->dst_index) {
+                ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+                ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
+                elf_symbol->st_value = symbol->dst_value;
+                elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
+            }
         }
     }
 }
@@ -1546,7 +1586,33 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
 
-        if (symbol->extra == SE_IN_GOT) {
+        if (symbol->extra != SE_IN_GOT) continue;
+        if (!section_got) panic("GOT is NULL");
+
+        int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
+        if (i >= output_elf_file->rela_dyn_entry_count)
+            panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
+                symbol->name, i, output_elf_file->rela_dyn_entry_count);
+
+        if (i > highest_got_entry) highest_got_entry = i;
+
+        // Populate the relocation entry in .rela.dyn
+        ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
+        r->r_info = R_X86_64_GLOB_DAT + ((uint64_t) symbol->dst_dynsym_index << 32);
+        r->r_offset = got_value + symbol->got_offset;
+        r->r_addend = 0;
+    }
+
+    // Similar to above, loop over local symbols that need a GOT entry.
+    // The symbol not in the .dynsym since it's local.
+    // A R_X86_64_RELATIVE (B + A) relocation is added using an offset instead of a symbol.
+    strmap_ordered_foreach(local_symbol_tables, it) {
+        const char *filename = strmap_ordered_iterator_key(&it);
+        SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
+        map_ordered_foreach(local_symbol_table->defined_symbols, it) {
+            const SymbolNV *snv = map_ordered_iterator_key(&it);
+            Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
+            if (symbol->extra != SE_IN_GOT) continue;
             if (!section_got) panic("GOT is NULL");
 
             int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
@@ -1558,9 +1624,9 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
 
             // Populate the relocation entry in .rela.dyn
             ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
-            r->r_info = R_X86_64_GLOB_DAT + ((uint64_t) symbol->dst_dynsym_index << 32);
+            r->r_info = R_X86_64_RELATIVE;
             r->r_offset = got_value + symbol->got_offset;
-            r->r_addend = 0;
+            r->r_addend = symbol->dst_value;
         }
     }
 

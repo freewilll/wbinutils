@@ -10,17 +10,19 @@ exit_with_not_ok:
 
 # Test linker opcode rewriting.
 # In the static case, the instructions are changed by the linker to not use a GOT.
+# In the dynamic case, instrutions are relaxed for GOTPCRELX relocations, or
+# GOT entries + relocations are added for GOTPCREL.
 main:
-    # Test R_X86_64_GOTPCRELX relocations
-    movl reg00@GOTPCREL(%rip), %eax
+    # Test R_X86_64_GOTPCREL* relocations
+    movq reg00@GOTPCREL(%rip), %rax
     movq (%rax), %rax ; cmp $100, %rax
     jne exit_with_not_ok
 
-    movl reg00@GOTPCREL(%rip), %ecx
+    movq reg00@GOTPCREL(%rip), %rcx
     movq (%rcx), %rax ; cmp $100, %rax
     jne exit_with_not_ok
 
-    # Test R_X86_64_REX_GOTPCRELX
+    # Test R_X86_64_REX_GOTPCREL*
     movq reg00@GOTPCREL(%rip),  %rax ; movq (%rax), %rax ; cmp $100, %rax ; jne exit_with_not_ok
     movq reg01@GOTPCREL(%rip),  %rcx ; movq (%rcx), %rax ; cmp $101, %rax ; jne exit_with_not_ok
     movq reg02@GOTPCREL(%rip),  %rdx ; movq (%rdx), %rax ; cmp $102, %rax ; jne exit_with_not_ok
