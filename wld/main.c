@@ -14,6 +14,7 @@ int main(int argc, char **argv) {
     int verbose = 0;
     int is_static = 0;
     int is_shared = 0;
+    int is_pie = 0; // Position independent executable
     List *input_files = new_list(32);
     char *output_filename = NULL;
     List *library_paths = new_list(32);
@@ -83,6 +84,11 @@ int main(int argc, char **argv) {
                 argc--;
                 argv++;
             }
+            else if (!strcmp(argv[0], "-pie")) {
+                is_pie = 1;
+                argc--;
+                argv++;
+            }
             // -dynamic-linker x
             else if (!strcmp(argv[0], "-dynamic-linker")) {
                 dynamic_linker = argv[1];
@@ -121,6 +127,13 @@ int main(int argc, char **argv) {
     if (is_static) output_type |= OUTPUT_TYPE_FLAG_STATIC;
     if (!is_shared) output_type |=OUTPUT_TYPE_FLAG_EXECUTABLE;
     if (!is_static && !is_shared) output_type |= OUTPUT_TYPE_FLAG_SHARED; // For a  dynamic executable
+
+    // is_pie is the default for dynamic executables, so the flag is ignored.
+    // However, the flag is invalid when making a shared library or a static executable.
+    if (is_pie && (output_type & !((OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE)))) {
+        printf("The -pie flag can only be used with dynamic executables\n");
+        exit(1);
+    }
 
     if (verbose) {
         printf("Wld linker\n");
