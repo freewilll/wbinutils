@@ -2,4 +2,5 @@
 *.a
 main-static-relaxed
 main-static-unrelaxed
-main-dynamic
+main-dynamic-relaxed
+main-dynamic-unrelaxed

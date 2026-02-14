@@ -35,10 +35,11 @@
 #define VERNEED_SECTION_NAME    ".gnu.version_r"
 #define VERDEF_SECTION_NAME     ".gnu.version_d"
 
-#define DEBUG_SYMBOL_RESOLUTION 0
-#define DEBUG_SYMBOL_VERSIONS   0
-#define DEBUG_RELOCATIONS       0
-#define DEBUG_LAYOUT            0
+#define DEBUG_SYMBOL_RESOLUTION     0
+#define DEBUG_SYMBOL_VERSIONS       0
+#define DEBUG_RELOCATIONS           0
+#define DEBUG_RELOCATION_RELAXATION 0
+#define DEBUG_LAYOUT                0
 
 // Section types that are included when not referenced in the linker script
 #define ORPHANED_SECTION_TYPE(type) \

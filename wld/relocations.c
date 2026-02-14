@@ -139,7 +139,8 @@ static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbo
 // A symbol that can be preempted must be accessed indirectly
 // GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
 static int may_relax_symbol_for_GOTPCRELX(OutputElfFile *output_elf_file, Symbol *symbol) {
-    if (!symbol) return 0;
+    if (!symbol) return 1; // Section symbols are always relaxable
+    if (output_elf_file->type == ET_EXEC) return 1; // Can always relax in static executable
     if (symbol->is_undefined) return 0; // Cannot relax undefined symbols
     if (symbol->binding == STB_WEAK) return 0; // Cannot relax weak symbols
     if (!output_elf_file->is_executable) return 0; // Is not preemptible
@@ -297,33 +298,40 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             return;
 
         case R_X86_64_GOTPCRELX: {
-            // Relax instructions to not use the GOT, where possible
-
-            if (link_dynamically) {
-                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
-                return;
-            }
+            // Relax instructions to not use the GOT, if possible.
 
             // GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
             int may_relax = may_relax_symbol_for_GOTPCRELX(output_elf_file, symbol);
 
-            // Rewrite instructions
+            if (link_dynamically || !may_relax) {
+                // A GOT entry must be added and no relaxation is possible
+                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
+                return;
+            }
 
-            uint32_t *output = (uint32_t *) input_data;
+            // The symbol has a known address
+
+            char *debug_symbol_name = symbol ? symbol->name : "(none)";
+
+            // Attempt to rewrite instructions, otherwise fall back to using the GOT
 
             uint8_t *pmod_rm = (uint8_t *) (input_data - 1);
             uint8_t *popcode = (uint8_t *) (input_data - 2);
             uint8_t *pprefix = (uint8_t *) (input_data - 3);
             uint8_t opcode = *popcode;
 
-            // movl foo@GOTPCREL@(%rip)
+            // movl foo@GOTPCREL(%rip)
             if (offset > 1 && opcode == 0x8b) {
                 if (output_is_shared) {
-                    // TODO Convert movl foo@GOTPCREL@(%rip), ... to lea foo(%rip), ....
+                    // TODO Convert movl foo@GOTPCREL(%rip), ... to lea foo(%rip), ....
                     panic("Relaxing to relative-RIP load for R_X86_64_GOTPCRELX not implemented for ET_DYN\n");
                 }
 
-                // Convert movl foo@GOTPCREL(%rip), %eax to mov $foo, %eax
+                // Use the absolute value of the symbol in a static executable
+                if (DEBUG_RELOCATION_RELAXATION)
+                    printf("Relaxing mov %s@GOTPCREL(%%rip), reg to mov $%s, reg\n", debug_symbol_name,  debug_symbol_name);
+
+                // Convert Gvqp to Evqp and set mode to direct addressing
                 *popcode = 0xc7;
                 *pmod_rm = 0xc0 | (*pmod_rm & 0x38) >> 3;
 
@@ -331,8 +339,10 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             }
 
             // callq foo(%rip)
-            else if (may_relax && offset > 1 && opcode == 0xff) {
-                // Convert callq foo(%rip) to addr32 callq foo RIP-relative
+            else if (offset > 1 && opcode == 0xff) {
+                if (DEBUG_RELOCATION_RELAXATION)
+                    printf("Relaxing callq %s(%%rip) to addr32 callq %s RIP-relative\n", debug_symbol_name,  debug_symbol_name);
+
                 if (*pmod_rm == 0x15) { // reg=2, the opcode extension r/m=5 is [rip + disp32]. So mod/rm = reg << 3 + r/m = 0x15
                     *popcode = 0x67; // Replace the opcode with the address size override prefix 0x67
                     *pmod_rm = 0xe8; // Replace mod/rm with the new opcode 0xe8
@@ -347,44 +357,60 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
         }
 
         case R_X86_64_REX_GOTPCRELX: {
-            // Relax instructions to not use the GOT, where possible
-
-            if (link_dynamically) {
-                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
-                return;
-            }
+            // Relax instructions to not use the GOT, if possible.
 
             // GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
             int may_relax = may_relax_symbol_for_GOTPCRELX(output_elf_file, symbol);
 
-            // Rewrite instructions
+            if (link_dynamically || !may_relax) {
+                // A GOT entry must be added and no relaxation is possible
+                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
+                return;
+            }
+
+            // The symbol has a known address
+
+            char *debug_symbol_name = symbol ? symbol->name : "(none)";
+
+            // Attempt to rewrite instructions, otherwise fall back to using the GOT
 
             uint8_t *pprefix = (uint8_t *) (input_data - 3);
             uint8_t *popcode = (uint8_t *) (input_data - 2);
             uint8_t opcode = *popcode;
 
             if (offset > 2 && opcode == 0x8b) {
-                if (may_relax && output_is_shared) {
-                    // Convert mov foo@GOTPCREL@(%rip) to lea foo(%rip).
+                // Relax mov %s@GOTPCREL(%%rip)
+
+                if (output_is_shared) {
                     // The RIP-relative value of foo will be used rather than a GOT slot.
+                    if (DEBUG_RELOCATION_RELAXATION)
+                        printf("Relaxing mov %s@GOTPCREL(%%rip) to lea %s(%%rip)\n", debug_symbol_name,  debug_symbol_name);
+
                     *popcode = 0x8d; // lea
 
                     return;
                 }
 
-                // Convert movq foo@GOTPCREL(%rip), %rax to movq $foo, %rax
+                // Use the absolute value of the symbol in a static executable
+                if (DEBUG_RELOCATION_RELAXATION)
+                    printf("Relaxing movq %s@GOTPCREL(%%rip), raxreg to movq $%s, raxreg\n", debug_symbol_name,  debug_symbol_name);
+
                 convert_Gvqp_to_Evqp(input_data, 0xc7, 0);
                 return;
             }
 
-            else if (may_relax && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
-                // Convert cmpq foo@GOTPCREL(%rip), %rax to cmpq $foo, %rax
+            else if (!output_is_shared && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
+                if (DEBUG_RELOCATION_RELAXATION)
+                    printf("Relaxing cmpq %s@GOTPCREL(%%rip), raxreg to cmpq $%s, raxreg\n", debug_symbol_name,  debug_symbol_name);
+
                 convert_Gvqp_to_Evqp(input_data, 0x81, 7);
                 return;
             }
 
-            else if (may_relax && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
-                // Convert subq foo@GOTPCREL(%rip), %rax to subq $foo, %rax
+            else if (!output_is_shared && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
+                if (DEBUG_RELOCATION_RELAXATION)
+                    printf("Relaxing subq %s@GOTPCREL(%%rip), raxreg to subq $%s, raxreg\n", debug_symbol_name,  debug_symbol_name);
+
                 convert_Gvqp_to_Evqp(input_data, 0x81, 5);
                 return;
             }
@@ -555,7 +581,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
                 break;
             }
 
-            // opcode 0xc7 is mov $foo, %eax, which was converted from foo@GOTPCREL@(%rip), %eax in the scan phase
+            // opcode 0xc7 is mov $foo, %eax, which was converted from foo@GOTPCREL(%rip), %eax in the scan phase
             // Make an absolute address
             else if (output_offset > 1 && (*output2 == 0xc7)) {
                 uint64_t value = S; // Ignore the addend, this is an absolute address
@@ -577,28 +603,41 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
         }
 
         case R_X86_64_REX_GOTPCRELX: {
-            // Relax instructions to not use the GOT, where possible
+            // Instructions may have been relaxed. .got or .got.plt entries may also have been added.
 
             uint8_t *output1 = (uint8_t *) (output_pointer - 1);
             uint8_t *output2 = (uint8_t *) (output_pointer - 2);
+            uint8_t *mod_rm = (uint8_t *) (output_pointer - 1);
 
-            uint64_t value = S;
+            uint64_t value;
 
-            // The instruction has been rewritten to use an PC-relative address using a lea
-            if (*output2 == 0x8d) value = S + A - P;
+            // A relaxed binop usees an absolute address
+            int use_absolute_address = *output2 == 0x81; // 0x81 is a binop $foo, %rax
 
-            // The instruction has been rewritten to use an absolute address
+            // Check if the instruction is a mov with an absolute address
             // 0xc7 is mov $foo, %eax
-            // 0x81 is a binop $foo, %rax
-            int need_absolute_address = ((*output2 == 0xc7 || *output2 == 0x81));
+            if (*output2 == 0xc7 && DECODE_MOD_RM_MODE(*mod_rm) == MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING)
+                use_absolute_address = 1;
 
-            if (!need_absolute_address) {
-                // mov or binop
-                if (symbol->extra == SE_IN_GOT)
-                    value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
-                else if (symbol->extra == SE_IN_GOT_IPLT)
-                    value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
-            }
+            // The instruction has been relaxed from a mov to a lea
+            int use_pc_relative_address = *output2 == 0x8d;
+
+            if (use_pc_relative_address)
+                // The instruction has been relaxed from a mov to use an PC-relative address using a lea.
+                value = S + A - P;
+            else if (use_absolute_address)
+                // The instruction has been relaxed to use an absolute value
+                value = S;
+
+            // The instruction has not been relaxed.
+            else if (symbol->extra == SE_IN_GOT)
+                value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
+            else if (symbol->extra == SE_IN_GOT_PLT)
+                ; // TODO what to do about a symbol with a R_X86_64_REX_GOTPCRELX that is in the SE_IN_GOT_PLT? Is this a bug?
+            else if (symbol->extra == SE_IN_GOT_IPLT)
+                value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
+            else
+                panic("Unable to determine the operation for a R_X86_64_REX_GOTPCRELX. Opcode=%#x", *output2);
 
             if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
             uint32_t *output = (uint32_t *) output_pointer;

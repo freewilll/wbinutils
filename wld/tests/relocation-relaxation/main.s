@@ -50,6 +50,7 @@ main:
 restore_stack_and_exit_with_not_ok:
     mov %rbx, %rsp  # Restore the stack registers
     mov %rcx, %rbp
+    jmp exit_with_not_ok
 
 stack_ok:
     mov %rbx, %rsp  # Restore the stack registers
