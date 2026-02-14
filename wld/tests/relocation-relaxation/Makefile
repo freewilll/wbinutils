@@ -57,6 +57,7 @@ main-dynamic: main-dynamic.o libtest.o
 	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
 	-lc                                                   \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	-pie                                                  \
 
 run-main-static-relaxed: main-static-relaxed
 	./main-static-relaxed
