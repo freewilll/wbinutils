@@ -48,6 +48,10 @@ sanity1:
 sanity2:
 	+$(MAKE) -C sanity2
 
+.PHONY: glibc-hello-world
+glibc-hello-world:
+	+$(MAKE) -C glibc-hello-world
+
 .PHONY: glibc-math
 glibc-math:
 	+$(MAKE) -C glibc-math
