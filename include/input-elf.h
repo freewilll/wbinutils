@@ -8,6 +8,20 @@
 #include "strmap.h"
 #include "output-elf.h"
 
+static const char *SYMBOL_TYPE_NAMES[] = {
+    "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?"
+};
+
+static const char *SYMBOL_BINDING_NAMES[] = {
+    "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?",
+};
+
+static const char *SYMBOL_VISIBILITY_NAMES[] = {
+    "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
+};
+
 typedef struct input_section {
     char *name;                           // Section name
     int index;                            // Index in the ELF section headers table

@@ -87,7 +87,7 @@ extern StrMapOrdered *local_symbol_tables;
 
 extern char *last_error_message;
 
-SymbolNV *new_symbolnv(const char *name, int version_index, int is_default);
+SymbolNV *new_symbolnv(const char *name, int version_index, int is_default, int is_proxy_for_default);
 SymbolTable *new_symbol_table(void);
 void init_symbols(OutputElfFile *output_elf_file);
 Symbol *get_defined_symbol(SymbolTable *st, const char *name, int version_index);

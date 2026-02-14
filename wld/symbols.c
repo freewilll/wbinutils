@@ -79,20 +79,6 @@ static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, c
     return !output_elf_file->is_executable;
 }
 
-static const char *SYMBOL_TYPE_NAMES[] = {
-    "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
-    "?", "?", "?", "?", "?", "?", "?", "?"
-};
-
-static const char *SYMBOL_BINDING_NAMES[] = {
-    "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
-    "?", "?", "?", "?", "?", "?", "?", "?",
-};
-
-static const char *SYMBOL_VISIBILITY_NAMES[] = {
-    "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
-};
-
 SymbolTable *global_symbol_table;
 StrMapOrdered *local_symbol_tables; // Map from filename to symbol table
 StrMapOrdered *provided_symbols; // symbols from linker script PROVIDE() and PROVIDE_HIDDEN. Map from symbol name to Symbol
@@ -124,11 +110,12 @@ static void make_snv_full_name(SymbolNV *snv) {
     }
 }
 
-SymbolNV *new_symbolnv(const char *name, int version_index, int is_default) {
+SymbolNV *new_symbolnv(const char *name, int version_index, int is_default, int is_proxy_for_default) {
     SymbolNV *snv = malloc(sizeof(SymbolNV));
     snv->name = strdup(name);
     snv->version_index = version_index;
     snv->is_default = is_default;
+    snv->is_proxy_for_default = is_proxy_for_default;
     make_snv_full_name(snv);
     return snv;
 }
@@ -213,7 +200,7 @@ Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t 
 static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s version=%d binding=%s\n", name, version_index, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
-    SymbolNV *snv = new_symbolnv(name, version_index, 0);
+    SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
     map_ordered_put(st->defined_symbols, snv, symbol);
 
     return symbol;
@@ -246,7 +233,7 @@ static int resolve_undefined_symbol(const char *name, int version_index, int is_
 static Symbol *add_undefined_symbol(const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
     if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
-    SymbolNV *snv = new_symbolnv(name, version_index, 0);
+    SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
     map_ordered_put(global_symbol_table->undefined_symbols, snv, symbol);
 
     return symbol;
@@ -528,6 +515,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
 
         int global_version_index = 0;
         int is_default_version = 0;
+        int is_proxy_for_default = 0;
 
         if (elf_file_local_version_index >= 2) {
             char *version_name = elf_file->symbol_version_names->elements[elf_file_local_version_index];
@@ -547,7 +535,7 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
             elf_file->global_version_indexes[elf_file_local_version_index] = global_version_index;
         }
 
-        SymbolNV *snv = new_symbolnv(symbol_name, global_version_index, is_default_version);
+        SymbolNV *snv = new_symbolnv(symbol_name, global_version_index, is_default_version, is_proxy_for_default);
 
         // Create a ElfSymbolContext
         ElfSymbolContext esc;
@@ -623,9 +611,8 @@ int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only) 
             // Add an entry to the symbol table GLOBAL_SYMBOL_INDEX_NONE, so that unversioned symbols
             // resolve to the default.
             Symbol *symbol = must_get_defined_symbol(global_symbol_table, symbol_name, global_version_index);
-            SymbolNV *snv = new_symbolnv(symbol_name, GLOBAL_SYMBOL_INDEX_NONE, 0);
+            SymbolNV *snv = new_symbolnv(symbol_name, GLOBAL_SYMBOL_INDEX_NONE, 0, 1);
             map_ordered_put(global_symbol_table->defined_symbols, snv, symbol);
-            snv->is_proxy_for_default = 1;
         }
     }
 
@@ -638,7 +625,7 @@ void resolve_provided_symbols(OutputElfFile *output_elf_file) {
         const char *name = strmap_ordered_iterator_key(&it);
         Symbol *provided_symbol = strmap_ordered_get(provided_symbols, name);
         int version_index = 0;
-        SymbolNV *snv = new_symbolnv(name, version_index, 0);
+        SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
         Symbol *symbol = get_undefined_symbol(name, version_index);
         if (symbol) {
             resolve_undefined_symbol(name, 0, 0, 0, 0);
@@ -670,7 +657,7 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
         // Weak undefined symbols become defined with value zero
         else if (symbol->binding == STB_WEAK) {
             symbol->dst_value = 0;
-            SymbolNV *new_snv = new_symbolnv(snv->name, snv->version_index, 0);
+            SymbolNV *new_snv = new_symbolnv(snv->name, snv->version_index, 0, 0);
             map_ordered_put(global_symbol_table->defined_symbols, new_snv, symbol);
         }
         else if (!strmap_get(global_symbols_in_use, snv->name)) {
@@ -1591,7 +1578,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
 
         int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
         if (i >= output_elf_file->rela_dyn_entry_count)
-            panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
+            panic("Symbol %s has a GOT offset that exceeds the size of .rela.dyn table: %d > %d",
                 symbol->name, i, output_elf_file->rela_dyn_entry_count);
 
         if (i > highest_got_entry) highest_got_entry = i;
@@ -1617,7 +1604,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
 
             int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
             if (i >= output_elf_file->rela_dyn_entry_count)
-                panic("Symbol %s has a GOT offset that exceeds the size of GOT table: %d > %d",
+                panic("Symbol %s has a GOT offset that exceeds the size of .rela.dyn table: %d > %d",
                     symbol->name, i, output_elf_file->rela_dyn_entry_count);
 
             if (i > highest_got_entry) highest_got_entry = i;

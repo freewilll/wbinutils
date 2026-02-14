@@ -138,9 +138,10 @@ static void reset(OutputType ot, void *output_data, uint64_t reloc_type, uint64_
     int size = 8;
     int version_index = 0;
     int is_default_version = 0;
+    int is_proxy_for_default = 0;
     Symbol *symbol = new_symbol(strdup(test_symbol_name), STT_OBJECT, STB_GLOBAL, other, size, SRC_INTERNAL);
     symbol->src_elf_file = input_elf_file;
-    SymbolNV *snv = new_symbolnv(strdup(test_symbol_name), version_index, is_default_version);
+    SymbolNV *snv = new_symbolnv(strdup(test_symbol_name), version_index, is_default_version, is_proxy_for_default);
     map_ordered_put(global_symbol_table->defined_symbols, snv, symbol);
 
     state.output_elf_file = output_elf_file;

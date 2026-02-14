@@ -13,11 +13,6 @@
 
 #define VERBOSE_ERROR_LIST 0
 
-typedef enum got_or_plt_relocation_type {
-    RT_GOT,
-    RT_PLT
-} GotOrPltRelocationType;
-
 // mod_rem encoding and decoding
 #define MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING 3
 
@@ -152,8 +147,10 @@ static int may_relax_symbol_for_GOTPCRELX(OutputElfFile *output_elf_file, Symbol
     return 1;
 }
 
-// A .got or .got.plt entry is needed
-static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation, GotOrPltRelocationType add_got) {
+// A .got or .got.plt entry and a .dynsym entry
+static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocation *relocation, int symbol_extra) {
+    if (symbol_extra != SE_IN_GOT && symbol_extra != SE_IN_GOT_PLT) panic("Invalid symbol extra %d\n", symbol_extra);
+
     int type = relocation->r_info & 0xffffffff;
     int symbol_index = relocation->r_info >> 32;
 
@@ -173,14 +170,11 @@ static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocatio
     Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
     if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol->name);
 
-    if (add_got == RT_GOT) {
-        symbol->extra = SE_IN_GOT;
-        symbol->needs_dynsym_entry = 1;
-    }
-    else {
-        symbol->extra = SE_IN_GOT_PLT;
-        symbol->needs_dynsym_entry = 1;
-    }
+    if (symbol->extra != SE_NONE && symbol->extra != symbol_extra)
+        printf("FIXME: Obliterating a pre-existing symbol->extra from %d to %d for %s\n", symbol->extra, symbol_extra, symbol->name);
+
+    symbol->extra = symbol_extra;
+    symbol->needs_dynsym_entry = 1;
 }
 
 static void add_R_X86_64_RELATIVE_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
@@ -299,14 +293,14 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             return;
 
         case R_X86_64_GOTPCREL:
-            add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+            add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
             return;
 
         case R_X86_64_GOTPCRELX: {
             // Relax instructions to not use the GOT, where possible
 
             if (link_dynamically) {
-                add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
                 return;
             }
 
@@ -356,7 +350,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             // Relax instructions to not use the GOT, where possible
 
             if (link_dynamically) {
-                add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
                 return;
             }
 
@@ -395,13 +389,13 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
-            add_got_or_plt_relocation(input_elf_file, relocation, RT_GOT);
+            add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
             return;
         }
 
         case R_X86_64_PLT32:
             if (link_dynamically) {
-                add_got_or_plt_relocation(input_elf_file, relocation, RT_PLT);
+                add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT_PLT);
                 return;
             }
             else
