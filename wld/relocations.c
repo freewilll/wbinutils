@@ -171,10 +171,7 @@ static void add_got_or_plt_relocation(InputElfFile *input_elf_file, ElfRelocatio
     Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
     if (!symbol) panic("Cannot process a relocation for an undefined symbol: %s\n", symbol->name);
 
-    if (symbol->extra != SE_NONE && symbol->extra != symbol_extra)
-        printf("FIXME: Obliterating a pre-existing symbol->extra from %d to %d for %s\n", symbol->extra, symbol_extra, symbol->name);
-
-    symbol->extra = symbol_extra;
+    symbol->extra |= symbol_extra;
     symbol->needs_dynsym_entry = 1;
 }
 
@@ -378,6 +375,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             uint8_t *popcode = (uint8_t *) (input_data - 2);
             uint8_t opcode = *popcode;
 
+            // See x86-64-ABI-1.0 B.2
             if (offset > 2 && opcode == 0x8b) {
                 // Relax mov %s@GOTPCREL(%%rip)
 
@@ -500,7 +498,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
 
     // When linking statically, a R_X86_64_PLT32 is treated like a R_X86_64_PC32,
     // unless the symbol is in the .iplt section for ifuncs.
-    if (type == R_X86_64_PLT32 && symbol && symbol->extra != SE_IN_GOT_IPLT && !link_dynamically)
+    if (type == R_X86_64_PLT32 && symbol && !(symbol->extra & SE_IN_GOT_IPLT) && !link_dynamically)
         type = R_X86_64_PC32;
 
     if (type == R_X86_64_GOTTPOFF) {
@@ -551,11 +549,11 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
         case R_X86_64_GOTPCREL: {
             uint64_t value;
 
-            if (symbol->extra == SE_IN_GOT)
+            if (symbol->extra & SE_IN_GOT)
                 value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
-            else if (symbol->extra == SE_IN_GOT_PLT)
+            else if (symbol->extra & SE_IN_GOT_PLT)
                 S = output_elf_file->plt_offset + symbol->plt_offset + A - P;
-            else if (symbol->extra == SE_IN_GOT_IPLT)
+            else if (symbol->extra & SE_IN_GOT_IPLT)
                 value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
             else
                 panic("Got a R_X86_64_GOTPCREL relocation without the symbol being in any of the GOT tables. symbol->extra=%d", symbol->extra);
@@ -574,7 +572,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             uint8_t *output2 = (uint8_t *) (output_pointer - 2);
 
             // If a symbol is the GOT, then write the PC-relative offset to the GOT entry
-            if (symbol->extra == SE_IN_GOT) {
+            if (symbol->extra & SE_IN_GOT) {
                 uint64_t value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
                 uint32_t *output = (uint32_t *) output_pointer;
                 *output = value;
@@ -630,11 +628,11 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
                 value = S;
 
             // The instruction has not been relaxed.
-            else if (symbol->extra == SE_IN_GOT)
+            else if (symbol->extra & SE_IN_GOT)
                 value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
-            else if (symbol->extra == SE_IN_GOT_PLT)
+            else if (symbol->extra & SE_IN_GOT_PLT)
                 ; // TODO what to do about a symbol with a R_X86_64_REX_GOTPCRELX that is in the SE_IN_GOT_PLT? Is this a bug?
-            else if (symbol->extra == SE_IN_GOT_IPLT)
+            else if (symbol->extra & SE_IN_GOT_IPLT)
                 value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
             else
                 panic("Unable to determine the operation for a R_X86_64_REX_GOTPCRELX. Opcode=%#x", *output2);
@@ -655,9 +653,9 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
         }
 
         case R_X86_64_PLT32: {
-            if (symbol && symbol->extra == SE_IN_GOT_IPLT)
+            if (symbol && (symbol->extra & SE_IN_GOT_IPLT))
                 S = output_elf_file->iplt_virt_address + symbol->iplt_offset + A - P;
-            else if (symbol && symbol->extra == SE_IN_GOT_PLT)
+            else if (symbol && (symbol->extra & SE_IN_GOT_PLT))
                 S = output_elf_file->plt_offset + symbol->plt_offset + A - P;
             else
                 panic("R_X86_64_PLT32 relocation symbol not in plt nor iplt");

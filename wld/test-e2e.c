@@ -243,17 +243,10 @@ static void assert_symbol_table(OutputElfFile *elf_file, OutputSection *section,
             debug_summarize_symbols();
 
             printf("%s mismatch\n"
-                "expected value=%#08x  size=%#08x type=%d binding=%d visiblility=%d index=%5d name=%s\n"
-                "got      value=%#08x  size=%#08x type=%d binding=%d visiblility=%d index=%5d name=%s\n",
+                "got      value=%#08x  size=%#08x type=%d binding=%d visiblility=%d index=%5d name=%s\n"
+                "expected value=%#08x  size=%#08x type=%d binding=%d visiblility=%d index=%5d name=%s\n",
                 section->name,
 
-                expected_value,
-                expected_size,
-                expected_type,
-                expected_binding,
-                expected_visibility,
-                expected_section_index,
-                expected_name ? expected_name : "null",
 
                 got_value,
                 got_size,
@@ -261,7 +254,16 @@ static void assert_symbol_table(OutputElfFile *elf_file, OutputSection *section,
                 got_binding,
                 got_visibility,
                 got_index,
-                got_name ? got_name : "null"
+                got_name ? got_name : "null",
+
+                expected_value,
+                expected_size,
+                expected_type,
+                expected_binding,
+                expected_visibility,
+                expected_section_index,
+                expected_name ? expected_name : "null"
+
             );
 
             exit(1);
@@ -394,18 +396,19 @@ void assert_relocations(OutputElfFile *elf_file, OutputSection *section, va_list
             const char *expected_type_name = expected_type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[expected_type] : "UNKNOWN";
             const char *got_type_name = got_type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[got_type] : "UNKNOWN";
 
+
             panic("Relocations mismatch at position %d:\n"
-                "expected type=%30s, symbol index=%4d, offset=%#08x, addend=%#08lx\n"
-                "got      type=%30s, symbol index=%4d, offset=%#08x, addend=%#08lx",
+                "got      type=%30s, symbol index=%4d, offset=%#08x, addend=%#08lx\n"
+                "expected type=%30s, symbol index=%4d, offset=%#08x, addend=%#08lx\n",
                 pos / sizeof(ElfRelocation),
-                expected_type_name,
-                expected_symbol_index,
-                expected_offset,
-                expected_addend,
                 got_type_name,
                 got_symbol_index,
                 got_offset,
-                got_addend
+                got_addend,
+                expected_type_name,
+                expected_symbol_index,
+                expected_offset,
+                expected_addend
             );
         }
 
@@ -2309,6 +2312,66 @@ void test_dynamic_library_illegal_R_X86_64_PC32_relocation() {
     free(stderr_output);
 }
 
+void test_dynamic_executable_GOT_AND_PLT_relocation() {
+    char *object_path = run_was(
+        ".globl f;"
+        "f: ret;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_GOT_AND_PLT_relocation");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+    sprintf(lib_filename, "lib%s.so", &lib_name[1]);
+
+    // Make a second lib that uses the two ints from the first
+    object_path = run_as(NULL,
+        ".text;"
+        "call *f@GOTPCREL(%rip);" // R_X86_64_GOTPCRELX
+        "call f;" //# R_X86_64_PLT32
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_GOT_AND_PLT_relocation");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
+        ".rela.plt",       SHT_RELA,       0x2000,   0x2000, 0x18,  SHF_ALLOC | SHF_INFO_LINK, 8,
+        ".plt",            SHT_PROGBITS,   0x3000,   0x3000, 0x20,  SHF_ALLOC | SHF_EXECINSTR, 8,
+        ".text",           SHT_PROGBITS,   0x3020,   0x3020, 0x0b,  SHF_ALLOC | SHF_EXECINSTR, 1,
+        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xe0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x40e0,   0x40e0, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,   0x40e8,   0x40e8, 0x20,  SHF_ALLOC | SHF_WRITE,     8,
+        NULL
+    );
+
+    // Relocation for call *f@GOTPCREL(%rip)
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Offset   Addend
+        R_X86_64_GLOB_DAT, 1,                0x40e0,  0x0000,
+        END);
+
+    // Relocation for call f
+    assert_rela_plt_relocations(elf_file,
+        // Tag              Dyn symtab index  Offset   Addend
+        R_X86_64_JUMP_SLOT, 1,                0x4100,  0x0000,
+        END);
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x0000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "UND",     "f",
+        END);
+}
+
 void test_versioning_default_symbol() {
     char *object_path1 = run_as(NULL,
         ".text;"
@@ -2464,5 +2527,6 @@ int main() {
     test_dynamic_library_R_X86_64_64_relocation_for_function_pointer();
     test_dynamic_library_illegal_R_X86_64_PC32_relocation();
     test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library();
+    test_dynamic_executable_GOT_AND_PLT_relocation();
     test_versioning_default_symbol();
 }

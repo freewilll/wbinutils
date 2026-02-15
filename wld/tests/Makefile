@@ -23,6 +23,7 @@ test: \
 	relocation-got \
 	relocation-tls \
 	relocation-R_X86_64_64-in-shared-library \
+	relocation-R_X86_64_GOTPCRELX-in-dyn-executable \
 	array-lifecycle \
 	orphan-sections \
 	ifuncs \
@@ -132,6 +133,10 @@ relocation-tls:
 relocation-R_X86_64_64-in-shared-library:
 	+$(MAKE) -C relocation-R_X86_64_64-in-shared-library
 
+.PHONY: relocation-R_X86_64_GOTPCRELX-in-dyn-executable
+relocation-R_X86_64_GOTPCRELX-in-dyn-executable:
+	+$(MAKE) -C relocation-R_X86_64_GOTPCRELX-in-dyn-executable
+
 .PHONY: array-lifecycle
 array-lifecycle:
 	+$(MAKE) -C array-lifecycle
@@ -219,6 +224,7 @@ clean:
 	@+$(MAKE) -C relocation-got clean
 	@+$(MAKE) -C relocation-tls clean
 	@+$(MAKE) -C relocation-R_X86_64_64-in-shared-library clean
+	@+$(MAKE) -C relocation-R_X86_64_GOTPCRELX-in-dyn-executable clean
 	@+$(MAKE) -C array-lifecycle clean
 	@+$(MAKE) -C orphan-sections clean
 	@+$(MAKE) -C ifuncs clean

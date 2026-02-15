@@ -167,22 +167,22 @@ static void set_value(uint64_t value) {
 }
 
 static void set_plt_offset(uint64_t plt_offset) {
-    state.symbol->extra = SE_IN_GOT_PLT;
+    state.symbol->extra |= SE_IN_GOT_PLT;
     state.symbol->plt_offset = plt_offset;
 }
 
 static void set_iplt_offset(uint64_t iplt_offset) {
-    state.symbol->extra = SE_IN_GOT_IPLT;
+    state.symbol->extra |= SE_IN_GOT_IPLT;
     state.symbol->iplt_offset = iplt_offset;
 }
 
 static void set_got_iplt_offset(uint64_t got_iplt_offset) {
-    state.symbol->extra = SE_IN_GOT_IPLT;
+    state.symbol->extra |= SE_IN_GOT_IPLT;
     state.symbol->got_iplt_offset = got_iplt_offset;
 }
 
 static void set_got_offset(uint64_t got_offset) {
-    state.symbol->extra = SE_IN_GOT;
+    state.symbol->extra |= SE_IN_GOT;
     state.symbol->got_offset = got_offset;
 }
 
@@ -196,7 +196,7 @@ static void set_tls_template_tls_offset(uint64_t tls_template_tls_offset) {
 
 static void run() {
     // In normal execution, SE_IN_GOT_IPLT is set in between scan and apply. This needs simulating here by resetting it in between.
-    int in_got_iplt = state.symbol->extra == SE_IN_GOT_IPLT;
+    int in_got_iplt = (state.symbol->extra & SE_IN_GOT_IPLT);
     scan_relocation(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);
     if (in_got_iplt) state.symbol->extra = SE_IN_GOT_IPLT;
     apply_relocation(state.output_elf_file, state.input_elf_file, state.input_section, state.relocation);

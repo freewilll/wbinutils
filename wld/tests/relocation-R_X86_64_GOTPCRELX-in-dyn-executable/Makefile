@@ -12,7 +12,8 @@ libtest.so: libtest.c
 	${GCC} libtest.c -o libtest.so -shared
 
 main.o: main.s
-	as main.s -o main.o
+	# gas makes GOTPCREL instructions with -mrelax-relocations=no
+	as main.s -o main.o -mrelax-relocations=no
 
 main: main.o libtest.so
 	@${WLD}                                               \

@@ -33,8 +33,8 @@ typedef struct symbol_nv {
 #define SE_NONE            0
 #define SE_IN_GOT          1
 #define SE_IN_GOT_PLT      2
-#define SE_IN_GOT_IPLT     3
-#define SE_COPY_RELOCATION 4
+#define SE_IN_GOT_IPLT     4
+#define SE_COPY_RELOCATION 8
 
 #define GLOBAL_SYMBOL_INDEX_NONE    0
 #define GLOBAL_SYMBOL_INDEX_DEFAULT 1

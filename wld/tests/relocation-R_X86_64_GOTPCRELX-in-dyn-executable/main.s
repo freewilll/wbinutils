@@ -6,13 +6,21 @@ main:
     pushq %rbp
     movq  %rsp, %rbp
 
+    # Indirect via GOT
     movl  $42, %edi
-    call  *foo@GOTPCREL(%rip)
+    call  *foo@GOTPCREL(%rip)    # R_X86_64_GOTPCRELX
     cmpl  $43, %eax
-    je    .ok
-    movl  $1, %edi
+    jne   fail
+
+    # Direct PLT call
+    movl  $42, %edi
+    call  foo                   # R_X86_64_PLT32
+    cmpl  $43, %eax
+    jne   fail
+
+    movl  $0, %edi
     call  exit@PLT
 
-.ok:
-    movl  $0, %edi
+fail:
+    movl  $1, %edi
     call  exit@PLT
