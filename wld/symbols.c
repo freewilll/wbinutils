@@ -991,7 +991,8 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
 
         dynsym_symbol_count++;
 
-        if (symbol->extra & (SE_IN_GOT | SE_COPY_RELOCATION)) rela_dyn_entry_count++;
+        if (symbol->extra & SE_IN_GOT) rela_dyn_entry_count++;
+        if (symbol->extra & SE_COPY_RELOCATION) rela_dyn_entry_count++;
     }
 
     // Process local symbols. There are no .dynsym entries for them, but they can be in the .rela.dyn table
@@ -1002,7 +1003,8 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
             const SymbolNV *snv = map_ordered_iterator_key(&it);
             Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
             seen_version_indexes[snv->version_index] = 1;
-            if (symbol->extra & (SE_IN_GOT | SE_COPY_RELOCATION)) rela_dyn_entry_count++;
+            if (symbol->extra & SE_IN_GOT) rela_dyn_entry_count++;
+            if (symbol->extra & SE_COPY_RELOCATION) rela_dyn_entry_count++;
         }
     }
 
@@ -1568,6 +1570,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     // Loop over all global symbols. If they are present in the dynsym table and came from
     // a shared library, then they have entries in the GOT and need entries in .rela.dyn
     // for the dynamic linker to sort out.
+    int i = 0;
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
@@ -1576,7 +1579,6 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         if (!(symbol->extra & SE_IN_GOT)) continue;
         if (!section_got) panic("GOT is NULL");
 
-        int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
         if (i >= output_elf_file->rela_dyn_entry_count)
             panic("Symbol %s has a GOT offset that exceeds the size of .rela.dyn table: %d > %d",
                 symbol->name, i, output_elf_file->rela_dyn_entry_count);
@@ -1584,10 +1586,13 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         if (i > highest_got_entry) highest_got_entry = i;
 
         // Populate the relocation entry in .rela.dyn
+        if (i >= section_rela_dyn->size) panic("Attempt to write beyond .rela.dyn at %d, size=%d", i, section_rela_dyn->size);
         ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
         r->r_info = R_X86_64_GLOB_DAT + ((uint64_t) symbol->dst_dynsym_index << 32);
         r->r_offset = got_value + symbol->got_offset;
         r->r_addend = 0;
+
+        i++;
     }
 
     // Similar to above, loop over local symbols that need a GOT entry.
@@ -1610,15 +1615,17 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
             if (i > highest_got_entry) highest_got_entry = i;
 
             // Populate the relocation entry in .rela.dyn
+            if (i >= output_elf_file->rela_dyn_entry_count) panic("Attempt to write beyond .rela.dyn at %d, size=%d", i, output_elf_file->rela_dyn_entry_count);
             ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
             r->r_info = R_X86_64_RELATIVE;
             r->r_offset = got_value + symbol->got_offset;
             r->r_addend = symbol->dst_value;
+
+            i++;
         }
     }
 
     // Add entries for symbols that need copying at runtime with a R_X86_64_COPY relocation
-    int i = highest_got_entry + 1;
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
@@ -1629,6 +1636,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
             panic("Symbol %s has a .rela.dyn offset that exceeds the size of .rela.dyn table: %d >= %d",
                 symbol->name, i, output_elf_file->rela_dyn_entry_count);
 
+        if (i >= output_elf_file->rela_dyn_entry_count) panic("Attempt to write beyond .rela.dyn at %d, size=%d", i, output_elf_file->rela_dyn_entry_count);
         ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
         r->r_info = R_X86_64_COPY + ((uint64_t) symbol->dst_dynsym_index << 32);
         r->r_offset = symbol->dst_value;
@@ -1652,6 +1660,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
             addend = rrdr->relocation_input_section->output_section->offset + rrdr->relocation_input_section->dst_offset + rrdr->addend;
         }
 
+        if (i >= output_elf_file->rela_dyn_entry_count) panic("Attempt to write beyond .rela.dyn at %d, size=%d", i, output_elf_file->rela_dyn_entry_count);
         ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
         r->r_info = R_X86_64_RELATIVE;
         r->r_offset = rrdr->target_section->output_section->offset + rrdr->target_section->dst_offset + rrdr->offset;
@@ -1666,6 +1675,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         if (!rrdr->symbol) panic("Did not get a symbol for a R_X86_64_64 relocation\n");
         uint64_t addend = rrdr->addend;
 
+        if (i >= output_elf_file->rela_dyn_entry_count) panic("Attempt to write beyond .rela.dyn at %d, size=%d", i, output_elf_file->rela_dyn_entry_count);
         ElfRelocation *r = &((ElfRelocation *) section_rela_dyn->data)[i];
         r->r_info = R_X86_64_64 + ((uint64_t) rrdr->symbol->dst_dynsym_index << 32);
         r->r_offset = rrdr->target_section->output_section->offset + rrdr->target_section->dst_offset + rrdr->offset;

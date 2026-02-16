@@ -210,7 +210,7 @@ static void add_R_X86_64_RELATIVE_relocation(OutputElfFile *output_elf_file, Inp
     append_to_list(output_elf_file->rela_dyn_R_X86_64_RELATIVE_relocations, rrdr);
 }
 
-static void add_NEEDS_R_X86_64_64_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
+static void add_R_X86_64_64_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_file, InputSection *input_section, ElfRelocation *relocation) {
     // Ignore relocations for non-loadable sections, e.g. dwarf sections
     if (!(input_section->flags & SHF_ALLOC)) return;
 
@@ -271,7 +271,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
         case R_X86_64_64:
             if (output_is_shared) {
                 if (symbol_is_from_shared_library || !is_executable)
-                    add_NEEDS_R_X86_64_64_relocation(output_elf_file, input_elf_file, input_section, relocation);
+                    add_R_X86_64_64_relocation(output_elf_file, input_elf_file, input_section, relocation);
                 else
                     add_R_X86_64_RELATIVE_relocation(output_elf_file, input_elf_file, input_section, relocation);
             }
@@ -480,8 +480,9 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
 
     if (DEBUG_RELOCATIONS) {
         const char *relocation_name = type < RELOCATION_NAMES_COUNT ? RELOCATION_NAMES[type] : "UNKNOWN";
-        printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld\n",
-            input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend);
+        char *symbol_name = symbol ? symbol->name : "(none)";
+        printf("  input section %s, rel=%s, offset %#08lx,  %s + %ld symbol=%s\n",
+            input_section->name, relocation_name, relocation->r_offset, symbol_name, relocation->r_addend, symbol_name);
     }
 
     uint64_t output_offset = input_section->dst_offset + relocation->r_offset;
@@ -513,7 +514,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
         case R_X86_64_64: {
             uint64_t value;
 
-            // This  value is used in static executables,
+            // This value is used in static executables,
             // This is also used in DWARF sections in dynamic executables.
             value = S + A;
 
