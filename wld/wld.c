@@ -439,6 +439,7 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
         set_in_dynamic_section(output_elf_file, pos++, DT_RELAENT, sizeof(ElfRelocation));
     }
 
+    set_in_dynamic_section(output_elf_file, pos++, DT_DEBUG, 0);
     set_in_dynamic_section(output_elf_file, pos++, DT_NULL, 0);
 }
 

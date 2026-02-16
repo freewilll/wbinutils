@@ -1319,9 +1319,9 @@ static void test_shared_library_no_dependencies() {
         ".dynsym",         SHT_DYNSYM,     0x102c,   0x102c, 0xa8,  SHF_ALLOC,                 1,
         ".dynstr",         SHT_STRTAB,     0x10d4,   0x10d4, 0x0f,  SHF_ALLOC,                 1,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x02,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x60,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x3060,   0x3060, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
-        ".bss",            SHT_NOBITS,     0x3068,   0x3068, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x70,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x3070,   0x3070, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".bss",            SHT_NOBITS,     0x3078,   0x3078, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
@@ -1330,8 +1330,8 @@ static void test_shared_library_no_dependencies() {
         PT_LOAD,          0x0000,  0x0000,  0x2c0,   0x2c0,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x1000,  0x00e3,  0x00e3, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x0002,  0x0002, PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x3000,  0x3000,  0x0068,  0x0070, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x3000,  0x0060,  0x0060, PF_R | PF_W,  0x0008,
+        PT_LOAD,          0x3000,  0x3000,  0x0078,  0x0080, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x0070,  0x0070, PF_R | PF_W,  0x0008,
         END
     );
 
@@ -1341,15 +1341,16 @@ static void test_shared_library_no_dependencies() {
         DT_STRSZ,  0xf,    NULL,
         DT_SYMENT, 0x18,   NULL,
         DT_HASH,   0x1000, NULL,
+        DT_DEBUG,  0,      NULL,
         DT_NULL,   0,      NULL
     );
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
-        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
-        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
-        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
+        0x3070,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x3074,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
+        0x3078,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "k",
+        0x307c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "l",
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f1",
         0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f2",
         END);
@@ -1357,10 +1358,10 @@ static void test_shared_library_no_dependencies() {
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
         0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
-        0x3060,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",    "i",
-        0x3064,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",    "j",
-        0x3068,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",     "k",
-        0x306c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",     "l",
+        0x3070,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",    "i",
+        0x3074,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",    "j",
+        0x3078,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",     "k",
+        0x307c,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",     "l",
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "f1",
         0x2001,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "f2",
         END);
@@ -1406,8 +1407,8 @@ static void test_two_shared_libs_with_data() {
         ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x15,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1078,   0x1078, 0x30,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got",            SHT_PROGBITS,   0x30a0,   0x30a0, 0x10,  SHF_ALLOC | SHF_WRITE,     8,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x30b0,   0x30b0, 0x10,  SHF_ALLOC | SHF_WRITE,     8,
         NULL
     );
 
@@ -1416,8 +1417,8 @@ static void test_two_shared_libs_with_data() {
         PT_LOAD,          0x0000,  0x0000,  0x2c0,   0x2c0,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x1000,  0x00a8,  0x00a8, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x000c,  0x000c, PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x3000,  0x3000,  0x00b0,  0x00b0, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x3000,  0x00a0,  0x00a0, PF_R | PF_W,  0x0008,
+        PT_LOAD,          0x3000,  0x3000,  0x00c0,  0x00c0, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x3000,  0x3000,  0x00b0,  0x00b0, PF_R | PF_W,  0x0008,
         END
     );
 
@@ -1431,13 +1432,14 @@ static void test_two_shared_libs_with_data() {
         DT_RELA,        0x1078,     NULL,
         DT_RELASZ,      0x30,       NULL,
         DT_RELAENT,     0x18,       NULL,
+        DT_DEBUG,       0,         NULL,
         DT_NULL,        0,          NULL
     );
 
     assert_symtab(elf_file,
     //  Value   Size   Type        Binding     Visibility   Section    Name
         0x3000, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".dynamic", "_DYNAMIC",
-        0x30a0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
+        0x30b0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
         END);
 
     assert_dynsym(elf_file,
@@ -1448,8 +1450,8 @@ static void test_two_shared_libs_with_data() {
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_GLOB_DAT, 1,                0x30a0,  0,
-        R_X86_64_GLOB_DAT, 2,                0x30a8,  0,
+        R_X86_64_GLOB_DAT, 1,                0x30b0,  0,
+        R_X86_64_GLOB_DAT, 2,                0x30b8,  0,
         END);
 }
 
@@ -1492,8 +1494,8 @@ static void test_two_shared_libs_with_functions() {
         ".rela.plt",       SHT_RELA,       0x2000,   0x2000, 0x30,  SHF_ALLOC | SHF_INFO_LINK, 8,
         ".plt",            SHT_PROGBITS,   0x3000,   0x3000, 0x30,  SHF_ALLOC | SHF_EXECINSTR, 8,
         ".text",           SHT_PROGBITS,   0x3030,   0x3030, 0x0a,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got.plt",        SHT_PROGBITS,   0x40b0,   0x40b0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
+        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xc0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,   0x40c0,   0x40c0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
         NULL
     );
 
@@ -1503,8 +1505,8 @@ static void test_two_shared_libs_with_functions() {
         PT_LOAD,          0x1000,  0x1000,  0x0077,  0x0077, PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x2000,  0x0030,  0x0030, PF_R,         0x1000,
         PT_LOAD,          0x3000,  0x3000,  0x003a,  0x003a, PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x4000,  0x4000,  0x00d8,  0x00d8, PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x4000,  0x4000,  0x00b0,  0x00b0, PF_R | PF_W,  0x0008,
+        PT_LOAD,          0x4000,  0x4000,  0x00e8,  0x00e8, PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x4000,  0x4000,  0x00c0,  0x00c0, PF_R | PF_W,  0x0008,
         END
     );
 
@@ -1515,17 +1517,18 @@ static void test_two_shared_libs_with_functions() {
         DT_STRSZ,       0x17,       NULL,
         DT_SYMENT,      0x18,       NULL,
         DT_HASH,        0x1000,     NULL,
-        DT_PLTGOT,      0x40b0,     NULL,
+        DT_PLTGOT,      0x40c0,     NULL,
         DT_PLTRELSZ,    0x30,       NULL,
         DT_PLTREL,      0x07,       NULL,
         DT_JMPREL,      0x2000,     NULL,
+        DT_DEBUG,       0,          NULL,
         DT_NULL,        0,          NULL
     );
 
     assert_symtab(elf_file,
     //  Value   Size   Type        Binding     Visibility   Section    Name
         0x4000, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".dynamic", "_DYNAMIC",
-        0x40b0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got.plt", "_GLOBAL_OFFSET_TABLE_",
+        0x40c0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got.plt", "_GLOBAL_OFFSET_TABLE_",
         END);
 
     assert_dynsym(elf_file,
@@ -1536,24 +1539,25 @@ static void test_two_shared_libs_with_functions() {
 
     assert_rela_plt_relocations(elf_file,
         // Tag              Dyn symtab index  Offset   Addend
-        R_X86_64_JUMP_SLOT, 1,                0x40c8,  0,
-        R_X86_64_JUMP_SLOT, 2,                0x40d0,  0,
+        R_X86_64_JUMP_SLOT, 1,                0x40d8,  0,
+        R_X86_64_JUMP_SLOT, 2,                0x40e0,  0,
         END);
 
     // .rela.plt must have 3 entries. A The plt0 code + code for f1 and f2.
     assert_section_data(elf_file, PLT_SECTION_NAME,
+
         // PLT entry 0
-        0xff, 0x35, 0xb2, 0x10, 0x00, 0x00, // pushq .got.plt+8(%rip)
-        0xff, 0x25, 0xb4, 0x10, 0x00, 0x00, // jmpq .got.plt+16(%rip)
-        0x0f, 0x1f, 0x40, 0x00,             // nopl 0x0(%rax)
+        0xff, 0x35, 0xc2, 0x10, 0x00, 0x00,     // 0xff, 0x35, 0xb2, 0x10, 0x00, 0x00, // pushq .got.plt+8(%rip)
+        0xff, 0x25, 0xc4, 0x10, 0x00, 0x00,     // 0xff, 0x25, 0xb4, 0x10, 0x00, 0x00, // jmpq .got.plt+16(%rip)
+        0x0f, 0x1f, 0x40, 0x00,                 // 0x0f, 0x1f, 0x40, 0x00,             // nopl 0x0(%rax)
 
         // PLT entry 1
-        0xff, 0x25, 0xb2, 0x10, 0x00, 0x00, // jmpq *.got.plt+...(%rip)
-        0x68, 0x00, 0x00, 0x00, 0x00,       // pushq $rela_dyn_index
-        0xe9, 0xe0, 0xff, 0xff, 0xff,       // jmpq .plt0
+        0xff, 0x25, 0xc2, 0x10, 0x00, 0x00,     // jmpq *.got.plt+...(%rip)
+        0x68, 0x00, 0x00, 0x00, 0x00,           // pushq $rela_dyn_index
+        0xe9, 0xe0, 0xff, 0xff, 0xff,           // jmpq .plt0
 
-        // PLT entry 1
-        0xff, 0x25, 0xaa, 0x10, 0x00, 0x00,
+        // PLT entry 2
+        0xff, 0x25, 0xba, 0x10, 0x00, 0x00,
         0x68, 0x01, 0x00, 0x00, 0x00,
         0xe9, 0xd0, 0xff, 0xff, 0xff,
 
@@ -1607,19 +1611,19 @@ static void test_shared_lib_with_two_objects() {
     // Relocation for i
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_GLOB_DAT, 2,                0x40d0,  0,
+        R_X86_64_GLOB_DAT, 2,                0x40e0,  0,
         END);
 
     // Relocation for f
     assert_rela_plt_relocations(elf_file,
         // Tag              Dyn symtab index  Offset   Addend
-        R_X86_64_JUMP_SLOT, 1,                0x40f0,  0,
+        R_X86_64_JUMP_SLOT, 1,                0x4100,  0,
         END);
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
         0x3030,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "f",
-        0x40f8,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x4108,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
         END);
 }
 
@@ -1648,16 +1652,16 @@ static void test_dynamic_executable_with_GOT_entry_for_local_symbol() {
         ".dynstr",         SHT_STRTAB,     0x1028,   0x1028, 0x01,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1030,   0x1030, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x07,  SHF_ALLOC | SHF_EXECINSTR, 1,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got",            SHT_PROGBITS,   0x3090,   0x3090, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x3098,   0x3098, 0x08,  SHF_ALLOC | SHF_WRITE,     1,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a8,   0x30a8, 0x08,  SHF_ALLOC | SHF_WRITE,     1,
         NULL
     );
 
     // Relocation for foo
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_RELATIVE, 0,                0x3090,  0x3098,
+        R_X86_64_RELATIVE, 0,                0x30a0,  0x30a8,
         END);
 
     // Check foo is in the symtab, but not the dynsym
@@ -1666,8 +1670,8 @@ static void test_dynamic_executable_with_GOT_entry_for_local_symbol() {
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section     Name
         0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
-        0x3090,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
-        0x3098,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "foo",
+        0x30a0,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
+        0x30a8,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "foo",
         0x2000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
 }
@@ -1700,24 +1704,24 @@ void test_dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_
         ".dynstr",         SHT_STRTAB,     0x1028,   0x1028, 0x01,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1030,   0x1030, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x0e,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got",            SHT_PROGBITS,   0x3090,   0x3090, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x3098,   0x3098, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a8,   0x30a8, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
     // Relocation for foo
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_RELATIVE, 0,                0x3090,  0x3098,
+        R_X86_64_RELATIVE, 0,                0x30a0,  0x30a8,
         END);
 
     // .got is at 0x3090
     // .text stats at 0x2000
     // The displacement is calculated from the next instruction. The instruction lengths are 7.
     assert_section_data(elf_file, ".text",
-        0x48, 0x8d, 0x05, 0x91, 0x10, 0x00, 0x00, // lea 0x1091(%rip),%rax 0x3090 - 0x2007 = 0x1091
-        0x48, 0x3b, 0x05, 0x82, 0x10, 0x00, 0x00, // cmp 0x1082(%rip),%rax 0x3090 - 0x200e = 0x1082
+        0x48, 0x8d, 0x05, 0xa1, 0x10, 0x00, 0x00, // lea 0x1091(%rip),%rax 0x30a0 - 0x2007 = 0x10a1
+        0x48, 0x3b, 0x05, 0x92, 0x10, 0x00, 0x00, // cmp 0x1082(%rip),%rax 0x30a0 - 0x200e = 0x1092
         END);
 }
 
@@ -1788,8 +1792,8 @@ static void test_dwarf() {
         ".dynsym",        SHT_DYNSYM,     0x1010,   0x1010, 0x18,  SHF_ALLOC,                 1,
         ".dynstr",        SHT_STRTAB,     0x1028,   0x1028, 0x01,  SHF_ALLOC,                 1,
         ".text",          SHT_PROGBITS,   0x2000,   0x2000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",       SHT_DYNAMIC,    0x3000,   0x3000, 0x60,  SHF_ALLOC | SHF_WRITE,     8,
-        "foo",            SHT_PROGBITS,   0x3060,   0x3060, 0x04,  SHF_ALLOC | SHF_WRITE,     1,
+        ".dynamic",       SHT_DYNAMIC,    0x3000,   0x3000, 0x70,  SHF_ALLOC | SHF_WRITE,     8,
+        "foo",            SHT_PROGBITS,   0x3070,   0x3070, 0x04,  SHF_ALLOC | SHF_WRITE,     1,
         ".debug_info",    SHT_PROGBITS,   0x0000,   0x4000, 0x04,  0,                         1,
         ".debug_abbrev",  SHT_PROGBITS,   0x0000,   0x4004, 0x04,  0,                         1,
         ".debug_line",    SHT_PROGBITS,   0x0000,   0x4008, 0x38,  0,                         0,
@@ -1880,15 +1884,15 @@ static void test_dynamic_executable_sanity() {
         PT_LOAD,          0x0000,  0x00000,   0x280,   0x280,  PF_R,         0x1000,
         PT_LOAD,          0x1000,  0x001000,  0x029,   0x29,   PF_R,         0x1000,
         PT_LOAD,          0x2000,  0x002000,  0x010,   0x10,   PF_R | PF_X,  0x1000,
-        PT_LOAD,          0x3000,  0x003000,  0x064,   0x64,   PF_R | PF_W,  0x1000,
-        PT_DYNAMIC,       0x3000,  0x003000,  0x060,   0x60,   PF_R | PF_W,  0x0008,
+        PT_LOAD,          0x3000,  0x003000,  0x074,   0x74,   PF_R | PF_W,  0x1000,
+        PT_DYNAMIC,       0x3000,  0x003000,  0x070,   0x70,   PF_R | PF_W,  0x0008,
         END
     );
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section     Name
         0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
-        0x3060,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "code",
+        0x3070,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "code",
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
 
@@ -1930,19 +1934,19 @@ void test_dynamic_executable_using_an_object_in_a_library() {
         ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x07,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30b0,   0x30b0, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x30a0,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x30b0,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
         END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_COPY,     1,                0x30a0,  0,
+        R_X86_64_COPY,     1,                0x30b0,  0,
         END);
 }
 
@@ -1976,8 +1980,8 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
         ".rela.dyn",       SHT_RELA,       0x1030,   0x1030, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x01,  SHF_ALLOC | SHF_EXECINSTR, 16,
         ".rodata",         SHT_PROGBITS,   0x3000,   0x3000, 0x0d,  SHF_ALLOC,                 4,
-        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x4090,   0x4090, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x40a0,   0x40a0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
@@ -1985,7 +1989,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_RELATIVE, 0,                0x4090,  0x3000,
+        R_X86_64_RELATIVE, 0,                0x40a0,  0x3000,
         END);
 }
 
@@ -2019,7 +2023,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_RELATIVE, 0,                0x3098,  0x3090,
+        R_X86_64_RELATIVE, 0,                0x30a8,  0x30a0,
         END);
 }
 
@@ -2049,7 +2053,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_da
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_RELATIVE, 0,                0x3090,  0x3098,
+        R_X86_64_RELATIVE, 0,                0x30a0,  0x30a8,
         END);
 }
 
@@ -2090,8 +2094,8 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_RELATIVE, 0,                0x4090,  0x3000,
-        R_X86_64_RELATIVE, 0,                0x4098,  0x3004,
+        R_X86_64_RELATIVE, 0,                0x40a0,  0x3000,
+        R_X86_64_RELATIVE, 0,                0x40a8,  0x3004,
         END);
 }
 
@@ -2146,8 +2150,8 @@ void test_dynamic_executable_R_X86_64_64_relocation() {
         ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x15,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30b0,   0x30b0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
@@ -2158,7 +2162,7 @@ void test_dynamic_executable_R_X86_64_64_relocation() {
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_64,       1,                0x30a0,  0x0000,
+        R_X86_64_64,       1,                0x30b0,  0x0000,
         END);
 }
 
@@ -2209,8 +2213,8 @@ void test_dynamic_library_R_X86_64_64_relocation_for_function_pointer() {
         ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
         ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x09,  SHF_ALLOC | SHF_EXECINSTR, 16,
-        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30b0,   0x30b0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
@@ -2221,7 +2225,7 @@ void test_dynamic_library_R_X86_64_64_relocation_for_function_pointer() {
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_64,       1,                0x30a0,  0x0000,
+        R_X86_64_64,       1,                0x30b0,  0x0000,
         END);
 }
 
@@ -2252,20 +2256,20 @@ void test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library() 
         ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
         ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x06,  SHF_ALLOC,                 1,
         ".rela.dyn",       SHT_RELA,       0x1068,   0x1068, 0x18,  SHF_ALLOC,                 8,
-        ".dynamic",        SHT_DYNAMIC,    0x2000,   0x2000, 0x90,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x2090,   0x2090, 0x0c,  SHF_ALLOC | SHF_WRITE,     4,
+        ".dynamic",        SHT_DYNAMIC,    0x2000,   0x2000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x20a0,   0x20a0, 0x0c,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x2090,    0,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "d",
-        0x2094,    0,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "pd",
+        0x20a0,    0,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "d",
+        0x20a4,    0,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "pd",
         END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_64,       1,                0x2094,  0x0000,
+        R_X86_64_64,       1,                0x20a4,  0x0000,
         END);
 }
 
@@ -2348,22 +2352,22 @@ void test_dynamic_executable_GOT_AND_PLT_relocation() {
         ".rela.plt",       SHT_RELA,       0x2000,   0x2000, 0x18,  SHF_ALLOC | SHF_INFO_LINK, 8,
         ".plt",            SHT_PROGBITS,   0x3000,   0x3000, 0x20,  SHF_ALLOC | SHF_EXECINSTR, 8,
         ".text",           SHT_PROGBITS,   0x3020,   0x3020, 0x0b,  SHF_ALLOC | SHF_EXECINSTR, 1,
-        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xe0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got",            SHT_PROGBITS,   0x40e0,   0x40e0, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got.plt",        SHT_PROGBITS,   0x40e8,   0x40e8, 0x20,  SHF_ALLOC | SHF_WRITE,     8,
+        ".dynamic",        SHT_DYNAMIC,    0x4000,   0x4000, 0xf0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x40f0,   0x40f0, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,   0x40f8,   0x40f8, 0x20,  SHF_ALLOC | SHF_WRITE,     8,
         NULL
     );
 
     // Relocation for call *f@GOTPCREL(%rip)
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
-        R_X86_64_GLOB_DAT, 1,                0x40e0,  0x0000,
+        R_X86_64_GLOB_DAT, 1,                0x40f0,  0x0000,
         END);
 
     // Relocation for call f
     assert_rela_plt_relocations(elf_file,
         // Tag              Dyn symtab index  Offset   Addend
-        R_X86_64_JUMP_SLOT, 1,                0x4100,  0x0000,
+        R_X86_64_JUMP_SLOT, 1,                0x4110,  0x0000,
         END);
 
     assert_dynsym(elf_file,
@@ -2443,8 +2447,8 @@ void test_versioning_default_symbol() {
         ".rela.plt",       SHT_RELA,        0x2000,   0x2000, 0x30,  SHF_ALLOC | SHF_INFO_LINK, 8,
         ".plt",            SHT_PROGBITS,    0x3000,   0x3000, 0x30,  SHF_ALLOC | SHF_EXECINSTR, 8,
         ".text",           SHT_PROGBITS,    0x3030,   0x3030, 0x05,  SHF_ALLOC | SHF_EXECINSTR, 1,
-        ".dynamic",        SHT_DYNAMIC,     0x4000,   0x4000, 0xe0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got.plt",        SHT_PROGBITS,    0x40e0,   0x40e0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
+        ".dynamic",        SHT_DYNAMIC,     0x4000,   0x4000, 0xf0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,    0x40f0,   0x40f0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
         NULL
     );
 
@@ -2458,10 +2462,11 @@ void test_versioning_default_symbol() {
         DT_VERNEED,     0x1068, NULL,
         DT_VERNEEDNUM,  0x1,    NULL,
         DT_VERSYM,      0x1062, NULL,
-        DT_PLTGOT,      0x40e0, NULL,
+        DT_PLTGOT,      0x40f0, NULL,
         DT_PLTRELSZ,    0x30,   NULL,
         DT_PLTREL,      0x7,    NULL,
         DT_JMPREL,      0x2000, NULL,
+        DT_DEBUG,       0,      NULL,
         DT_NULL,        0,      NULL
     );
 
