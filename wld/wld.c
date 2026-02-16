@@ -318,12 +318,22 @@ void dump_relocations(OutputSection* section) {
     }
 }
 
+static OutputSection *get_non_empty_output_section(OutputElfFile *output_elf_file, char *name) {
+    OutputSection *section = get_output_section(output_elf_file, name);
+    if (!section || section->size == 0) return NULL;
+    return section;
+}
+
 static int make_dynamic_section_entry_count(OutputElfFile *output_elf_file) {
     int dynamic_section_entry_count = BASE_DYNAMIC_SECTION_ENTRY_COUNT + output_elf_file->shared_libraries->length;
+
+    if (get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
+    if (get_non_empty_output_section(output_elf_file, FINI_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (output_elf_file->verneed_names && output_elf_file->verneed_names->length > 0) dynamic_section_entry_count += 2;
     if (get_extra_section(output_elf_file, VERSYM_SECTION_NAME)) dynamic_section_entry_count += 1;
     if (output_elf_file->rela_dyn_entry_count > 0) dynamic_section_entry_count += 3;
     if (output_elf_file->got_plt_entries_count > 0) dynamic_section_entry_count += 4;
+
     return dynamic_section_entry_count;
 }
 
@@ -383,6 +393,8 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
     InputSection *section_got_plt = output_elf_file->section_got_plt;
     InputSection *section_verneed = get_extra_section(output_elf_file, VERNEED_SECTION_NAME);
     InputSection *section_versym = get_extra_section(output_elf_file, VERSYM_SECTION_NAME);
+    OutputSection *section_init_array = get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME);
+    OutputSection *section_fini_array = get_non_empty_output_section(output_elf_file, FINI_ARRAY_SECTION_NAME);
 
     int pos = output_elf_file->shared_libraries->length;
 
@@ -391,6 +403,16 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file) {
     set_in_dynamic_section(output_elf_file, pos++, DT_STRSZ,  section_dynstr->size);
     set_in_dynamic_section(output_elf_file, pos++, DT_SYMENT, sizeof(ElfSymbol));
     set_in_dynamic_section(output_elf_file, pos++, DT_HASH, section_hash->output_section->address);
+
+    if (section_init_array) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_INIT_ARRAY, section_init_array->address);
+        set_in_dynamic_section(output_elf_file, pos++, DT_INIT_ARRAYSZ, section_init_array->size);
+    }
+
+    if (section_fini_array) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_FINI_ARRAY, section_fini_array->address);
+        set_in_dynamic_section(output_elf_file, pos++, DT_FINI_ARRAYSZ, section_fini_array->size);
+    }
 
     if (section_verneed && section_verneed->size > 0 && section_verneed->output_section) {
         set_in_dynamic_section(output_elf_file, pos++, DT_VERNEED, section_verneed->output_section->address);
