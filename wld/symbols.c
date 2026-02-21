@@ -204,7 +204,6 @@ Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t 
     return symbol;
 }
 
-
 static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
     SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
@@ -218,8 +217,8 @@ static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version
 }
 
 // Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
-// Returns 1 if an undefined symbol has been resolved.
-static int resolve_undefined_symbol(const char *name, int version_index, int is_default_version, int is_library, int read_only) {
+// Returns the undefined symbol if one has been resolved.
+static Symbol *resolve_undefined_symbol(const char *name, int version_index, int is_default_version, int is_library, int read_only) {
     Symbol *undefined_symbol = get_undefined_symbol(name, version_index);
 
     int undefined_symbol_version_index = version_index;
@@ -230,15 +229,15 @@ static int resolve_undefined_symbol(const char *name, int version_index, int is_
         if (undefined_symbol) undefined_symbol_version_index = 0;
     }
 
-    if (!undefined_symbol) return 0;
+    if (!undefined_symbol) return NULL;
 
     // Resolve the undefined symbol.
     if (!read_only) remove_undefined_symbol(name, undefined_symbol_version_index);
 
     // Weak undefined symbols don't get resolved if also found in a library.
-    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
+    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return NULL;
 
-    return 1;
+    return undefined_symbol;
 }
 
 static Symbol *add_undefined_symbol(const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
@@ -313,7 +312,7 @@ static int handle_local_symbol(ElfSymbolContext *esc) {
         new_symbol->src_value = esc->elf_symbol->st_value;
     }
 
-    return resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+    return !!resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
 }
 
 // Handle a symbol where either the found symbol or symbol is common
@@ -364,7 +363,7 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
             new_symbol->is_common = 1;
         }
 
-        result = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+        result = !!resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
     }
 
     return result;
@@ -391,7 +390,7 @@ static int handle_abs_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
             new_symbol->is_abs = 1;
         }
 
-        return resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+        return !!resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
     }
 
     return 0;
@@ -472,17 +471,23 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
             new_symbol->is_common = 0;
         }
 
-        result = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+        Symbol *resolved_undefined_symbol = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+        result = !!resolved_undefined_symbol;
 
-        // When loading a symbol from a shared library, note that this symbol resolves an undefined symbol.
-        // This is needed to add the symbol to the .dynsym section.
+        // When loading a symbol from a shared library, note if this symbol resolves an undefined symbol.
         //
         // If:
+        // - Symbol is undefined in an object file, so it participates in the link
         // - Symbol type is STT_OBJECT
         // - Symbol is GLOBAL
         // - Symbol is defined in a shared object
-        // - Symbol is referenced by the executable
-        if (result && new_symbol && new_symbol->type == STT_OBJECT && new_symbol->binding == STB_GLOBAL && (esc->source == SRC_SHARED_LIBRARY)) new_symbol->resolves_undefined_symbol = 1;
+        if (
+            resolved_undefined_symbol && (resolved_undefined_symbol->sources & SRC_OBJECT) &&
+            new_symbol && new_symbol->type == STT_OBJECT &&
+            new_symbol->binding == STB_GLOBAL &&
+            esc->source == SRC_SHARED_LIBRARY
+        )
+            new_symbol->resolves_undefined_symbol = 1;
     }
 
     return result;

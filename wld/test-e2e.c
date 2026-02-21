@@ -1958,6 +1958,54 @@ void test_dynamic_executable_using_an_object_in_a_library() {
         END);
 }
 
+// Ensure a COPY relocation is not created if a symbol in a shared library resolves an unresolves symbol in another shared library
+// This takes care of a regression with sqlite3 where COPY relocations were added for glibc's _rtld_global_ro, leading
+// to serious confusion during during the program loading by the dynamic linker.
+static void test_lack_of_copy_relocation_in_two_shared_libs() {
+    char *library_path1 = run_was(
+        ".globl i;"
+        ".type i, @object;"
+        ".size i, 1;"
+        ".data; i: .byte 1;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, library_path1);
+
+    char *lib_name1;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name1, 0, "lack_of_copy_relocation_in_two_shared_libs");
+
+    char *library_path2 = run_was(
+        ".text; movb i@GOTPCREL(%rip), %al;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, library_path2);
+    append_to_list(input_paths, lib_name1);
+
+    char *lib_name2;
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name2, 0, "lack_of_copy_relocation_in_two_shared_libs");
+
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+    append_to_list(input_paths, lib_name2); // Load lib2 first so that i is undefined
+    append_to_list(input_paths, lib_name1); // lib1 resolves the undefined symbol from lib1
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "lack_of_copy_relocation_in_two_shared_libs");
+
+    if (get_output_section(elf_file, RELA_DYN_SECTION_NAME)) {
+        printf("Expected no relocations\n");
+        exit(1);
+    }
+}
+
+
 // Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
 // This tests a relocation from the .rodata section, without there being a symbol
 void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
@@ -2532,6 +2580,7 @@ int main() {
     test_gnu_ld_script_archive();
     test_dynamic_executable_sanity();
     test_dynamic_executable_using_an_object_in_a_library();
+    test_lack_of_copy_relocation_in_two_shared_libs();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_data();
