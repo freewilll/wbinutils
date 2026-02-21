@@ -41,6 +41,7 @@ test: \
 	glibc-tls-alignment \
 	symbol-versioning \
 	glibc-dynamic-hello-world \
+	glibc-dynamic-curses \
 
 .PHONY: sanity1
 sanity1:
@@ -206,6 +207,10 @@ symbol-versioning:
 glibc-dynamic-hello-world:
 	+$(MAKE) -C glibc-dynamic-hello-world
 
+.PHONY: glibc-dynamic-curses
+glibc-dynamic-curses:
+	+$(MAKE) -C glibc-dynamic-curses
+
 clean:
 	@+$(MAKE) -C sanity1 clean
 	@+$(MAKE) -C sanity2 clean
@@ -247,3 +252,4 @@ clean:
 	@+$(MAKE) -C glibc-tls-alignment clean
 	@+$(MAKE) -C symbol-versioning clean
 	@+$(MAKE) -C glibc-dynamic-hello-world clean
+	@+$(MAKE) -C glibc-dynamic-curses clean

@@ -5,12 +5,6 @@
 
 #include "list.h"
 
-#define AR_MAGIC "!<arch>\n"
-#define AR_MAGIC_LEN 8
-
-#define GNU_LD_SCRIPT_MAGIC "/* GNU ld script"
-#define GNU_LD_SCRIPT_MAGIC_LEN 16
-
 typedef struct archive_file_object {
     char *filename;
     int offset;

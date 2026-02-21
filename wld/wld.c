@@ -100,7 +100,7 @@ const char *section_type_name(uint64_t type) {
     return "UNKNOWN";
 }
 
-static void run_archive_file_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files);
+static void run_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files, List *library_paths);
 
 OutputElfFile *init_output_elf_file(const char *output_filename, int output_type) {
     int elf_output_type = output_type & OUTPUT_TYPE_FLAG_STATIC ? ET_EXEC : ET_DYN;
@@ -154,7 +154,14 @@ static void read_object_or_shared_library_file(List *input_elf_files, const char
 }
 
 // Identify the filetype and load the file
-static int read_library(const char *path, List *input_elf_files, StrMap *read_shared_object_files) {
+static int read_input_file(const char *path, List *input_elf_files, StrMap *read_shared_object_files, List *library_paths) {
+    // If the path isn't absolute, search for it
+    if (path[0] != '/') {
+        path = find_file(library_paths, path, "library");
+        if (!path)
+            error("Unable to find file: %s", path);
+    }
+
     int objects_added = 0;
 
     FileType type = identify_library_file(path);
@@ -170,7 +177,7 @@ static int read_library(const char *path, List *input_elf_files, StrMap *read_sh
 
     switch (type) {
         case FT_LINKER_SCRIPT:
-            run_archive_file_linker_script(path, input_elf_files, read_shared_object_files);
+            run_linker_script(path, input_elf_files, read_shared_object_files, library_paths);
             break;
 
         case FT_ARCHIVE: {
@@ -190,33 +197,53 @@ static int read_library(const char *path, List *input_elf_files, StrMap *read_sh
     return objects_added;
 }
 
-// Static libraries subh as libm.a can consist of a linker script that looks something like:
+// Static libraries such as libm.a can consist of a linker script that looks something like:
 // /* GNU ld script
 // */
 // OUTPUT_FORMAT(elf64-x86-64)
 // GROUP ( /usr/lib/x86_64-linux-gnu/libm-2.31.a /usr/lib/x86_64-linux-gnu/libmvec.a )
 // Parse the linker script and process all libraries in the GROUP()
-static void run_archive_file_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files) {
+static void run_linker_script(const char *path, List *input_elf_files, StrMap *read_shared_object_files, List *library_paths) {
     init_lexer(path);
     List *linker_script = parse();
 
     // Loop over the group
     for (int i = 0; i < linker_script->length; i++) {
         ScriptCommand *command = linker_script->elements[i];
-        if (command->type != CMD_GROUP) continue;
-
-        // Loop over the group until no more objects are added
-        while (1) {
-            int objects_added = 0;
-
-            List *input_group_items = command->group.input_group_items;
-            for (int j = 0; j < input_group_items->length; j++) {
-                InputGroupItem *input_group_item = input_group_items->elements[j];
+        if (command->type == CMD_INPUT) {
+            // Loop over the input until no more objects are added
+            List *items = command->input.items;
+            for (int j = 0; j < items->length; j++) {
+                InputGroupItem *input_group_item = items->elements[j];
                 char *path = input_group_item->filename;
-                objects_added += read_library(path, input_elf_files, read_shared_object_files);
-            }
 
-            if (!objects_added) break;
+                // Handle -lfoo
+                int length = strlen(path);
+                if (length > 2 && path[0] == '-' && path[1] == 'l') {
+                    // Transform -lfoo to libfoo.a
+                    char *new_path = malloc(length + 4);
+                    sprintf(new_path, "lib%s.a", &path[2]);
+                    path = new_path;
+                }
+
+                read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
+            }
+        }
+
+        else if (command->type == CMD_GROUP) {
+            // Loop over the group until no more objects are added
+            while (1) {
+                int objects_added = 0;
+
+                List *items = command->group.items;
+                for (int j = 0; j < items->length; j++) {
+                    InputGroupItem *input_group_item = items->elements[j];
+                    char *path = input_group_item->filename;
+                    objects_added += read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
+                }
+
+                if (!objects_added) break;
+            }
         }
     }
 }
@@ -234,7 +261,7 @@ static List *read_input_files(List *library_paths, List *input_files, int output
         if (input_file->is_library) {
             const char *path = search_for_library(output_type, library_paths, input_filename);
 
-            read_library(path, input_elf_files, read_shared_object_files);
+            read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
         }
         else {
             // It's an object file

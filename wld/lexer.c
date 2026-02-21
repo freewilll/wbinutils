@@ -18,7 +18,7 @@ int cur_line;                       // Current line
 int cur_token;                      // Current token
 char *cur_identifier;               // Current identifier
 long cur_long;                      // Current integer
-int in_group;                       // In a GROUP statement
+int in_input_or_group;                       // In a GROUP statement
 
 void free_lexer(void) {
     free(cur_identifier);
@@ -29,7 +29,7 @@ static void start_lexer(void) {
     ip = input;
     cur_line = 1;
     cur_identifier = malloc(MAX_IDENTIFIER_SIZE);
-    in_group = 0;
+    in_input_or_group = 0;
 
     set_error_line(1);
 
@@ -163,12 +163,12 @@ static void lex_integer(void) {
     }
 }
 
-static void lex_group(void) {
+static void lex_input_or_group(void) {
     skip_whitespace();
 
     int left = input_end - ip;
 
-        if (*ip == ')')  { cur_token = TOK_RPAREN; ip++; in_group = 0; return; }
+        if (*ip == ')')  { cur_token = TOK_RPAREN; ip++; in_input_or_group = 0; return; }
     else if (*ip == '(') { cur_token = TOK_LPAREN; ip++; return; }
     else if (*ip == ',') { cur_token = TOK_COMMA;  ip++; return; }
     else if (left >= 9 && !memcmp(ip, "AS_NEEDED", 9)) { cur_token = TOK_AS_NEEDED; ip += 9; return; }
@@ -209,8 +209,8 @@ void next(void) {
             cur_token = TOK_DISCARD;
         }
 
-        else if (in_group) {
-            lex_group();
+        else if (in_input_or_group) {
+            lex_input_or_group();
         }
 
         else if (             c1 == '('                          )  { ip += 1;  cur_token = TOK_LPAREN;                     }
@@ -273,6 +273,7 @@ void next(void) {
 
                  if (!strcmp(cur_identifier, "ENTRY"          )) { cur_token = TOK_ENTRY; }
             else if (!strcmp(cur_identifier, "OUTPUT_FORMAT"  )) { cur_token = TOK_OUTPUT_FORMAT; }
+            else if (!strcmp(cur_identifier, "INPUT"          )) { cur_token = TOK_INPUT; }
             else if (!strcmp(cur_identifier, "GROUP"          )) { cur_token = TOK_GROUP; }
             else if (!strcmp(cur_identifier, "AS_NEEDED"      )) { cur_token = TOK_AS_NEEDED; }
             else if (!strcmp(cur_identifier, "SECTIONS"       )) { cur_token = TOK_SECTIONS; }
@@ -290,7 +291,7 @@ void next(void) {
         else
             error_in_file("Unknown token %c (%d)", *ip, *ip);
 
-        if (cur_token == TOK_GROUP) in_group = 1;
+        if (cur_token == TOK_INPUT || cur_token == TOK_GROUP) in_input_or_group = 1;
 
         return;
     }

@@ -63,7 +63,8 @@ typedef struct sections_command  {
 typedef enum script_command_type {
     CMD_ENTRY    = 1,
     CMD_SECTIONS = 2,
-    CMD_GROUP = 3,
+    CMD_INPUT    = 3,
+    CMD_GROUP    = 4,
 } ScriptCommandType;
 
 typedef struct script_command_entry {
@@ -79,8 +80,12 @@ typedef struct input_group_item {
     int as_needed;
 } InputGroupItem;
 
+typedef struct script_command_input {
+    List *items;
+} ScriptCommandInput;
+
 typedef struct script_command_group {
-    List *input_group_items;
+    List *items;
 } ScriptCommandGroup;
 
 typedef struct script_command {
@@ -88,6 +93,7 @@ typedef struct script_command {
     union {
         ScriptCommandEntry entry;
         ScriptCommandSections sections;
+        ScriptCommandInput input;
         ScriptCommandGroup group;
     };
 } ScriptCommand;

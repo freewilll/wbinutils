@@ -13,6 +13,15 @@
 #include "wld/utils.h"
 #include "wld/wld.h"
 
+#define AR_MAGIC "!<arch>\n"
+#define AR_MAGIC_LEN 8
+
+#define GNU_LD_SCRIPT_MAGIC1 "/* GNU ld script"
+#define GNU_LD_SCRIPT_MAGIC1_LEN 16
+#define GNU_LD_SCRIPT_MAGIC2 "INPUT"
+#define GNU_LD_SCRIPT_MAGIC2_LEN 5
+
+
 // Try and find a .a or .so on the builtin library paths. Fails if not found. Outputs is_shared.
 char *search_for_library(int output_type, List *library_paths, const char *name) {
     char *filename = malloc(strlen(name) + 10);
@@ -126,15 +135,24 @@ void index_archive_file(ArchiveFile *ar_file) {
     }
 }
 
-// Check if an archive file starts with a GNU magic string
+// Clunky check if a file starts with a linker script magic string
 int is_gnu_linker_script_file(const char *filename) {
     FILE *file = fopen(filename, "r");
 
     int result = 0;
 
-    char magic[GNU_LD_SCRIPT_MAGIC_LEN];
-    if (fread(magic, 1, GNU_LD_SCRIPT_MAGIC_LEN, file) == GNU_LD_SCRIPT_MAGIC_LEN) {
-        if (!memcmp(magic, GNU_LD_SCRIPT_MAGIC, GNU_LD_SCRIPT_MAGIC_LEN)) {
+    char magic1[GNU_LD_SCRIPT_MAGIC1_LEN];
+    if (fread(magic1, 1, GNU_LD_SCRIPT_MAGIC1_LEN, file) == GNU_LD_SCRIPT_MAGIC1_LEN) {
+        if (!memcmp(magic1, GNU_LD_SCRIPT_MAGIC1, GNU_LD_SCRIPT_MAGIC1_LEN)) {
+            result = 1;
+        }
+    }
+
+    fseek(file, 0, SEEK_SET);
+
+    char magic2[GNU_LD_SCRIPT_MAGIC2_LEN];
+    if (fread(magic2, 1, GNU_LD_SCRIPT_MAGIC2_LEN, file) == GNU_LD_SCRIPT_MAGIC2_LEN) {
+        if (!memcmp(magic2, GNU_LD_SCRIPT_MAGIC2, GNU_LD_SCRIPT_MAGIC2_LEN)) {
             result = 1;
         }
     }

@@ -12,12 +12,19 @@
 
 #define DEBUG_SYMBOL_VERSIONS 0
 
-static void read_header(InputElfFile *elf_file) {
+static int read_header(InputElfFile *elf_file, int fail_on_read_error) {
     fseek(elf_file->file, elf_file->file_offset, SEEK_SET);
     elf_file->elf_header = malloc(sizeof(ElfHeader));
+
     int read = fread(elf_file->elf_header, 1, sizeof(ElfHeader), elf_file->file);
-    if (read != sizeof(ElfHeader)) error("Unable to read ELF header from input file: %s", elf_file->filename);
+    if (read != sizeof(ElfHeader)) {
+        if (fail_on_read_error) error("Unable to read ELF header from input file: %s", elf_file->filename);
+        return 0;
+    }
+
     elf_file->type = elf_file->elf_header->e_type;
+
+    return 1;
 }
 
 // Read from the file into a buffer
@@ -304,7 +311,7 @@ static void load_sections(InputElfFile *elf_file) {
 }
 
 static void read_common_file_data(InputElfFile *elf_file) {
-    read_header(elf_file);
+    read_header(elf_file, 1);
     check_file(elf_file);
     load_sections(elf_file);
 }
@@ -344,7 +351,7 @@ InputElfFile *open_elf_file_in_archive(FILE *file, const char *filename, int off
 
 int file_is_shared_library_file(const char *filename) {
     InputElfFile *elf_file = open_elf_file_internal(filename);
-    read_header(elf_file);
+    if (!read_header(elf_file, 0)) return 0;
     if (!has_elf_magic(elf_file)) return 0;
     return elf_file->elf_header->e_type == ET_DYN;
 }

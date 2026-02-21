@@ -217,7 +217,6 @@ static void test_parse_output_format() {
 }
 
 static void test_parse_group() {
-    // char *script = "GROUP(/path/libm.a /path/libm2.a)";
     char *script = "GROUP(/path/libm.a /path/libm2.a AS_NEEDED(/path/libm3.a))";
     run_parser(script);
 
@@ -225,11 +224,11 @@ static void test_parse_group() {
     ScriptCommand *command = linker_script->elements[0];
     assert_int(CMD_GROUP, command->type, script);
 
-    List *input_group_items = command->group.input_group_items;
-    assert_int(3, input_group_items->length, script);
-    assert_input_group_item("/path/libm.a",  0, input_group_items->elements[0], script);
-    assert_input_group_item("/path/libm2.a", 0, input_group_items->elements[1], script);
-    assert_input_group_item("/path/libm3.a", 1, input_group_items->elements[2], script);
+    List *items = command->group.items;
+    assert_int(3, items->length, script);
+    assert_input_group_item("/path/libm.a",  0, items->elements[0], script);
+    assert_input_group_item("/path/libm2.a", 0, items->elements[1], script);
+    assert_input_group_item("/path/libm3.a", 1, items->elements[2], script);
 
     // With filenames delimited by commas
     script = "GROUP(/path/libm.a, /path/libm2.a)";
@@ -239,10 +238,37 @@ static void test_parse_group() {
     command = linker_script->elements[0];
     assert_int(CMD_GROUP, command->type, script);
 
-    input_group_items = command->group.input_group_items;
-    assert_int(2, input_group_items->length, script);
-    assert_input_group_item("/path/libm.a",  0, input_group_items->elements[0], script);
-    assert_input_group_item("/path/libm2.a", 0, input_group_items->elements[1], script);
+    items = command->group.items;
+    assert_int(2, items->length, script);
+    assert_input_group_item("/path/libm.a",  0, items->elements[0], script);
+    assert_input_group_item("/path/libm2.a", 0, items->elements[1], script);
+}
+
+static void test_parse_input() {
+    char *script = "INPUT(libncurses.so.6 -ltinfo)";
+    run_parser(script);
+
+    assert_int(1, linker_script->length, script);
+    ScriptCommand *command = linker_script->elements[0];
+    assert_int(CMD_INPUT, command->type, script);
+
+    List *items = command->group.items;
+    assert_int(2, items->length, script);
+    assert_input_group_item("libncurses.so.6",  0, items->elements[0], script);
+    assert_input_group_item("-ltinfo", 0, items->elements[1], script);
+
+    // With filenames delimited by commas
+    script = "INPUT(libncurses.so.6, -ltinfo)";
+    run_parser(script);
+
+    assert_int(1, linker_script->length, script);
+    command = linker_script->elements[0];
+    assert_int(CMD_INPUT, command->type, script);
+
+    items = command->group.items;
+    assert_int(2, items->length, script);
+    assert_input_group_item("libncurses.so.6",  0, items->elements[0], script);
+    assert_input_group_item("-ltinfo", 0, items->elements[1], script);
 }
 
 int main() {
@@ -253,5 +279,6 @@ int main() {
     test_sections_output();
     test_parse_output_format();
     test_parse_group();
+    test_parse_input();
     test_parse_default_linker_script();
 }

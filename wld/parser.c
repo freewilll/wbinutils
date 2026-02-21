@@ -223,18 +223,20 @@ static void parse_sections(void) {
     consume(TOK_RCURLY, "}");
 }
 
-static void parse_group_item_filename(List *input_group_items, int as_needed) {
+static void parse_filename(List *list, int as_needed) {
     InputGroupItem *input_group_item = malloc(sizeof(InputGroupItem));
     input_group_item->filename = strdup(cur_identifier);
     input_group_item->as_needed = as_needed;
-    append_to_list(input_group_items, input_group_item);
+    append_to_list(list, input_group_item);
 }
 
-static void parse_group(void) {
+
+// Parse a list of space or comma separate items
+static List *parse_filename_list(void) {
     next();
     consume(TOK_LPAREN, "(");
 
-    List *input_group_items = new_list(8);
+    List *items = new_list(8);
 
     while (1) {
         if (cur_token == TOK_RPAREN || cur_token == TOK_EOF) break;
@@ -243,13 +245,13 @@ static void parse_group(void) {
             next();
             consume(TOK_LPAREN, "(");
             expect(TOK_FILENAME, "filename");
-            parse_group_item_filename(input_group_items, 1);
+            parse_filename(items, 1);
             next();
             consume(TOK_RPAREN, ")");
         }
 
         else if (cur_token == TOK_FILENAME) {
-            parse_group_item_filename(input_group_items, 0);
+            parse_filename(items, 0);
             consume(TOK_FILENAME, "filename");
         }
 
@@ -258,9 +260,20 @@ static void parse_group(void) {
 
     consume(TOK_RPAREN, ")");
 
+    return items;
+}
+
+static void parse_input(void) {
+    ScriptCommand *command = malloc(sizeof(ScriptCommand));
+    command->type = CMD_INPUT;
+    command->input.items = parse_filename_list();
+    append_to_list(current_linker_script, command);
+}
+
+static void parse_group(void) {
     ScriptCommand *command = malloc(sizeof(ScriptCommand));
     command->type = CMD_GROUP;
-    command->group.input_group_items = input_group_items;
+    command->group.items = parse_filename_list();
     append_to_list(current_linker_script, command);
 }
 
@@ -292,6 +305,10 @@ List *parse(void) {
             // Ignore OUTPUT_FORMAT(...)
             while (cur_token != TOK_EOF && cur_token != TOK_RPAREN) next();
             if (cur_token == TOK_RPAREN) next();
+        }
+
+        else if (cur_token == TOK_INPUT) {
+            parse_input();
         }
 
         else if (cur_token == TOK_GROUP) {
