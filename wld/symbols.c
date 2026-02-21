@@ -1723,7 +1723,7 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
     }
 
     if (data_copy_section)
-        data_copy_section->data = calloc(1, sizeof(data_copy_section->size));
+        data_copy_section->data = calloc(1, data_copy_section->size);
 }
 
 // Any ELF file that has a PT_DYNAMIC section must add a local _DYNAMIC symbol.
