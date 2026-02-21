@@ -1,9 +1,9 @@
-extern int object_in_shared_library2;
+extern int foo2;
 
 int f() {
-    return object_in_shared_library2;
+    return foo2;
 }
 
 int g() {
-    return object_in_shared_library2;
+    return foo2;
 }

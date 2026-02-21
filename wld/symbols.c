@@ -1707,8 +1707,11 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
         if (!data_copy_section)
             data_copy_section = get_or_create_extra_section(output_elf_file, DATA_COPY_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC | SHF_WRITE, align);
 
-        // Increase the alignment in the section if necessary
+        // Increase the alignment of the section if necessary
         if (align > data_copy_section->align) data_copy_section->align = align;
+
+        // Align the section
+        data_copy_section->size = ALIGN_UP(data_copy_section->size, align);
 
         // Disassociate the symbol with the shared library
         // This is a bit hacky, since this pretends the symbol originated in the executable in the first place

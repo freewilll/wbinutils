@@ -21,7 +21,7 @@ libtest1.o: libtest1.c
 libtest2.o: libtest2.c
 	AS=${WAS} ${CC} -c libtest2.c -o libtest2.o -fPIC
 
-libtest1.so: libtest1.o ${WLD}
+libtest1.so: libtest1.o
 	${WLD} \
 		-shared \
 		-L/usr/lib \
@@ -34,7 +34,7 @@ libtest1.so: libtest1.o ${WLD}
 		-lgcc_eh \
 		-lc \
 
-libtest2.so: libtest2.o libtest1.so ${WLD}
+libtest2.so: libtest2.o libtest1.so
 	${WLD} \
 		-shared \
 		-L/usr/lib \
@@ -42,6 +42,8 @@ libtest2.so: libtest2.o libtest1.so ${WLD}
 		-o libtest2.so \
 		libtest2.o \
 		-L/usr/lib/x86_64-linux-musl \
+		-L . \
+		-ltest1 \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
@@ -61,7 +63,8 @@ main: main.o libtest1.so libtest2.so
 	-L/usr/lib/x86_64-linux-musl                          \
 	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
 	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	-pie
 
 run-main: main
 	LD_LIBRARY_PATH=. ./main

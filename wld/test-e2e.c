@@ -1902,10 +1902,15 @@ static void test_dynamic_executable_sanity() {
 void test_dynamic_executable_using_an_object_in_a_library() {
     char *library_path = run_was(
         ".globl i;"
-        ".type i, @object;" // Required
-        ".size i, 4;"       // Required
+        ".globl j;"
+        ".type i, @object;" // A char
+        ".size i, 1;"       //
+        ".type j, @object;" // An int
+        ".size j, 4;"       //
         ".data;"
-        "    i: .long 1;"
+        "    i: .byte 1;"
+        ".align 4;"         // Align to 4 bytes
+        "    j: .long 2;"
     );
 
     List *input_paths = new_list(1);
@@ -1918,7 +1923,8 @@ void test_dynamic_executable_using_an_object_in_a_library() {
         ".globl _start;"
         ".text;"
         "_start:;"
-        "    movq i(%rip), %rax;"
+        "    movb i(%rip), %al;"
+        "    movl j(%rip), %eax;"
     );
 
     input_paths = new_list(1);
@@ -1929,24 +1935,26 @@ void test_dynamic_executable_using_an_object_in_a_library() {
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
-        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
-        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
-        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
-        ".rela.dyn",       SHT_RELA,       0x1058,   0x1058, 0x18,  SHF_ALLOC,                 8,
-        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x07,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x15,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1078,   0x1078, 0x30,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
         ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xb0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".data",           SHT_PROGBITS,   0x30b0,   0x30b0, 0x04,  SHF_ALLOC | SHF_WRITE,     4,
+        ".data",           SHT_PROGBITS,   0x30b0,   0x30b0, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
         NULL
     );
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
-        0x30b0,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x30b0,    1,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "i",
+        0x30b4,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "j",
         END);
 
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_COPY,     1,                0x30b0,  0,
+        R_X86_64_COPY,     2,                0x30b4,  0,
         END);
 }
 

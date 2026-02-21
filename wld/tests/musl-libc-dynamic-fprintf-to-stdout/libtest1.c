@@ -1,2 +1,3 @@
-int object_in_shared_library = 42;
-int object_in_shared_library2 = 6;
+char foo0 = 1; // The char is to check the alignment of the following int
+int foo1 = 42; // Should be properly aligned in the relocation
+int foo2 = 6;
