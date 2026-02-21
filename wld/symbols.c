@@ -13,6 +13,13 @@
 #include "wld/script.h"
 #include "wld/wld.h"
 
+// Useful for printf, given a symbol name and version index. Use snv->full_name, if available.
+#define SYMBOL_VERSION_AND_NAME(name, version_index) \
+        name, \
+        version_index ? "@" : "", \
+        (version_index ? (char *) global_symbol_version_indexes_list->elements[version_index] : "")
+
+
 typedef struct {
     InputElfFile *elf_file;
     ElfSymbol *elf_symbol;
@@ -179,7 +186,7 @@ int is_undefined_symbol(const char *name, int version_index) {
 
 // Remove a symbol from the undefined symbols set
 static void remove_undefined_symbol(const char *name, int version_index) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s (%d)\n", name, version_index);
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Removed undefined %s%s%s\n", SYMBOL_VERSION_AND_NAME(name, version_index));
     SymbolNV snv = make_symbolnv(name, version_index);
     map_ordered_delete(global_symbol_table->undefined_symbols, &snv);
 }
@@ -197,11 +204,15 @@ Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t 
     return symbol;
 }
 
+
 static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added defined symbol %s version=%d binding=%s\n", name, version_index, SYMBOL_BINDING_NAMES[binding]);
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
     SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
     map_ordered_put(st->defined_symbols, snv, symbol);
+
+    if (DEBUG_SYMBOL_RESOLUTION)
+        printf("  Added defined symbol %s binding=%s\n", snv->full_name, SYMBOL_BINDING_NAMES[binding]);
+
 
     return symbol;
 }
@@ -231,10 +242,12 @@ static int resolve_undefined_symbol(const char *name, int version_index, int is_
 }
 
 static Symbol *add_undefined_symbol(const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
-    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", name);
+
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
     SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
     map_ordered_put(global_symbol_table->undefined_symbols, snv, symbol);
+
+    if (DEBUG_SYMBOL_RESOLUTION) printf("  Added undefined symbol %s\n", snv->full_name);
 
     return symbol;
 }
@@ -651,7 +664,7 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
 
         // If the symbol has been found in a shared library then it's allowed to be undefined.
         if (symbol->sources & SRC_SHARED_LIBRARY)  {
-            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring undefined %s in lib\n" , symbol->name);
+            if (DEBUG_SYMBOL_RESOLUTION) printf("Ignoring undefined %ss in lib\n" , snv->full_name);
             continue;
         }
         // Weak undefined symbols become defined with value zero
@@ -865,7 +878,7 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
             }
 
             if (DEBUG_RELOCATIONS) {
-                printf("%-60s %-60s value=%08lx  ", symbol->name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
+                printf("%-60s %-60s value=%08lx  ", snv->full_name, symbol->src_elf_file ? symbol->src_elf_file->filename : "-", symbol->dst_value);
 
                 if (symbol->binding != STB_WEAK) {
                     if (symbol->input_section)

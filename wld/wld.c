@@ -144,7 +144,10 @@ InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *
 }
 
 // Go down all input files which are either object files or shared libraries
-static void read_object_file(List *input_elf_files, const char *path, int source) {
+static void read_object_or_shared_library_file(List *input_elf_files, const char *path, int source) {
+    if (DEBUG_SYMBOL_RESOLUTION || DEBUG_SYMBOL_VERSIONS)
+        printf("Examining file %s\n", path);
+
     InputElfFile *elf_file = open_elf_file(path);
     process_elf_file_symbols(elf_file, source, 0);
     append_to_list(input_elf_files, elf_file);
@@ -177,7 +180,7 @@ static int read_library(const char *path, List *input_elf_files, StrMap *read_sh
         }
 
         case FT_SHARED_LIBRARY:
-            read_object_file(input_elf_files, path, SRC_SHARED_LIBRARY);
+            read_object_or_shared_library_file(input_elf_files, path, SRC_SHARED_LIBRARY);
             break;
 
         default:
@@ -235,7 +238,7 @@ static List *read_input_files(List *library_paths, List *input_files, int output
         }
         else {
             // It's an object file
-            read_object_file(input_elf_files, input_filename, SRC_OBJECT);
+            read_object_or_shared_library_file(input_elf_files, input_filename, SRC_OBJECT);
         }
     }
 
