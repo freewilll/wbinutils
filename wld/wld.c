@@ -790,6 +790,9 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, OutputElfFi
         for (int j = 0; j < input_elf_file->section_list->length; j++) {
             InputSection *input_section = input_elf_file->section_list->elements[j];
 
+            // Skip empty sections
+            if (!input_section->size) continue;
+
             // Only include sections that have program data
             if (!input_section->output_section) continue;
 
@@ -812,6 +815,9 @@ static void copy_extra_sections_to_output(OutputElfFile *output_elf_file) {
     strmap_ordered_foreach(output_elf_file->extra_sections, it) {
         const char *name = strmap_ordered_iterator_key(&it);
         InputSection *input_section = strmap_ordered_get(output_elf_file->extra_sections, name);
+
+        // Skip empty sections
+        if (!input_section->size) continue;
 
         const char *section_name = input_section->name;
         OutputSection *output_section = input_section->output_section;
