@@ -41,6 +41,7 @@ test: \
 	glibc-tls-alignment \
 	symbol-versioning \
 	symbol-versioning-double-undefined_symbol_resolution-with-default \
+	symbol-versioning-weak-strong-default-in-two-libs \
 	glibc-dynamic-hello-world \
 	glibc-dynamic-curses \
 
@@ -208,6 +209,10 @@ symbol-versioning:
 symbol-versioning-double-undefined_symbol_resolution-with-default:
 	+$(MAKE) -C symbol-versioning-double-undefined_symbol_resolution-with-default
 
+.PHONY: symbol-versioning-weak-strong-default-in-two-libs
+symbol-versioning-weak-strong-default-in-two-libs:
+	+$(MAKE) -C symbol-versioning-weak-strong-default-in-two-libs
+
 .PHONY: glibc-dynamic-hello-world
 glibc-dynamic-hello-world:
 	+$(MAKE) -C glibc-dynamic-hello-world
@@ -257,5 +262,6 @@ clean:
 	@+$(MAKE) -C glibc-tls-alignment clean
 	@+$(MAKE) -C symbol-versioning clean
 	@+$(MAKE) -C symbol-versioning-double-undefined_symbol_resolution-with-default clean
+	@+$(MAKE) -C symbol-versioning-weak-strong-default-in-two-libs clean
 	@+$(MAKE) -C glibc-dynamic-hello-world clean
 	@+$(MAKE) -C glibc-dynamic-curses clean

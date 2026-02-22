@@ -15,9 +15,9 @@
 
 // Useful for printf, given a symbol name and version index. Use snv->full_name, if available.
 #define SYMBOL_VERSION_AND_NAME(name, version_index) \
-        name, \
-        version_index ? "@" : "", \
-        (version_index ? (char *) global_symbol_version_indexes_list->elements[version_index] : "")
+    name, \
+    version_index ? "@" : "", \
+    (version_index ? (char *) global_symbol_version_indexes_list->elements[version_index] : "")
 
 
 typedef struct {
@@ -471,36 +471,39 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
     }
     else {
         // The symbol has not yet been defined
-        Symbol *new_symbol = NULL;
+        found_symbol = NULL;
 
         if (!esc->read_only) {
             // Add a new symbol
-            new_symbol = add_defined_symbol(global_symbol_table, esc->snv->name, esc->snv->version_index, esc->type, esc->binding, esc->other, esc->size, esc->source);
-            new_symbol->src_elf_file = esc->elf_file;
-            new_symbol->input_section = input_section;
-            new_symbol->src_value = esc->elf_symbol->st_value;
-            new_symbol->is_common = 0;
+            found_symbol = add_defined_symbol(global_symbol_table, esc->snv->name, esc->snv->version_index, esc->type, esc->binding, esc->other, esc->size, esc->source);
+            found_symbol->src_elf_file = esc->elf_file;
+            found_symbol->input_section = input_section;
+            found_symbol->src_value = esc->elf_symbol->st_value;
+            found_symbol->is_common = 0;
         }
-
-        // Multiple undefined symbols can have been resolved. We're interested if any of them came from an object file.
-        int resolved_undefined_symbol_sources = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
-        result = !!resolved_undefined_symbol_sources;
-
-        // When loading a symbol from a shared library, note if this symbol resolves an undefined symbol.
-        //
-        // If:
-        // - Symbol is undefined in an object file, so it participates in the link
-        // - Symbol type is STT_OBJECT
-        // - Symbol is GLOBAL
-        // - Symbol is defined in a shared object
-        if (
-            resolved_undefined_symbol_sources & SRC_OBJECT &&
-            new_symbol && new_symbol->type == STT_OBJECT &&
-            new_symbol->binding == STB_GLOBAL &&
-            esc->source == SRC_SHARED_LIBRARY
-        )
-            new_symbol->resolves_undefined_symbol = 1;
     }
+
+    // Always try to resolve undefined symbols. In particular, there is a case where a weak default symbol might come after a strong non-default symbol.
+    // The weak symbol must resolve unversioned undefined symbols.
+
+    // Multiple undefined symbols can have been resolved. We're interested if any of them came from an object file.
+    int resolved_undefined_symbol_sources = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+    result |= !!resolved_undefined_symbol_sources;
+
+    // When loading a symbol from a shared library, note if this symbol resolves an undefined symbol.
+    //
+    // If:
+    // - Symbol is undefined in an object file, so it participates in the link
+    // - Symbol type is STT_OBJECT
+    // - Symbol is GLOBAL
+    // - Symbol is defined in a shared object
+    if (
+        resolved_undefined_symbol_sources & SRC_OBJECT &&
+        found_symbol && found_symbol->type == STT_OBJECT &&
+        found_symbol->binding == STB_GLOBAL &&
+        esc->source == SRC_SHARED_LIBRARY
+    )
+        found_symbol->resolves_undefined_symbol = 1;
 
     return result;
 }
