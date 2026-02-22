@@ -2632,6 +2632,39 @@ static void test_double_undefined_symbol_resolution_with_default() {
         END);
 }
 
+// Test bug where bss sections were read from the file
+static void test_silly_bss_section_loading_bug() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:; nop;"
+        ".section .bss,\"aw\",@nobits;"
+        "    .zero 10240;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, "silly_bss_section_loading_bug");
+
+    // assert_sections(elf_file,
+    //     // Name           Type            Address   Offset  Size   Flags                            Align
+    //     ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR,       16,
+    //     ".tdata",         SHT_PROGBITS,   0x402ffc, 0x2ffc, 0x04,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 1,
+    //     ".tbss",          SHT_NOBITS,     0x403000, 0x3000, 0x04,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 1,
+    //     NULL
+    // );
+
+    // assert_program_segments(elf_file,
+    //     // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+    //     PT_LOAD,          0x0000,  0x400000,  0x1c0,   0x1c0,  PF_R,         0x1000,
+    //     PT_LOAD,          0x1000,  0x401000,  0x0c,    0x0c,   PF_R | PF_X,  0x1000,
+    //     PT_LOAD,          0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R | PF_W,  0x1000,
+    //     PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R ,        8,
+    //     END
+    // );
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -2669,4 +2702,5 @@ int main() {
     test_dynamic_executable_GOT_AND_PLT_relocation();
     test_versioning_default_symbol();
     test_double_undefined_symbol_resolution_with_default();
+    test_silly_bss_section_loading_bug();
 }

@@ -45,6 +45,10 @@ void *load_section_uncached(InputElfFile *elf_file, int section_index) {
 
 // Unless already done, allocate memory for a section, read it, and return it
 void *load_section(InputElfFile *elf_file, InputSection *section) {
+    if (section->type == SHT_NOBITS)
+        error("Attempt to read section data from file %s, section %s where the section type is SHT_NOBITS\n",
+            elf_file->filename, section->name);
+
     if (section->data) return section->data;
     section->data = malloc(section->size);
     read_from_file(elf_file, section->data, section->src_offset, section->size);

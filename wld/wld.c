@@ -826,6 +826,9 @@ static void copy_input_elf_sections_to_output(List *input_elf_files, OutputElfFi
             // Only include sections that have program data
             if (!input_section->output_section) continue;
 
+            // Ignore sections without data
+            if (input_section->type == SHT_NOBITS) continue;
+
             const char *section_name = input_section->name;
             OutputSection *rw_section = input_section->output_section;
             if (!rw_section) continue; // The section is not included
