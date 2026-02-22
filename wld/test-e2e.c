@@ -669,7 +669,7 @@ static char *run_wld_and_capture_stderr(List *input_filenames, List *extra_args,
 }
 
 
-static OutputElfFile *run_wld(List *input_filenames, int output_type, char **poutput_lib_name, int run_executable, char *test_name) {
+static OutputElfFile *run_wld(List *input_filenames, int output_type, char **poutput_lib_name, int run_executable, char *soname, char *test_name) {
     // Make list of InputFile from the input filenames
     List *input_files = new_list(input_filenames->length);
     for (int i = 0; i < input_filenames->length; i++) {
@@ -714,7 +714,7 @@ static OutputElfFile *run_wld(List *input_filenames, int output_type, char **pou
     List *library_paths = new_list(0);
     append_to_list(library_paths, "/tmp");
 
-    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, output_type, NULL);
+    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, output_type, NULL, soname);
 
     if (run_executable) {
         // Run the executable and assert an exit code of zero
@@ -746,7 +746,7 @@ static void test_sanity() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 1, NULL, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -784,7 +784,7 @@ static void test_empty_object_file() {
     append_to_list(input_paths, object1_path);
     append_to_list(input_paths, object2_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -815,7 +815,7 @@ void test_segments_are_page_aligned() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "sanity");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -866,7 +866,7 @@ static void test_orphan_sections_no_rearrangement(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                                  Align
@@ -922,7 +922,7 @@ static void test_orphan_sections_rearrangement(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "orphan sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "orphan sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -961,7 +961,7 @@ static void test_tls() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "tls");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "tls");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                            Align
@@ -1011,7 +1011,7 @@ static void test_tls_aligment() {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, "test_tls_aligment");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, NULL, "test_tls_aligment");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                            Align
@@ -1061,7 +1061,7 @@ static void test_two_bss_sections(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1105,7 +1105,7 @@ static void test_data_and_two_bss_sections(void) {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "two bss sections");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "two bss sections");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1140,7 +1140,7 @@ static void test_etext_undefined() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "undefined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "undefined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1181,7 +1181,7 @@ static void test_defined_etext() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "defined etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "defined etext");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size     Flags                      Align
@@ -1222,7 +1222,7 @@ static void test_unused_etext() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "unused etext");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "unused etext");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -1290,7 +1290,7 @@ static void test_automatic_start_stop_symbols() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "__start_ and __end_ symbols");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "__start_ and __end_ symbols");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size     Flags                      Align
@@ -1336,7 +1336,7 @@ static void test_shared_library_no_dependencies() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_shared_library_no_dependencies");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "test_shared_library_no_dependencies");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1408,7 +1408,7 @@ static void test_two_shared_libs_with_data() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_data");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "test_two_shared_libs_with_data");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1423,7 +1423,7 @@ static void test_two_shared_libs_with_data() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_data");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "test_two_shared_libs_with_data");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1494,7 +1494,7 @@ static void test_two_shared_libs_with_functions() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_functions");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "test_two_shared_libs_with_functions");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1509,7 +1509,7 @@ static void test_two_shared_libs_with_functions() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "test_two_shared_libs_with_functions");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "test_two_shared_libs_with_functions");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1625,7 +1625,7 @@ static void test_shared_lib_with_two_objects() {
     append_to_list(input_paths, object_path2);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "shared_lib_with_two_objects");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "shared_lib_with_two_objects");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -1668,7 +1668,7 @@ static void test_dynamic_executable_with_GOT_entry_for_local_symbol() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_with_GOT_entry_for_local_symbol");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_with_GOT_entry_for_local_symbol");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1720,7 +1720,7 @@ void test_dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_too");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_too");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -1777,7 +1777,7 @@ static void test_dwarf() {
     append_to_list(input_paths, object_path);
 
     // Static executable
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "dwarf lines");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "dwarf lines");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1809,7 +1809,7 @@ static void test_dwarf() {
     assert_uint64_t(0x401000, address, "Line number address is set to .text");
 
     // Dynamic executable
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "dwarf lines");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "dwarf lines");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1874,7 +1874,7 @@ static void test_gnu_ld_script_archive() {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, "*gnuldscript");
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, "linking to a GNU ld script archive");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "linking to a GNU ld script archive");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1901,7 +1901,7 @@ static void test_dynamic_executable_sanity() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 1, "test_dynamic_executable_sanity");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 1, NULL, "test_dynamic_executable_sanity");
 
     assert_program_segments(elf_file,
         // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
@@ -1942,7 +1942,7 @@ void test_dynamic_executable_using_an_object_in_a_library() {
     append_to_list(input_paths, library_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_using_an_object_in_a_library");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_using_an_object_in_a_library");
 
     char *object_path = run_was(
         ".globl _start;"
@@ -1956,7 +1956,7 @@ void test_dynamic_executable_using_an_object_in_a_library() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_using_an_object_in_a_library");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_using_an_object_in_a_library");
 
     assert_sections(elf_file,
         // Name           Type            Address   Offset  Size   Flags                      Align
@@ -1998,7 +1998,7 @@ static void test_lack_of_copy_relocation_in_two_shared_libs() {
     append_to_list(input_paths, library_path1);
 
     char *lib_name1;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name1, 0, "lack_of_copy_relocation_in_two_shared_libs");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name1, 0, NULL, "lack_of_copy_relocation_in_two_shared_libs");
 
     char *library_path2 = run_was(
         ".text; movb i@GOTPCREL(%rip), %al;"
@@ -2009,7 +2009,7 @@ static void test_lack_of_copy_relocation_in_two_shared_libs() {
     append_to_list(input_paths, lib_name1);
 
     char *lib_name2;
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name2, 0, "lack_of_copy_relocation_in_two_shared_libs");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name2, 0, NULL, "lack_of_copy_relocation_in_two_shared_libs");
 
     char *object_path = run_was(
         ".globl _start;"
@@ -2022,7 +2022,7 @@ static void test_lack_of_copy_relocation_in_two_shared_libs() {
     append_to_list(input_paths, lib_name2); // Load lib2 first so that i is undefined
     append_to_list(input_paths, lib_name1); // lib1 resolves the undefined symbol from lib1
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "lack_of_copy_relocation_in_two_shared_libs");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "lack_of_copy_relocation_in_two_shared_libs");
 
     if (get_output_section(elf_file, RELA_DYN_SECTION_NAME)) {
         printf("Expected no relocations\n");
@@ -2050,7 +2050,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -2097,7 +2097,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
     assert_dynsym(elf_file, END);
 
@@ -2127,7 +2127,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_da
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
     assert_dynsym(elf_file, END);
 
@@ -2168,7 +2168,7 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
     append_to_list(input_paths, object_path1);
     append_to_list(input_paths, object_path2);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_RELATIVE_relocations");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_R_X86_64_RELATIVE_relocations");
 
     assert_dynsym(elf_file, END);
 
@@ -2196,7 +2196,7 @@ void test_dynamic_executable_R_X86_64_64_relocation() {
     append_to_list(input_paths, object_path1);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_R_X86_64_64_relocation");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_R_X86_64_64_relocation");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -2221,7 +2221,7 @@ void test_dynamic_executable_R_X86_64_64_relocation() {
     append_to_list(input_paths, object_path2);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "dynamic_executable_R_X86_64_64_relocation");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_R_X86_64_64_relocation");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -2262,7 +2262,7 @@ void test_dynamic_library_R_X86_64_64_relocation_for_function_pointer() {
     append_to_list(input_paths, object_path1);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_R_X86_64_64_relocation");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_library_R_X86_64_64_relocation");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -2284,7 +2284,7 @@ void test_dynamic_library_R_X86_64_64_relocation_for_function_pointer() {
     append_to_list(input_paths, object_path2);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_R_X86_64_64_relocation");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_library_R_X86_64_64_relocation");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -2328,7 +2328,7 @@ void test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library() 
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -2368,7 +2368,7 @@ void test_dynamic_library_illegal_R_X86_64_PC32_relocation() {
     append_to_list(input_paths, object_path1);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_library_illegal_R_X86_64_PC32_relocation");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_library_illegal_R_X86_64_PC32_relocation");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -2406,7 +2406,7 @@ void test_dynamic_executable_GOT_AND_PLT_relocation() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_GOT_AND_PLT_relocation");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_GOT_AND_PLT_relocation");
     char *lib_filename = malloc(strlen(lib_name) + 16);
     sprintf(lib_filename, "lib%s.so", &lib_name[1]);
 
@@ -2421,7 +2421,7 @@ void test_dynamic_executable_GOT_AND_PLT_relocation() {
     append_to_list(input_paths, object_path);
     append_to_list(input_paths, lib_name);
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "dynamic_executable_GOT_AND_PLT_relocation");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_GOT_AND_PLT_relocation");
 
     assert_sections(elf_file,
         // Name            Type            Address   Offset  Size   Flags                      Align
@@ -2496,7 +2496,7 @@ void test_versioning_default_symbol() {
     append_to_list(input_paths, object_path2);
     append_to_list(input_paths, "*test");
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "versioning_default_symbol");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "versioning_default_symbol");
 
     assert_sections(elf_file,
         // Name            Type             Address   Offset  Size   Flags                      Align
@@ -2593,7 +2593,7 @@ static void test_double_undefined_symbol_resolution_with_default() {
     append_to_list(input_paths, library2_object_path);
 
     char *lib_name2;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name2, 0, "double_undefined_symbol_resolution_with_default");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name2, 0, NULL, "double_undefined_symbol_resolution_with_default");
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
@@ -2618,7 +2618,7 @@ static void test_double_undefined_symbol_resolution_with_default() {
     append_to_list(input_paths, lib_name2);   // Has undefined f1@V1
     append_to_list(input_paths, "*test");     // Resolves both f1 and f1@V1
 
-    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "double_undefined_symbol_resolution_with_default");
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "double_undefined_symbol_resolution_with_default");
 
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
@@ -2645,24 +2645,31 @@ static void test_silly_bss_section_loading_bug() {
     List *input_paths = new_list(1);
     append_to_list(input_paths, object_path);
 
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, "silly_bss_section_loading_bug");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, NULL, "silly_bss_section_loading_bug");
+}
 
-    // assert_sections(elf_file,
-    //     // Name           Type            Address   Offset  Size   Flags                            Align
-    //     ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR,       16,
-    //     ".tdata",         SHT_PROGBITS,   0x402ffc, 0x2ffc, 0x04,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 1,
-    //     ".tbss",          SHT_NOBITS,     0x403000, 0x3000, 0x04,  SHF_ALLOC | SHF_WRITE | SHF_TLS, 1,
-    //     NULL
-    // );
+static void test_soname() {
+    char *object_path = run_was(
+        ".globl f;"
+        "f: ret;"
+    );
 
-    // assert_program_segments(elf_file,
-    //     // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
-    //     PT_LOAD,          0x0000,  0x400000,  0x1c0,   0x1c0,  PF_R,         0x1000,
-    //     PT_LOAD,          0x1000,  0x401000,  0x0c,    0x0c,   PF_R | PF_X,  0x1000,
-    //     PT_LOAD,          0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R | PF_W,  0x1000,
-    //     PT_TLS,           0x2ffc,  0x402ffc,  0x04,    0x08,   PF_R ,        8,
-    //     END
-    // );
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "foo", "soname");
+
+    assert_dynamic(elf_file,
+        DT_SONAME, 0,      "foo",
+        DT_STRTAB, 0x1044, NULL,
+        DT_SYMTAB, 0x1014, NULL,
+        DT_STRSZ,  0x7,    NULL,
+        DT_SYMENT, 0x18,   NULL,
+        DT_HASH,   0x1000, NULL,
+        DT_DEBUG,  0,      NULL,
+        DT_NULL,   0,      NULL
+    );
 }
 
 int main() {
@@ -2703,4 +2710,5 @@ int main() {
     test_versioning_default_symbol();
     test_double_undefined_symbol_resolution_with_default();
     test_silly_bss_section_loading_bug();
+    test_soname();
 }

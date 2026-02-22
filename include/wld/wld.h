@@ -68,6 +68,6 @@ void dump_relocations(OutputSection* section);
 void dump_sections(OutputElfFile *output_elf_file);
 void dump_program_segments(OutputElfFile *output_elf_file);
 OutputSection *get_or_create_create_bss_section(OutputElfFile *output);
-OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker);
+OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker, char *soname);
 
 #endif
