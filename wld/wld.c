@@ -144,9 +144,22 @@ InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *
 }
 
 // Go down all input files which are either object files or shared libraries
-static void read_object_or_shared_library_file(List *input_elf_files, const char *path, int source) {
+static void read_object_or_shared_library_file(List *input_elf_files, const char *path) {
     if (DEBUG_SYMBOL_RESOLUTION || DEBUG_SYMBOL_VERSIONS)
         printf("Examining file %s\n", path);
+
+    // Determine if the file is a shared object or object.
+    // This allows the user to pass a shared library nane, e.g. testfoo.so to be passed on the command
+    // line instead of -lfoo.
+    int source;
+    FileType type = identify_library_file(path);
+    switch (type) {
+        case FT_SHARED_LIBRARY:
+            source = SRC_SHARED_LIBRARY;
+            break;
+        default:
+            source = SRC_OBJECT;
+    }
 
     InputElfFile *elf_file = open_elf_file(path);
     process_elf_file_symbols(elf_file, source, 0);
@@ -187,7 +200,7 @@ static int read_input_file(const char *path, List *input_elf_files, StrMap *read
         }
 
         case FT_SHARED_LIBRARY:
-            read_object_or_shared_library_file(input_elf_files, path, SRC_SHARED_LIBRARY);
+            read_object_or_shared_library_file(input_elf_files, path);
             break;
 
         default:
@@ -258,14 +271,13 @@ static List *read_input_files(List *library_paths, List *input_files, int output
         char *input_filename = input_file->filename;
         if (DEBUG_SYMBOL_RESOLUTION) printf("Examining file %s\n", input_filename);
 
-        if (input_file->is_library) {
+        if (input_file->is_library_name) {
             const char *path = search_for_library(output_type, library_paths, input_filename);
-
             read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
         }
         else {
             // It's an object file
-            read_object_or_shared_library_file(input_elf_files, input_filename, SRC_OBJECT);
+            read_object_or_shared_library_file(input_elf_files, input_filename);
         }
     }
 

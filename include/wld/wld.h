@@ -52,7 +52,7 @@
 
 typedef struct input_file {
     char *filename;
-    int is_library;       // On the command line with -l
+    int is_library_name;       // Passed on the command line with -l
 } InputFile;
 
 extern const char *DYNAMIC_SECTION_TYPE_NAMES[];

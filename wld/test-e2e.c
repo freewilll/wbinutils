@@ -676,14 +676,14 @@ static OutputElfFile *run_wld(List *input_filenames, int output_type, char **pou
         char *filename = input_filenames->elements[i];
         InputFile *input_file = malloc(sizeof(InputFile));
 
-        int is_library = 0;
+        int is_library_name = 0;
         if (filename[0] == '*') {
             filename++;
-            is_library = 1;
+            is_library_name = 1;
         }
 
         input_file->filename = strdup(filename);
-        input_file->is_library = is_library;
+        input_file->is_library_name = is_library_name;
         append_to_list(input_files, input_file);
     }
 

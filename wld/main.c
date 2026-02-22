@@ -55,7 +55,7 @@ int main(int argc, char **argv) {
             else if (argc > 1 && !strcmp(argv[0], "-l")) {
                 InputFile *input_file = malloc(sizeof(InputFile));
                 input_file->filename = argv[1];
-                input_file->is_library = 1;
+                input_file->is_library_name = 1;
                 append_to_list(input_files, input_file);
                 argc -= 2;
                 argv += 2;
@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
             else if (strlen(argv[0]) > 2 && argv[0][0] == '-' && argv[0][1] == 'l' ) {
                 InputFile *input_file = malloc(sizeof(InputFile));
                 input_file->filename = &argv[0][2];
-                input_file->is_library = 1;
+                input_file->is_library_name = 1;
                 append_to_list(input_files, input_file);
                 argc--;
                 argv++;
@@ -109,7 +109,7 @@ int main(int argc, char **argv) {
         else {
             InputFile *input_file = malloc(sizeof(InputFile));
             input_file->filename = argv[0];
-            input_file->is_library = 0;
+            input_file->is_library_name = 0;
             append_to_list(input_files, input_file);
             argc--;
             argv++;
