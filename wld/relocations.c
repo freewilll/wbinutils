@@ -222,10 +222,14 @@ static void add_R_X86_64_64_relocation(OutputElfFile *output_elf_file, InputElfF
     InputSection *relocation_input_section = NULL;
 
     Symbol *symbol = get_symbol_from_elf_symbol_index(input_elf_file, symbol_index);
-    if (!symbol) panic("Expected %s to be defined due to a relocation referencing it", symbol_name);
+    if (!symbol)
+        panic("In add_R_X86_64_64_relocation: Expected symbol at index %d to be defined due to a relocation referencing it in %s",
+            symbol_index,
+            input_elf_file ? input_elf_file->filename : "(unknown filename)");
+
     symbol->needs_dynsym_entry = 1;
 
-    RelativeRelaDynRelocation *rrdr = calloc(1,sizeof(RelativeRelaDynRelocation));
+    RelativeRelaDynRelocation *rrdr = calloc(1, sizeof(RelativeRelaDynRelocation));
     rrdr->target_section = input_section;
     rrdr->symbol = symbol;
     rrdr->relocation_input_section = relocation_input_section;
@@ -270,9 +274,15 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
     switch (type) {
         case R_X86_64_64:
             if (output_is_shared) {
-                if (symbol_is_from_shared_library || !is_executable)
+                if (symbol && (symbol_is_from_shared_library || !is_executable))
+                    // The symbol is defined and either defined in another shared library,
+                    // or or preemtible since we are building a shared library.
                     add_R_X86_64_64_relocation(output_elf_file, input_elf_file, input_section, relocation);
                 else
+                    // One of the following holds:
+                    // The symbol is undefined, meaning it's local and not preemptible
+                    // The symbol is defined and not from a shared library, so it's from an object file, so local.
+                    // The symbol is defined and the output is an executable, so it's not preemtible
                     add_R_X86_64_RELATIVE_relocation(output_elf_file, input_elf_file, input_section, relocation);
             }
 

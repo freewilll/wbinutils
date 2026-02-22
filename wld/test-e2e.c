@@ -2179,6 +2179,61 @@ void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files() {
         END);
 }
 
+void test_shared_library_R_X86_64_RELATIVE_relocations_from_local_strings() {
+    char *object_path = run_was(
+        "	.globl	s1;"
+        "	.section	.rodata;"
+        ".LC0:;"
+        "	.string	\"foo\";"
+        "	.section	.data;"
+        "	.align 8;"
+        "	.type	s1, @object;"
+        "	.size	s1, 8;"
+        "s1:;"
+        "	.quad	.LC0;"
+        "	.globl	s2;"
+        "	.section	.rodata;"
+        ".LC1:;"
+        "	.string	\"bar\";"
+        "	.section	.data;"
+        "	.align 8;"
+        "	.type	s2, @object;"
+        "	.size	s2, 8;"
+        "s2:;"
+        "	.quad	.LC1;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "test_shared_library_R_X86_64_RELATIVE_relocations_from_local_strings");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x07,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1068,   0x1068, 0x30,  SHF_ALLOC,                 8,
+        ".rodata",         SHT_PROGBITS,   0x2000,   0x2000, 0x08,  SHF_ALLOC,                 4,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a0,   0x30a0, 0x10,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x30a0,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "s1",
+        0x30a8,    8,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".data",   "s2",
+        END);
+
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Offset   Addend
+        R_X86_64_RELATIVE, 0,                0x30a0,  0x2000, // .rodata + 0 -> s1
+        R_X86_64_RELATIVE, 0,                0x30a8,  0x2004, // .rodata + 4 -> s2
+        END);
+}
+
 // An executable calls a function in a shared library through a function pointer
 // The function pointer has a R_X86_64_64 relocation which must make it
 // into the .rela.dyn of the executable.
@@ -2702,6 +2757,7 @@ int main() {
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_initialized_data();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_uninitialized_data();
     test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_two_files();
+    test_shared_library_R_X86_64_RELATIVE_relocations_from_local_strings();
     test_dynamic_executable_R_X86_64_64_relocation();
     test_dynamic_library_R_X86_64_64_relocation_for_function_pointer();
     test_dynamic_library_illegal_R_X86_64_PC32_relocation();
