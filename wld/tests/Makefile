@@ -40,6 +40,7 @@ test: \
 	musl-runtime-symbol-resolution-with-multiple-defines \
 	glibc-tls-alignment \
 	symbol-versioning \
+	symbol-versioning-double-undefined_symbol_resolution-with-default \
 	glibc-dynamic-hello-world \
 	glibc-dynamic-curses \
 
@@ -203,6 +204,10 @@ glibc-tls-alignment:
 symbol-versioning:
 	+$(MAKE) -C symbol-versioning
 
+.PHONY: symbol-versioning-double-undefined_symbol_resolution-with-default
+symbol-versioning-double-undefined_symbol_resolution-with-default:
+	+$(MAKE) -C symbol-versioning-double-undefined_symbol_resolution-with-default
+
 .PHONY: glibc-dynamic-hello-world
 glibc-dynamic-hello-world:
 	+$(MAKE) -C glibc-dynamic-hello-world
@@ -251,5 +256,6 @@ clean:
 	@+$(MAKE) -C musl-runtime-symbol-resolution-with-multiple-defines clean
 	@+$(MAKE) -C glibc-tls-alignment clean
 	@+$(MAKE) -C symbol-versioning clean
+	@+$(MAKE) -C symbol-versioning-double-undefined_symbol_resolution-with-default clean
 	@+$(MAKE) -C glibc-dynamic-hello-world clean
 	@+$(MAKE) -C glibc-dynamic-curses clean

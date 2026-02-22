@@ -531,6 +531,31 @@ static char *run_as(char *extra_args, char *assembly) {
     return strdup(object_path);
 }
 
+static char *make_lib_with_versioned_symbols(char *map_file_contents, char *object_file_path, char *lib_name) {
+    char map_path[] = "/tmp/vermap_XXXXXX";
+    int fd = mkstemp(map_path);
+    if (fd == -1) { perror("mkstemp"); exit(1); }
+    FILE *map_file = fdopen(fd, "w");
+    if (!map_file) { perror("fdopen"); exit(1); }
+    fprintf(map_file, "%s", map_file_contents);
+    fclose(map_file);
+
+    char lib_path[] = "/tmp/libtest.so.XXXXXX";
+    int lib_fd = mkstemp(lib_path);
+    if (lib_fd < 0) { perror("mkstemp failed"); exit(1); }
+    close(lib_fd);
+
+    char command[512];
+    snprintf(command, sizeof(command), "ld -shared -o %s %s --soname lib%s.so --version-script=%s", lib_path, object_file_path, lib_name, map_path);
+    int result = system(command);
+    if (result) {
+        printf("ld failed with exit code %d\n", result >> 8);
+        exit(1);
+    }
+
+    return strdup(lib_path);
+}
+
 static char *run_was(char *assembly) {
     // Write out assembly to a temp file
     char source_path[] = "/tmp/asm_XXXXXX";
@@ -2005,7 +2030,6 @@ static void test_lack_of_copy_relocation_in_two_shared_libs() {
     }
 }
 
-
 // Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
 // This tests a relocation from the .rodata section, without there being a symbol
 void test_dynamic_executable_R_X86_64_RELATIVE_relocations_from_rodata() {
@@ -2449,12 +2473,7 @@ void test_versioning_default_symbol() {
         ".symver f1_2,f1@V2;"
     );
 
-    char map_path[] = "/tmp/vermap_XXXXXX";
-    int fd = mkstemp(map_path);
-    if (fd == -1) { perror("mkstemp"); exit(1); }
-    FILE *map_file = fdopen(fd, "w");
-    if (!map_file) { perror("fdopen"); exit(1); }
-    fprintf(map_file,
+    make_lib_with_versioned_symbols(
         "V1 {\n"
         "    global:\n"
         "        f1;\n"
@@ -2463,22 +2482,8 @@ void test_versioning_default_symbol() {
         "V2 {\n"
         "    global:\n"
         "        f1;\n"
-        "};\n"
-    );
-    fclose(map_file);
-
-    char lib_path[] = "/tmp/libtest.so.XXXXXX";
-    int lib_fd = mkstemp(lib_path);
-    if (lib_fd < 0) { perror("mkstemp failed"); exit(1); }
-    close(lib_fd);
-
-    char command[512];
-    snprintf(command, sizeof(command), "ld -shared -o %s %s --soname libtest.so --version-script=%s", lib_path, object_path1, map_path);
-    int result = system(command);
-    if (result) {
-        printf("ld failed with exit code %d\n", result >> 8);
-        exit(1);
-    }
+        "};\n",
+        object_path1, "test");
 
     char *object_path2 = run_as(NULL,
         ".globl _start;"
@@ -2555,6 +2560,78 @@ void test_versioning_default_symbol() {
     assert_int(0, vna->vna_next, "libtest.so has one version");
 }
 
+// Test a case where two undefined symbols resolve to the same symbol.
+// One of the undefineds is unversioned, the other is bound to a specific version
+static void test_double_undefined_symbol_resolution_with_default() {
+    // Make libtest.so that exports f1@@V1
+    char *library1_object_path = run_as(NULL,
+        ".text;"
+        ".globl f1_1;"
+        ".type f1_1, @function;"
+        "f1_1:"
+        "    mov $1, %eax;"
+        "    ret;"
+        ".symver f1_1,f1@@V1;"
+    );
+
+    char *lib1_path = make_lib_with_versioned_symbols(
+        "V1 {\n"
+        "    global:\n"
+        "        f1;\n"
+        "};\n",
+        library1_object_path, "test");
+
+    // Make libtest2.so that uses f1. It will be bound to f1@1 after linking.
+    char *library2_object_path = run_as(NULL,
+        ".text;"
+        "f2:;"
+        "    call f1;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, "*test");
+    append_to_list(input_paths, library2_object_path);
+
+    char *lib_name2;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name2, 0, "double_undefined_symbol_resolution_with_default");
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x0000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, "UND",     "f1",
+        END);
+
+    // Check versym .gnu.version entries
+    assert_section_data(elf_file, ".gnu.version",
+        0x00, 0x00, // null
+        0x02, 0x00, // f1 has V1, index 2
+        END);
+
+    // Make an executable that uses f1
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start: call f1;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path); // Has undefined f1
+    append_to_list(input_paths, lib_name2);   // Has undefined f1@V1
+    append_to_list(input_paths, "*test");     // Resolves both f1 and f1@V1
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, "double_undefined_symbol_resolution_with_default");
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x0000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, "UND",     "f1",
+        END);
+
+    // Check versym .gnu.version entries
+    assert_section_data(elf_file, ".gnu.version",
+        0x00, 0x00, // null
+        0x02, 0x00, // f1 has V1, index 2
+        END);
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -2591,4 +2668,5 @@ int main() {
     test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library();
     test_dynamic_executable_GOT_AND_PLT_relocation();
     test_versioning_default_symbol();
+    test_double_undefined_symbol_resolution_with_default();
 }

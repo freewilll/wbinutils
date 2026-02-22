@@ -217,8 +217,8 @@ static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version
 }
 
 // Check if a symbol resolves an undefined symbol. If so and not read-only the undefined symbol is removed.
-// Returns the undefined symbol if one has been resolved.
-static Symbol *resolve_undefined_symbol(const char *name, int version_index, int is_default_version, int is_library, int read_only) {
+// Returns either zero, or a merge of the sources of the resolved symbol, if any.
+static int resolve_undefined_symbol(const char *name, int version_index, int is_default_version, int is_library, int read_only) {
     Symbol *undefined_symbol = get_undefined_symbol(name, version_index);
 
     int undefined_symbol_version_index = version_index;
@@ -229,15 +229,26 @@ static Symbol *resolve_undefined_symbol(const char *name, int version_index, int
         if (undefined_symbol) undefined_symbol_version_index = 0;
     }
 
-    if (!undefined_symbol) return NULL;
+    if (!undefined_symbol) return 0;
 
     // Resolve the undefined symbol.
     if (!read_only) remove_undefined_symbol(name, undefined_symbol_version_index);
 
-    // Weak undefined symbols don't get resolved if also found in a library.
-    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return NULL;
+    int sources = undefined_symbol->sources;
 
-    return undefined_symbol;
+    // A defined symbol with a default version may also a second undefined symbol without a version
+    if (is_default_version) {
+        Symbol *duplicate_undefined_symbol = get_undefined_symbol(name, GLOBAL_SYMBOL_INDEX_NONE);
+        if (duplicate_undefined_symbol) {
+            if (!read_only) remove_undefined_symbol(name, GLOBAL_SYMBOL_INDEX_NONE);
+            sources |= duplicate_undefined_symbol->sources;
+        }
+    }
+
+    // Weak undefined symbols don't get resolved if also found in a library.
+    if (undefined_symbol->binding == STB_WEAK && is_library && read_only) return 0;
+
+    return sources;
 }
 
 static Symbol *add_undefined_symbol(const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
@@ -471,8 +482,9 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
             new_symbol->is_common = 0;
         }
 
-        Symbol *resolved_undefined_symbol = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
-        result = !!resolved_undefined_symbol;
+        // Multiple undefined symbols can have been resolved. We're interested if any of them came from an object file.
+        int resolved_undefined_symbol_sources = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+        result = !!resolved_undefined_symbol_sources;
 
         // When loading a symbol from a shared library, note if this symbol resolves an undefined symbol.
         //
@@ -482,7 +494,7 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
         // - Symbol is GLOBAL
         // - Symbol is defined in a shared object
         if (
-            resolved_undefined_symbol && (resolved_undefined_symbol->sources & SRC_OBJECT) &&
+            resolved_undefined_symbol_sources & SRC_OBJECT &&
             new_symbol && new_symbol->type == STT_OBJECT &&
             new_symbol->binding == STB_GLOBAL &&
             esc->source == SRC_SHARED_LIBRARY

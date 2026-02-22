@@ -10,13 +10,13 @@ all: test
 
 test: run-main
 
-libtest.so: libtest.c
+libtest.so: libtest.c libtest.map
 	${GCC} libtest.c -o libtest.so -shared -Wl,--version-script=libtest.map
 
 main.o: main.c
 	${GCC} -c main.c -o main.o
 
-main: main.o libtest.map libtest.so
+main: main.o libtest.so
 	${WLD}                                                \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
