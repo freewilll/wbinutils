@@ -336,27 +336,44 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
     int is_common = esc->elf_symbol->st_shndx == SHN_COMMON;
 
     if (found_symbol) {
+        if (DEBUG_SYMBOL_RESOLUTION)
+            printf("  Merging two common symbols %s ...", found_symbol->name);
+
         if (!found_symbol->is_common && is_common) {
             // Not common - common
+            if (DEBUG_SYMBOL_RESOLUTION) printf("doing nothing since existing is not common and new is common\n");
             return 0;
         }
         else if (found_symbol->is_common && !is_common) {
             // Common - not common
-            // The new symbol takes over from the common symbol
-            result = 1;
 
             if (!esc->read_only) {
-                InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
-                found_symbol->src_elf_file = esc->elf_file;
-                found_symbol->input_section = input_section;
-                found_symbol->src_value = esc->elf_symbol->st_value;
-                found_symbol->is_common = 0;
+
+                if (esc->elf_file->type != ET_DYN) {
+                    // The new symbol takes over from the common symbol
+                    if (DEBUG_SYMBOL_RESOLUTION) printf("the new symbol takes over since it's not common\n");
+
+                    InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
+                    found_symbol->src_elf_file = esc->elf_file;
+                    found_symbol->input_section = input_section;
+                    found_symbol->src_value = esc->elf_symbol->st_value;
+                    found_symbol->is_common = 0;
+                }
+                else {
+                    // No data is imported from a shared library. It's easiest to use the existing machinery that allocates
+                    // .bss entries for common symbols. So ignore the new symbol and let the old one do it's thing.
+                    if (DEBUG_SYMBOL_RESOLUTION) printf("the existing common symbol remains, since the new symbol is not common and is in a shared library\n");
+
+                    found_symbol->needs_dynsym_entry = 1;
+                }
             }
 
             return 0;
         }
         else {
             // Common - common
+            if (DEBUG_SYMBOL_RESOLUTION) printf("both symbols are common, adjusting size of the existing symbol\n");
+
             if (esc->elf_symbol->st_size > found_symbol->size) {
                 found_symbol->size = esc->elf_symbol->st_size;
                 return 1;
@@ -415,9 +432,11 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
     InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
 
     if (found_symbol)  {
-        if (DEBUG_SYMBOL_RESOLUTION) printf("  Merging two symbols %s existing binding=%s found binding=%s ...",
-            found_symbol->name, SYMBOL_BINDING_NAMES[found_symbol->binding], SYMBOL_BINDING_NAMES[esc->binding]);
-        // Check bindings
+        if (DEBUG_SYMBOL_RESOLUTION)
+            printf("  Merging two symbols %s existing binding=%s found binding=%s ...",
+                found_symbol->name, SYMBOL_BINDING_NAMES[found_symbol->binding], SYMBOL_BINDING_NAMES[esc->binding]);
+
+                // Check bindings
 
         // Two strong bindings
         if (found_symbol->binding != STB_WEAK && esc->binding != STB_WEAK) {
@@ -836,7 +855,6 @@ int common_symbols_are_present(void) {
     return 0;
 }
 
-// Returns 1 if any defined symbols are common
 void layout_common_symbols_in_bss_section(OutputSection *bss_section) {
     uint64_t offset = bss_section->size;
     int section_align = 1;
@@ -880,7 +898,8 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
             // Skip weak undefined symbols that don't have a input_section
             if (symbol->input_section) {
                 // Get the output section
-                if (!symbol->input_section->output_section) panic("Unexpectedly got null output_section for %s from %s\n", symbol->name, symbol->input_section->name);
+                if (!symbol->input_section->output_section) panic("Unexpectedly got null output_section for %s from %s\n",
+                    symbol->name, symbol->input_section->name);
 
                 OutputSection *rw_section = symbol->input_section->output_section;
                 if (!rw_section) panic("Unexpected empty output section for %s", snv->full_name);

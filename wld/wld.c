@@ -762,7 +762,7 @@ OutputSection *get_or_create_create_bss_section(OutputElfFile *output) {
     return output->section_bss;
 }
 
-// If there are any common symbols, create a bss section and allocate values the symbols
+// If there are any common symbols, create a bss section and allocate values for the symbols
 static void add_common_symbols_to_bss(OutputElfFile *output) {
     if (!common_symbols_are_present()) return;
 

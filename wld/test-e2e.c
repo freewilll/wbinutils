@@ -2511,6 +2511,57 @@ void test_dynamic_executable_GOT_AND_PLT_relocation() {
         END);
 }
 
+void test_dynamic_executable_with_bss_section_from_library() {
+    // Make a lib with some .bss data
+    char *object_path1 = run_was(
+        ".globl i;"
+        ".globl j;"
+        ".section .bss,\"aw\",@nobits;"
+        "i: .zero 4;"
+        "j: .zero 4;"
+        "k: .zero 4;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_with_bss_section_from_library");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+
+    char *object_path2 = run_was(
+    ".comm i, 4, 4;"
+    ".comm j, 4, 4;"
+    ".globl _start;"
+    "_start:;"
+    "    movl        i(%rip), %eax;"
+    "    movl        j(%rip), %eax;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path2);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_with_bss_section_from_library");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x18,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1018,   0x1018, 0x48,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1060,   0x1060, 0x15,  SHF_ALLOC,                 1,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x0c,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x80,  SHF_ALLOC | SHF_WRITE,     8,
+        ".bss",            SHT_NOBITS,     0x3080,   0x3080, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x3080,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "i",
+        0x3084,    4,     STT_OBJECT, STB_GLOBAL, STV_DEFAULT, ".bss",    "j",
+        END);
+}
+
 void test_versioning_default_symbol() {
     char *object_path1 = run_as(NULL,
         ".text;"
@@ -2763,6 +2814,7 @@ int main() {
     test_dynamic_library_illegal_R_X86_64_PC32_relocation();
     test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library();
     test_dynamic_executable_GOT_AND_PLT_relocation();
+    test_dynamic_executable_with_bss_section_from_library();
     test_versioning_default_symbol();
     test_double_undefined_symbol_resolution_with_default();
     test_silly_bss_section_loading_bug();
