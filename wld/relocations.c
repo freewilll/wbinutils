@@ -125,6 +125,9 @@ static Symbol *get_symbol_from_relocation(InputElfFile *input_elf_file, ElfReloc
 }
 
 static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbol) {
+    // Local symbols may not be bound dynamically
+    if (symbol && symbol->binding == STB_LOCAL) return 0;
+
     int symbol_is_from_shared_library = 0;
     if (symbol && symbol->src_elf_file) symbol_is_from_shared_library = symbol->src_elf_file->type == ET_DYN;
 

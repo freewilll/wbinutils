@@ -15,6 +15,7 @@ test: \
 	symbol-resolution-with-common-sections \
 	symbol-resolution-weak-strong-in-library \
 	symbol-resolution-weak-strong-both-defined-in-library \
+	symbol-resolution-weak-symbol-in-shared-library \
 	local-symbols \
 	abs-symbol \
 	symbol-resolution-with-mixed-bss-and-common-sections \
@@ -105,6 +106,10 @@ symbol-resolution-weak-strong-in-library:
 .PHONY: symbol-resolution-weak-strong-both-defined-in-library
 symbol-resolution-weak-strong-both-defined-in-library:
 	+$(MAKE) -C symbol-resolution-weak-strong-both-defined-in-library
+
+.PHONY: symbol-resolution-weak-symbol-in-shared-library
+symbol-resolution-weak-symbol-in-shared-library:
+	+$(MAKE) -C symbol-resolution-weak-symbol-in-shared-library
 
 .PHONY: local-symbols
 local-symbols:
@@ -241,6 +246,7 @@ clean:
 	@+$(MAKE) -C symbol-resolution-with-common-sections clean
 	@+$(MAKE) -C symbol-resolution-weak-strong-in-library clean
 	@+$(MAKE) -C symbol-resolution-weak-strong-both-defined-in-library clean
+	@+$(MAKE) -C symbol-resolution-weak-symbol-in-shared-library clean
 	@+$(MAKE) -C local-symbols clean
 	@+$(MAKE) -C abs-symbol clean
 	@+$(MAKE) -C symbol-resolution-with-mixed-bss-and-common-sections clean

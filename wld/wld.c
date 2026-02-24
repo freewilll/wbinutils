@@ -921,6 +921,9 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     // At this point all symbols should be defined. Ensure this is the case.
     finalize_symbols(output_elf_file);
 
+    // When making a shared library, convert all weak symbols to local, with default visibility
+    convert_hidden_symbols(output_elf_file);
+
     // Relax instructions where possible and determine which symbols need to be in the GOT
     process_relocations(output_elf_file, input_elf_files, RELOCATION_PHASE_SCAN);
 

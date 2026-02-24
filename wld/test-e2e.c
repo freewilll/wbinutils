@@ -2562,6 +2562,33 @@ void test_dynamic_executable_with_bss_section_from_library() {
         END);
 }
 
+// Hidden symbols must be converted to local ones when
+// making a shared library.
+void test_making_a_shared_library_using_a_hidden_symbol() {
+    // Make a lib with some .bss data
+    char *object_path = run_as(NULL,
+        ".globl f;"
+        ".hidden f;"
+        ".type f, @function;"
+        ".text;"
+        "f: ret;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_with_bss_section_from_library");
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section   Name
+        0x2000,    0,     STT_FUNC,   STB_LOCAL,  STV_DEFAULT, ".text",  "f",
+        0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        END);
+
+    assert_dynsym(elf_file, END);
+}
+
 void test_versioning_default_symbol() {
     char *object_path1 = run_as(NULL,
         ".text;"
@@ -2815,6 +2842,7 @@ int main() {
     test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library();
     test_dynamic_executable_GOT_AND_PLT_relocation();
     test_dynamic_executable_with_bss_section_from_library();
+    test_making_a_shared_library_using_a_hidden_symbol();
     test_versioning_default_symbol();
     test_double_undefined_symbol_resolution_with_default();
     test_silly_bss_section_loading_bug();

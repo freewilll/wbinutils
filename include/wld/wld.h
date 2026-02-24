@@ -37,8 +37,8 @@
 #define INIT_ARRAY_SECTION_NAME ".init_array"
 #define FINI_ARRAY_SECTION_NAME ".fini_array"
 
-#define DEBUG_SYMBOL_RESOLUTION     0
-#define DEBUG_SYMBOL_VERSIONS       0
+#define DEBUG_SYMBOL_RESOLUTION     0//1//0//1// 1//wwip
+#define DEBUG_SYMBOL_VERSIONS       0// 1//wwip
 #define DEBUG_RELOCATIONS           0
 #define DEBUG_RELOCATION_RELAXATION 0
 #define DEBUG_LAYOUT                0

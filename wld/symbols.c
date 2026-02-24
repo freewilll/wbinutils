@@ -61,7 +61,7 @@ static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, c
     if (!strcmp(symbol->name, ".")) return 0;
 
     // Hidden and internal symbols never go in the .dynsym
-    if (symbol->visibility == STV_HIDDEN || symbol->visibility == STV_INTERNAL) return 0;
+    if (symbol->other == STV_HIDDEN || symbol->other == STV_INTERNAL) return 0;
 
     // Local symbols are never go in the .dynsym
     if (symbol->binding == STB_LOCAL) return 0;
@@ -194,12 +194,12 @@ static void remove_undefined_symbol(const char *name, int version_index) {
 Symbol *new_symbol(const char *name, int type, int binding, int other, uint64_t size, int source) {
     Symbol *symbol = calloc(1, sizeof(Symbol));
 
-    symbol->name                  = strdup(name);
-    symbol->type                  = type;
-    symbol->binding               = binding;
-    symbol->other                 = other;
-    symbol->size                  = size;
-    symbol->sources               = source;
+    symbol->name    = strdup(name);
+    symbol->type    = type;
+    symbol->binding = binding;
+    symbol->other   = other;
+    symbol->size    = size;
+    symbol->sources = source;
 
     return symbol;
 }
@@ -210,7 +210,7 @@ static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version
     map_ordered_put(st->defined_symbols, snv, symbol);
 
     if (DEBUG_SYMBOL_RESOLUTION)
-        printf("  Added defined symbol %s binding=%s\n", snv->full_name, SYMBOL_BINDING_NAMES[binding]);
+        printf("  Added defined symbol %s binding=%s other=%s\n", snv->full_name, SYMBOL_BINDING_NAMES[binding], SYMBOL_VISIBILITY_NAMES[other]);
 
 
     return symbol;
@@ -252,7 +252,6 @@ static int resolve_undefined_symbol(const char *name, int version_index, int is_
 }
 
 static Symbol *add_undefined_symbol(const char *name, int version_index, int type, int binding, int other, uint64_t size, int source) {
-
     Symbol *symbol = new_symbol(name, type, binding, other, size, source);
     SymbolNV *snv = new_symbolnv(name, version_index, 0, 0);
     map_ordered_put(global_symbol_table->undefined_symbols, snv, symbol);
@@ -280,12 +279,12 @@ Symbol *get_or_add_linker_script_symbol(CommandAssignment *assignment) {
 
         symbol = new_symbol(name, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, SRC_INTERNAL);
         strmap_ordered_put(provided_symbols, name, symbol);
-        if (assignment->provide_hidden) symbol->visibility = STV_HIDDEN;
+        if (assignment->provide_hidden) symbol->other = STV_HIDDEN;
         symbol->is_abs = 1;
     }
     else {
         int version_index = 0;
-        symbol = add_defined_symbol(global_symbol_table, name, version_index, STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, 0, SRC_INTERNAL);
+        symbol = add_defined_symbol(global_symbol_table, name, version_index, STT_NOTYPE, STB_GLOBAL, 0, 0, SRC_INTERNAL);
         symbol->is_abs = 1;
         resolve_undefined_symbol(name, 0, 0, 0, 0);
     }
@@ -736,6 +735,20 @@ void finalize_symbols(OutputElfFile *output_elf_file) {
     error("Unable to resolve undefined references");
 }
 
+// When making a shared library, convert all weak symbols to local, with default visibility
+void convert_hidden_symbols(OutputElfFile *output_elf_file) {
+    if (output_elf_file->type != ET_DYN || output_elf_file->is_executable) return;
+
+    map_ordered_foreach(global_symbol_table->defined_symbols, it) {
+        const SymbolNV *snv = map_ordered_iterator_key(&it);
+        Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
+        if (symbol->other != STV_HIDDEN) continue;
+        if (DEBUG_SYMBOL_RESOLUTION) printf("Converting %s from hidden to local/default\n", snv->full_name);
+        symbol->binding = STB_LOCAL;
+        symbol->other = STV_DEFAULT;
+    }
+}
+
 static char *print_section_string(Symbol *symbol) {
     OutputSection *rw_section = symbol->output_section;
     int rw_section_index = rw_section ? rw_section->index : 0;
@@ -944,7 +957,7 @@ static void add_elf_symbols_from_symbol_table (OutputElfFile *output_elf_file, S
         if (output_elf_file->type == ET_DYN && !(symbol->sources & (SRC_INTERNAL | SRC_OBJECT | SRC_LIBRARY))) continue;
 
         int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
-        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
+        symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->other, section_index);
 
         // Update the symtab info section so that it points to the last local symbol
         if (binding == STB_LOCAL) output_elf_file->section_symtab->info = symbol->dst_index + 1;
@@ -995,7 +1008,7 @@ int add_dynstr_string(OutputElfFile *output_elf_file, const char *name) {
 
 // Add a symbol to the ELF symbol table dynsym
 // This function must be called with all local symbols first, then all global symbols
-static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int visibility, int section_index) {
+static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, long value, long size, int binding, int type, int other, int section_index) {
     InputSection *section_dynsym = output_elf_file->section_dynsym;
 
     int dynstr_offset = add_dynstr_string(output_elf_file, name);
@@ -1006,7 +1019,7 @@ static int add_elf_dyn_symbol(OutputElfFile *output_elf_file, const char *name, 
     symbol->st_value = value;
     symbol->st_size = size;
     symbol->st_info = (binding << 4) + type;
-    symbol->st_other = visibility;
+    symbol->st_other = other;
     symbol->st_shndx = section_index;
 
     int index = symbol - (ElfSymbol *) section_dynsym->data;
@@ -1039,7 +1052,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
         seen_version_indexes[snv->version_index] = 1;
 
         int section_index = symbol->is_abs ? SHN_ABS : SHN_UNDEF;
-        symbol->dst_dynsym_index = add_elf_dyn_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->visibility, section_index);
+        symbol->dst_dynsym_index = add_elf_dyn_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->other, section_index);
 
         dynsym_symbol_count++;
 
@@ -1162,7 +1175,7 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
 static Symbol *add_hidden_symbol(char *name) {
     Symbol *symbol = add_defined_symbol(global_symbol_table, name, 0, STT_NOTYPE, STB_GLOBAL, 0, 0, SRC_INTERNAL);
     symbol->is_abs = 1;
-    symbol->visibility = STV_HIDDEN;
+    symbol->other = STV_HIDDEN;
     return symbol;
 }
 
@@ -1785,7 +1798,7 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
 // Add a _DYNAMIC symbol for ET_DYN outputs
 void add_dynamic_symbol(OutputElfFile *output_elf_file) {
     if (output_elf_file->type == ET_DYN) {
-        add_defined_symbol(global_symbol_table, DYNAMIC_SYMBOL_NAME, 0, STT_OBJECT, STB_LOCAL, STV_DEFAULT, 0, SRC_INTERNAL);
+        add_defined_symbol(global_symbol_table, DYNAMIC_SYMBOL_NAME, 0, STT_OBJECT, STB_LOCAL, 0, 0, SRC_INTERNAL);
         resolve_undefined_symbol(DYNAMIC_SYMBOL_NAME, 0, 0, 0, 0);
     }
 }

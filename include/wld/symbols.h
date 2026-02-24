@@ -48,7 +48,6 @@ typedef struct symbol {
     uint64_t size;
     int is_abs;                         // The src value is an absolute address
     int is_common;                      // The symbol is a common symbol. input_section is null.
-    int visibility;                     // Used by the linker
     int sources;                        // A combination of at least one of SRC_*
     int extra;                          // One of SE_*
     int needs_dynsym_entry;             // Set to 1 if the symbol needs a dynsym entry. 0 doesn't exclude it from the .dynsym.
@@ -104,6 +103,7 @@ void debug_print_global_symbol_version_indexes();
 int process_elf_file_symbols(InputElfFile *elf_file, int source, int read_only);
 void resolve_provided_symbols(OutputElfFile *output_elf_file);
 void finalize_symbols(OutputElfFile *output_elf_file);
+void convert_hidden_symbols(OutputElfFile *output_elf_file);
 void dump_output_symbols(OutputElfFile *output_elf_file);
 void debug_print_symbol(Symbol *symbol);
 void debug_summarize_symbols(void);
