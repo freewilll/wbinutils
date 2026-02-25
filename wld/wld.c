@@ -366,16 +366,16 @@ static OutputSection *get_non_empty_output_section(OutputElfFile *output_elf_fil
     return section;
 }
 
-static void make_dynamic_section_entry_count(OutputElfFile *output_elf_file, char *soname) {
+static void make_dynamic_section_entry_count(OutputElfFile *output_elf_file, char *soname, List *rpaths) {
     int dynamic_section_entry_count = BASE_DYNAMIC_SECTION_ENTRY_COUNT + output_elf_file->shared_libraries->length;
-
+    if (soname) dynamic_section_entry_count++;
+    if (rpaths->length > 0) dynamic_section_entry_count++;
     if (get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (get_non_empty_output_section(output_elf_file, FINI_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (output_elf_file->verneed_names && output_elf_file->verneed_names->length > 0) dynamic_section_entry_count += 2;
     if (get_extra_section(output_elf_file, VERSYM_SECTION_NAME)) dynamic_section_entry_count += 1;
     if (output_elf_file->rela_dyn_entry_count > 0) dynamic_section_entry_count += 3;
     if (output_elf_file->got_plt_entries_count > 0) dynamic_section_entry_count += 4;
-    if (soname) dynamic_section_entry_count++;
 
     output_elf_file->dynamic_section_entry_count = dynamic_section_entry_count;
 }
@@ -400,11 +400,11 @@ static void create_interp_section(OutputElfFile *output_elf_file, char *dynamic_
 }
 
 // Add several sections if it's a shared library
-static void create_dynamic_sections(OutputElfFile *output_elf_file, List *input_elf_files, char *soname) {
+static void create_dynamic_sections(OutputElfFile *output_elf_file, List *input_elf_files, char *soname, List *rpaths) {
     if (output_elf_file->type != ET_DYN) return;
 
     make_shared_libraries_list(output_elf_file, input_elf_files);
-    make_dynamic_section_entry_count(output_elf_file, soname);
+    make_dynamic_section_entry_count(output_elf_file, soname, rpaths);
 
     InputSection *section_dynamic = create_extra_section(output_elf_file, DYNAMIC_SECTION_NAME, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE, 8);
     section_dynamic->size = output_elf_file->dynamic_section_entry_count * sizeof(ElfDyn);
@@ -424,10 +424,30 @@ static void create_dynamic_sections(OutputElfFile *output_elf_file, List *input_
         int dynstr_offset = add_dynstr_string(output_elf_file, filename);
         set_in_dynamic_section(output_elf_file, pos++, DT_NEEDED, dynstr_offset);
     }
+
+    if (rpaths->length > 0) {
+        // Make colon separated string of the rpaths
+        int size = 0;
+        for (int i = 0; i < rpaths->length; i++) size += strlen((char *) rpaths->elements[i]);
+        size += rpaths->length; // rpaths->length-1 colons + 1 zero end byte
+        char *runpath = malloc(size);
+
+        int p = 0;
+        for (int i = 0; i < rpaths->length; i++) {
+            int l = strlen((char *) rpaths->elements[i]);
+            memcpy(&runpath[p], rpaths->elements[i], l);
+            p += l;
+            if (i != rpaths->length - 1) runpath[p++] = ':';
+        }
+        runpath[p] = 0;
+
+        int dynstr_offset = add_dynstr_string(output_elf_file, runpath);
+        set_in_dynamic_section(output_elf_file, pos++, DT_RUNPATH, dynstr_offset);
+    }
 }
 
 // Update values in .dynamic section
-static void update_dynamic_sections(OutputElfFile *output_elf_file, char *soname) {
+static void update_dynamic_sections(OutputElfFile *output_elf_file, char *soname, List *rpaths) {
     if (output_elf_file->type != ET_DYN) return;
 
     InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
@@ -444,6 +464,7 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file, char *soname
 
     int pos = output_elf_file->shared_libraries->length;
     if (soname) pos++;
+    if (rpaths->length > 0) pos++;
 
     set_in_dynamic_section(output_elf_file, pos++, DT_STRTAB, section_dynstr->output_section->address);
     set_in_dynamic_section(output_elf_file, pos++, DT_SYMTAB, section_dynsym->output_section->address);
@@ -885,7 +906,10 @@ static void copy_extra_sections_to_output(OutputElfFile *output_elf_file) {
     }
 }
 
-OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker, char *soname) {
+OutputElfFile *run(
+    List *library_paths, List *linker_scripts, List *input_files,
+    const char *output_filename, int output_type, char *dynamic_linker, char *soname, List *rpaths) {
+
     // Create output file
     OutputElfFile *output_elf_file = init_output_elf_file(output_filename, output_type);
 
@@ -955,7 +979,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     create_dyn_rela_section(output_elf_file);
 
     // Add .dynamic section if it's a shared library
-    create_dynamic_sections(output_elf_file, input_elf_files, soname);
+    create_dynamic_sections(output_elf_file, input_elf_files, soname, rpaths);
 
     // Add an .interp section if the dynamic linker is set
     create_interp_section(output_elf_file, dynamic_linker);
@@ -975,7 +999,7 @@ OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files,
     layout_output_sections(output_elf_file, input_elf_files);
 
     // Update values in .dynamic section
-    update_dynamic_sections(output_elf_file, soname);
+    update_dynamic_sections(output_elf_file, soname, rpaths);
 
     // Remove sections from the section list that did not get included in the final file
     remove_empty_sections(output_elf_file);

@@ -21,6 +21,7 @@ int main(int argc, char **argv) {
     List *linker_scripts = new_list(32);
     char *dynamic_linker = NULL;
     char *soname = NULL;
+    List *rpaths = new_list(1);
 
     argc--;
     argv++;
@@ -102,6 +103,12 @@ int main(int argc, char **argv) {
                 argc -= 2;
                 argv += 2;
             }
+            // -rpath x
+            else if (!strcmp(argv[0], "-rpath")) {
+                append_to_list(rpaths, argv[1]);
+                argc -= 2;
+                argv += 2;
+            }
             else {
                 error("Unknown parameter %s\n", argv[0]);
             }
@@ -128,6 +135,7 @@ int main(int argc, char **argv) {
         printf("-dynamic-linker  Set the name of the dynamic linker\n");
         printf("-pie             Mostly ignored, is present for compatibility with gcc\n");
         printf("-soname          The name set in DT_SONAME in a shared library\n");
+        printf("-rpath           Add a path to the runpath search list\n");
         exit(1);
     }
 
@@ -164,7 +172,7 @@ int main(int argc, char **argv) {
         error("Missing input filename");
     }
 
-    run(library_paths, linker_scripts, input_files, output_filename, output_type, dynamic_linker, soname);
+    run(library_paths, linker_scripts, input_files, output_filename, output_type, dynamic_linker, soname, rpaths);
 
     exit(exit_code);
 }

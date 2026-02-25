@@ -37,8 +37,8 @@
 #define INIT_ARRAY_SECTION_NAME ".init_array"
 #define FINI_ARRAY_SECTION_NAME ".fini_array"
 
-#define DEBUG_SYMBOL_RESOLUTION     0//1//0//1// 1//wwip
-#define DEBUG_SYMBOL_VERSIONS       0// 1//wwip
+#define DEBUG_SYMBOL_RESOLUTION     0
+#define DEBUG_SYMBOL_VERSIONS       0
 #define DEBUG_RELOCATIONS           0
 #define DEBUG_RELOCATION_RELAXATION 0
 #define DEBUG_LAYOUT                0
@@ -68,6 +68,6 @@ void dump_relocations(OutputSection* section);
 void dump_sections(OutputElfFile *output_elf_file);
 void dump_program_segments(OutputElfFile *output_elf_file);
 OutputSection *get_or_create_create_bss_section(OutputElfFile *output);
-OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker, char *soname);
+OutputElfFile *run(List *library_paths, List *linker_scripts, List *input_files, const char *output_filename, int output_type, char *dynamic_linker, char *soname, List *rpaths);
 
 #endif

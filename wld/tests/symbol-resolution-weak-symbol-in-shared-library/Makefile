@@ -39,6 +39,7 @@ main: main.o libtest1.so libtest2.o
 	main.o                                       \
 	libtest1.so                                  \
 	libtest2.o                                   \
+	-rpath .                                     \
 	-lc                                          \
 	-lgcc                                        \
 	-lgcc_eh                                     \
@@ -48,7 +49,7 @@ main: main.o libtest1.so libtest2.o
 	-pie
 
 run-main: main
-	LD_LIBRARY_PATH=. ./main
+	./main
 
 clean:
 	rm -f main

@@ -714,7 +714,9 @@ static OutputElfFile *run_wld(List *input_filenames, int output_type, char **pou
     List *library_paths = new_list(0);
     append_to_list(library_paths, "/tmp");
 
-    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, output_type, NULL, soname);
+    List *rpaths = new_list(0);
+
+    OutputElfFile *elf_file = run(library_paths, linker_scripts, input_files, output_path, output_type, NULL, soname, rpaths);
 
     if (run_executable) {
         // Run the executable and assert an exit code of zero
