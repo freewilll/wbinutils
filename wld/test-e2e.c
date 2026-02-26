@@ -540,10 +540,17 @@ static char *make_lib_with_versioned_symbols(char *map_file_contents, char *obje
     fprintf(map_file, "%s", map_file_contents);
     fclose(map_file);
 
-    char lib_path[] = "/tmp/libtest.so.XXXXXX";
-    int lib_fd = mkstemp(lib_path);
-    if (lib_fd < 0) { perror("mkstemp failed"); exit(1); }
-    close(lib_fd);
+    char *lib_path;
+    if (lib_name) {
+        lib_path = malloc(strlen(lib_name) + 12);
+        sprintf(lib_path, "/tmp/lib%s.so", lib_name);
+    }
+    else {
+        lib_path = "/tmp/libtest.so.XXXXXX";
+        int lib_fd = mkstemp(lib_path);
+        if (lib_fd < 0) { perror("mkstemp failed"); exit(1); }
+        close(lib_fd);
+    }
 
     char command[512];
     snprintf(command, sizeof(command), "ld -shared -o %s %s --soname lib%s.so --version-script=%s", lib_path, object_file_path, lib_name, map_path);
@@ -2608,7 +2615,7 @@ void test_versioning_default_symbol() {
         ".symver f1_2,f1@V2;"
     );
 
-    make_lib_with_versioned_symbols(
+    char *library1_path = make_lib_with_versioned_symbols(
         "V1 {\n"
         "    global:\n"
         "        f1;\n"
@@ -2629,7 +2636,7 @@ void test_versioning_default_symbol() {
 
     List *input_paths = new_list(2);
     append_to_list(input_paths, object_path2);
-    append_to_list(input_paths, "*test");
+    append_to_list(input_paths, library1_path);
 
     OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "versioning_default_symbol");
 
@@ -2709,7 +2716,7 @@ static void test_double_undefined_symbol_resolution_with_default() {
         ".symver f1_1,f1@@V1;"
     );
 
-    char *lib1_path = make_lib_with_versioned_symbols(
+    char *library1_path = make_lib_with_versioned_symbols(
         "V1 {\n"
         "    global:\n"
         "        f1;\n"
@@ -2724,7 +2731,7 @@ static void test_double_undefined_symbol_resolution_with_default() {
     );
 
     List *input_paths = new_list(1);
-    append_to_list(input_paths, "*test");
+    append_to_list(input_paths, library1_path);
     append_to_list(input_paths, library2_object_path);
 
     char *lib_name2;
