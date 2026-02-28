@@ -212,7 +212,6 @@ static Symbol *add_defined_symbol(SymbolTable *st, const char *name, int version
     if (DEBUG_SYMBOL_RESOLUTION)
         printf("  Added defined symbol %s binding=%s other=%s\n", snv->full_name, SYMBOL_BINDING_NAMES[binding], SYMBOL_VISIBILITY_NAMES[other]);
 
-
     return symbol;
 }
 
@@ -334,6 +333,15 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
 
     int is_common = esc->elf_symbol->st_shndx == SHN_COMMON;
 
+    // Determine if the ELF symbol is in a .bss section
+    int is_bss = 0;
+    if (esc->elf_symbol->st_shndx < SHN_LORESERVE) {
+        InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
+        if (esc->elf_symbol->st_shndx >= esc->elf_file->section_list->length) panic("Section index exceeds section list");
+        if (!input_section) panic("Unexpectedly got an empty input section %d in %s", esc->elf_symbol->st_shndx, esc->elf_file->filename);
+        if (input_section->type & SHT_NOBITS) is_bss = 1;
+    }
+
     if (found_symbol) {
         if (DEBUG_SYMBOL_RESOLUTION)
             printf("  Merging two common symbols %s ...", found_symbol->name);
@@ -347,7 +355,6 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
             // Common - not common
 
             if (!esc->read_only) {
-
                 if (esc->elf_file->type != ET_DYN) {
                     // The new symbol takes over from the common symbol
                     if (DEBUG_SYMBOL_RESOLUTION) printf("the new symbol takes over since it's not common\n");
@@ -359,11 +366,33 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
                     found_symbol->is_common = 0;
                 }
                 else {
-                    // No data is imported from a shared library. It's easiest to use the existing machinery that allocates
-                    // .bss entries for common symbols. So ignore the new symbol and let the old one do it's thing.
+                    // A commmon symbol is resolved using a non-common symbol in a shared library.
+                    // There are two cases:
+                    // The symbol in the library is in the .bss
+                    // The symbol in the library is not in the .bss
                     if (DEBUG_SYMBOL_RESOLUTION) printf("the existing common symbol remains, since the new symbol is not common and is in a shared library\n");
 
                     found_symbol->needs_dynsym_entry = 1;
+
+                    // If the symbol in the library is in the .bss, continue to treat the symbol as a common symbol. This will lead to an allocation in the .bss.
+                    // Otherwise, treat it as a regular symbol, which will lead to a COPY relocation to be added.
+                    found_symbol->is_common = is_bss;
+
+                    // When loading a symbol from a shared library, note if this symbol resolves an undefined symbol.
+                    //
+                    // If:
+                    // - Symbol is undefined in an object file, so it participates in the link
+                    // - Symbol type is STT_OBJECT
+                    // - Symbol is GLOBAL
+                    // - Symbol is defined in a shared object
+                    // - Symbol is not in the .bss in the shared object
+                    if (
+                        found_symbol->type == STT_OBJECT &&
+                        found_symbol->binding == STB_GLOBAL &&
+                        !is_bss
+                    ) {
+                        found_symbol->needs_copy_relocation = 1;
+                    }
                 }
             }
 
@@ -386,7 +415,7 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
             Symbol *new_symbol = add_defined_symbol(global_symbol_table, esc->snv->name, esc->snv->version_index, esc->type, esc->binding, esc->other, esc->size, esc->source);
             new_symbol->src_elf_file = esc->elf_file;
             new_symbol->input_section = NULL;
-            new_symbol->src_value = esc->elf_symbol->st_value;
+            new_symbol->src_value = esc->elf_symbol->st_value; // This may seem odd, but in ELF, alignment for common symbols is stored in the value
             new_symbol->is_common = 1;
         }
 
@@ -520,8 +549,10 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
         found_symbol && found_symbol->type == STT_OBJECT &&
         found_symbol->binding == STB_GLOBAL &&
         esc->source == SRC_SHARED_LIBRARY
-    )
-        found_symbol->resolves_undefined_symbol = 1;
+    ) {
+        // Note: the relocation might be copying data from the .bss in a library, but that's ok.
+        found_symbol->needs_copy_relocation = 1;
+    }
 
     return result;
 }
@@ -1763,10 +1794,12 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
-        if (!symbol->resolves_undefined_symbol) continue;
+        if (!symbol->needs_copy_relocation) continue;
 
         // The alignment of the symbol is the alignment of the section it's in.
-        int align = symbol->input_section->align;
+        // Alignment is stored in src_value for common symbols.
+        int align = symbol->input_section ? symbol->input_section->align : symbol->src_value;
+        if (!align) panic("Got zero alignment when laying out .data.copy section");
 
         // Create a new .data.copy section if not already existent.
         if (!data_copy_section)

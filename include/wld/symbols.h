@@ -60,11 +60,11 @@ typedef struct symbol {
     InputElfFile *src_elf_file;         // File symbol is defined in. NULL if undefined.
     InputSection *input_section;        // Section the symbol is defined in. NULL if the symbol is undefined or common.
     OutputSection *output_section;
-    uint64_t src_value;                 // Value in the original ELF section
+    uint64_t src_value;                 // Value in the original ELF section. If the symbol is common, this is the alignment.
     uint64_t dst_value;                 // Value in the final ELF section
     int dst_index;                      // Index in the final ELF symbol table
     int dst_dynsym_index;               // Index in the final ELF dynsyn table (for libraries)
-    int resolves_undefined_symbol;      // Set to 1 if the symbol is from a shared library and resolves an undefined symbol in an object file
+    int needs_copy_relocation;          // Set to 1 if the symbol is from a shared library and resolves an undefined symbol in an object file
     int is_undefined;                   // Set to 1 at a later stage if the symbol is undefined
 } Symbol;
 

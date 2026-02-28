@@ -80,11 +80,14 @@ InputElfFile *init_elf_file(void) {
     elf_file->symbol_table_strings = calloc(1, MAX_STRTAB_SIZE);
     add_string_to_strtab(elf_file, "");
 
+    InputSection  *input_section = calloc(1, sizeof(InputSection));
+
     // Create two sections without data
     // The first is the NULL section, the second a fake section for the tests.
     elf_file->section_list = new_list(2);
     append_to_list(elf_file->section_list, NULL);
-    append_to_list(elf_file->section_list, NULL);
+    append_to_list(elf_file->section_list, input_section);
+
 
     elf_file->section_map = new_strmap();
 
