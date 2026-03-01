@@ -1703,7 +1703,6 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
             if (!(symbol->extra & SE_IN_GOT)) continue;
             if (!section_got) panic("GOT is NULL");
 
-            int i = symbol->got_offset / 8; // The index in the .got table is the same as the index in the .rela.dyn table.
             if (i >= output_elf_file->rela_dyn_entry_count)
                 panic("Symbol %s has a GOT offset that exceeds the size of .rela.dyn table: %d > %d",
                     symbol->name, i, output_elf_file->rela_dyn_entry_count);
