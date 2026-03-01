@@ -1720,7 +1720,7 @@ void test_dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_
         ".section .text;"
         ".globl _start;"
         "_start:;"
-        // Gets rewritten to a lea using a PC-relavtive address to d
+        // Gets rewritten to a lea using a PC-relative address to d
         "    movq d@GOTPCREL(%rip), %rax;"
         // Not rewritten, but needs the GOT entry added to the executable
         "    cmpq d@GOTPCREL(%rip), %rax;"
@@ -1744,15 +1744,52 @@ void test_dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_
         NULL
     );
 
-    // Relocation for foo
+    assert_dynsym(elf_file, END); // A relocation is present, but it doesn't refer to a symbol.
+
+    // Relocation for GOT entry for d
     assert_rela_dyn_relocations(elf_file,
         // Tag             Dyn symtab index  Offset   Addend
         R_X86_64_RELATIVE, 0,                0x30a0,  0x30a8,
         END);
 
-    // .got is at 0x3090
-    // .text stats at 0x2000
+    // .got is at 0x30a0
+    // .text starts at 0x2000
     // The displacement is calculated from the next instruction. The instruction lengths are 7.
+    assert_section_data(elf_file, ".text",
+        0x48, 0x8d, 0x05, 0xa1, 0x10, 0x00, 0x00, // lea 0x1091(%rip),%rax 0x30a0 - 0x2007 = 0x10a1
+        0x48, 0x3b, 0x05, 0x92, 0x10, 0x00, 0x00, // cmp 0x1082(%rip),%rax 0x30a0 - 0x200e = 0x1092
+        END);
+
+    // Build a shared library and ensure that the local symbol d also gets relaxed
+    char *lib_name;
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_with_GOT_entry_for_local_symbol_and_GOT_relocation_too");
+
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x08,  SHF_ALLOC,                 1,
+        ".rela.dyn",       SHT_RELA,       0x1050,   0x1050, 0x18,  SHF_ALLOC,                 8,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x0e,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0xa0,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got",            SHT_PROGBITS,   0x30a0,   0x30a0, 0x08,  SHF_ALLOC | SHF_WRITE,     8,
+        ".data",           SHT_PROGBITS,   0x30a8,   0x30a8, 0x08,  SHF_ALLOC | SHF_WRITE,     4,
+        NULL
+    );
+
+    // There's a duff _start symbol in the lib which normally doesn't make sense, since libraries
+    // should never define a _start symbol, but makes this test easier.
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
+        END);
+
+    // Relocation for GOT entry for d
+    assert_rela_dyn_relocations(elf_file,
+        // Tag             Dyn symtab index  Offset   Addend
+        R_X86_64_RELATIVE, 0,                0x30a0,  0x30a8,
+        END);
+
     assert_section_data(elf_file, ".text",
         0x48, 0x8d, 0x05, 0xa1, 0x10, 0x00, 0x00, // lea 0x1091(%rip),%rax 0x30a0 - 0x2007 = 0x10a1
         0x48, 0x3b, 0x05, 0x92, 0x10, 0x00, 0x00, // cmp 0x1082(%rip),%rax 0x30a0 - 0x200e = 0x1092

@@ -143,6 +143,7 @@ static int link_symbol_dynamically(OutputElfFile *output_elf_file, Symbol *symbo
 // GOTPCRELX relocations allow instruction relaxation when the symbol is non-preemptible and locally defined.
 static int may_relax_symbol_for_GOTPCRELX(OutputElfFile *output_elf_file, Symbol *symbol) {
     if (!symbol) return 1; // Section symbols are always relaxable
+    if (symbol->binding == STB_LOCAL) return 1; // Local symbols may always be relaxed
     if (output_elf_file->type == ET_EXEC) return 1; // Can always relax in static executable
     if (symbol->is_undefined) return 0; // Cannot relax undefined symbols
     if (symbol->binding == STB_WEAK) return 0; // Cannot relax weak symbols
