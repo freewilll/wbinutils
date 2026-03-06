@@ -2608,6 +2608,58 @@ void test_dynamic_executable_with_bss_section_from_library() {
         END);
 }
 
+// Test a bug where a dynsym entry was missing in a dynamic executable
+// that preempts the same symbol in a shared library. The missing dynsym
+// entry was preventing that preemption.
+void test_dynamic_executable_preemting_a_symbol_in_a_shared_library() {
+    // Make a lib with a function
+    char *object_path1 = run_was(
+        ".globl f;"
+        ".type f, @function;"
+        ".text;"
+        "f: nop;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path1);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_executable_preemting_a_symbol_in_a_shared_library");
+    char *lib_filename = malloc(strlen(lib_name) + 16);
+
+    char *object_path2 = run_was(
+        ".globl f;"
+        ".globl _start;"
+        ".type f, @function;"
+        ".type _start, @function;"
+        ".text;"
+        "f: nop;"
+        "_start: nop;"
+    );
+
+    input_paths = new_list(1);
+    append_to_list(input_paths, object_path2);
+    append_to_list(input_paths, lib_name);
+
+    elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE, NULL, 0, NULL, "dynamic_executable_preemting_a_symbol_in_a_shared_library");
+
+    // Ensure the function is in the .dynsym
+    assert_sections(elf_file,
+        // Name            Type            Address   Offset  Size   Flags                      Align
+        ".hash",           SHT_HASH,       0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
+        ".dynsym",         SHT_DYNSYM,     0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
+        ".dynstr",         SHT_STRTAB,     0x1044,   0x1044, 0x13,  SHF_ALLOC,                 1,
+        ".text",           SHT_PROGBITS,   0x2000,   0x2000, 0x02,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        ".dynamic",        SHT_DYNAMIC,    0x3000,   0x3000, 0x80,  SHF_ALLOC | SHF_WRITE,     8,
+        NULL
+    );
+
+    assert_dynsym(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section    Name
+        0x2000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, ".text",    "f",
+        END);
+}
+
 // Hidden symbols must be converted to local ones when
 // making a shared library.
 void test_making_a_shared_library_using_a_hidden_symbol() {
@@ -2888,6 +2940,7 @@ int main() {
     test_dynamic_library_R_X86_64_64_relocation_when_making_a_shared_library();
     test_dynamic_executable_GOT_AND_PLT_relocation();
     test_dynamic_executable_with_bss_section_from_library();
+    test_dynamic_executable_preemting_a_symbol_in_a_shared_library();
     test_making_a_shared_library_using_a_hidden_symbol();
     test_versioning_default_symbol();
     test_double_undefined_symbol_resolution_with_default();

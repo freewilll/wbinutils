@@ -63,7 +63,7 @@ static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, c
     // Hidden and internal symbols never go in the .dynsym
     if (symbol->other == STV_HIDDEN || symbol->other == STV_INTERNAL) return 0;
 
-    // Local symbols are never go in the .dynsym
+    // Local symbols never go in the .dynsym
     if (symbol->binding == STB_LOCAL) return 0;
 
     // Don't add defined symbols that aren't exported to .dynsym
@@ -76,6 +76,10 @@ static int symbol_is_in_dynsym(OutputElfFile *output_elf_file, Symbol *symbol, c
 
     // Include symbols with relocations
     if (symbol->needs_dynsym_entry) return 1;
+
+    // Symbols defined in an executable can preempt symbols in shared libraries,
+    // Add any symbols that have been seen in both an object file and a shared library.
+    if (output_elf_file->is_executable && (symbol->sources & SRC_OBJECT_OR_LIBRARY) && (symbol->sources & SRC_SHARED_LIBRARY)) return 1;
 
     // Only include symbols from other shared libraries that resolve undefined symbols.
     if (symbol->sources & SRC_SHARED_LIBRARY) return 0;

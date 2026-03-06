@@ -16,6 +16,7 @@ test: \
 	symbol-resolution-weak-strong-in-library \
 	symbol-resolution-weak-strong-both-defined-in-library \
 	symbol-resolution-weak-symbol-in-shared-library \
+	symbol-resolution-preemption-from-executable-to-with-shared-library \
 	local-symbols \
 	abs-symbol \
 	symbol-resolution-with-mixed-bss-and-common-sections \
@@ -111,6 +112,10 @@ symbol-resolution-weak-strong-both-defined-in-library:
 .PHONY: symbol-resolution-weak-symbol-in-shared-library
 symbol-resolution-weak-symbol-in-shared-library:
 	+$(MAKE) -C symbol-resolution-weak-symbol-in-shared-library
+
+.PHONY: symbol-resolution-preemption-from-executable-to-with-shared-library
+symbol-resolution-preemption-from-executable-to-with-shared-library:
+	+$(MAKE) -C symbol-resolution-preemption-from-executable-to-with-shared-library
 
 .PHONY: local-symbols
 local-symbols:
@@ -252,6 +257,7 @@ clean:
 	@+$(MAKE) -C symbol-resolution-weak-strong-in-library clean
 	@+$(MAKE) -C symbol-resolution-weak-strong-both-defined-in-library clean
 	@+$(MAKE) -C symbol-resolution-weak-symbol-in-shared-library clean
+	@+$(MAKE) -C symbol-resolution-preemption-from-executable-to-with-shared-library clean
 	@+$(MAKE) -C local-symbols clean
 	@+$(MAKE) -C abs-symbol clean
 	@+$(MAKE) -C symbol-resolution-with-mixed-bss-and-common-sections clean
