@@ -564,10 +564,12 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
         case R_X86_64_GOTPCREL: {
             uint64_t value;
 
-            if (symbol->extra & SE_IN_GOT)
+            if (symbol->extra & SE_IN_GOT) {
                 value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
-            else if (symbol->extra & SE_IN_GOT_PLT)
-                S = output_elf_file->plt_offset + symbol->plt_offset + A - P;
+            }
+            else if (symbol->extra & SE_IN_GOT_PLT) {
+                panic("R_X86_64_GOTPCREL does not create SE_IN_GOT_PLT relocations");
+            }
             else if (symbol->extra & SE_IN_GOT_IPLT)
                 value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
             else
@@ -646,7 +648,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             else if (symbol->extra & SE_IN_GOT)
                 value = output_elf_file->got_virt_address + symbol->got_offset + A - P;
             else if (symbol->extra & SE_IN_GOT_PLT)
-                ; // TODO what to do about a symbol with a R_X86_64_REX_GOTPCRELX that is in the SE_IN_GOT_PLT? Is this a bug?
+                panic("R_X86_64_REX_GOTPCRELX does not create SE_IN_GOT_PLT relocations");
             else if (symbol->extra & SE_IN_GOT_IPLT)
                 value = output_elf_file->got_iplt_virt_address + symbol->got_iplt_offset + A - P;
             else
