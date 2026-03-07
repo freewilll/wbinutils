@@ -340,8 +340,8 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
     // Determine if the ELF symbol is in a .bss section
     int is_bss = 0;
     if (esc->elf_symbol->st_shndx < SHN_LORESERVE) {
-        InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
         if (esc->elf_symbol->st_shndx >= esc->elf_file->section_list->length) panic("Section index exceeds section list");
+        InputSection *input_section = esc->elf_file->section_list->elements[esc->elf_symbol->st_shndx];
         if (!input_section) panic("Unexpectedly got an empty input section %d in %s", esc->elf_symbol->st_shndx, esc->elf_file->filename);
         if (input_section->type & SHT_NOBITS) is_bss = 1;
     }
