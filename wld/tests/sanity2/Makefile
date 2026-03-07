@@ -1,9 +1,7 @@
-WLD ?= ../../../bin/wld
-
 all: run-sanity2ab run-sanity2ba
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 sanity2ab: ${WLD} sanity2a.o sanity2b.o
 	${WLD} sanity2a.o sanity2b.o -o sanity2ab -static

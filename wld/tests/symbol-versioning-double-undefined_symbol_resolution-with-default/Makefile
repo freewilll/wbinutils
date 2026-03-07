@@ -3,10 +3,6 @@
 # - in an object file as f1
 # The undefined f1 is seen first, then the undefined f1@V1, then the defined f1@@V1 which resolves both.
 
-WLD ?= ../../../bin/wld
-WCC ?= ../../../../src/musl-wcc
-GCC ?= musl-gcc
-
 all: test
 
 test: run-main

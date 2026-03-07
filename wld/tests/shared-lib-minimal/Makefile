@@ -1,10 +1,5 @@
 # A simple executable that uses a data and function symbol from a library
 
-WLD ?= ../../../bin/wld
-
-# Use wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
-
 CURRENT_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 
 all: test
@@ -12,12 +7,12 @@ all: test
 test: run-main
 
 libtest.o: libtest.c
-	${CC} -shared -c libtest.c -o libtest.o
+	${WCC} -shared -c libtest.c -o libtest.o
 
 main.o: main.c
-	${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
-libtest.so: libtest.o ${WLD}
+libtest.so: libtest.o
 	${WLD} \
 		-shared \
 		-L/usr/lib \

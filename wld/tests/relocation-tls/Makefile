@@ -1,11 +1,9 @@
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 main: ${WLD} main.o
 	${WLD} -o main main.o -static

@@ -2,23 +2,21 @@
 # 1. An object file defines a variable. Two libraries also define it, but the definition in the object file comes first
 # 2. Two library files define a variable. The first definition comes first. The order is tested.
 
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main-with-def run-main-no-def-test1-first run-main-no-def-test2-first
 
 main-no-def.o: main-no-def.c
-	gcc -c -o main-no-def.o main-no-def.c
+	${GCC} -c -o main-no-def.o main-no-def.c
 
 main-with-def.o: main-with-def.c
-	gcc -c -o main-with-def.o main-with-def.c
+	${GCC} -c -o main-with-def.o main-with-def.c
 
 libtest1.o: libtest1.c
-	gcc -c libtest1.c -o libtest1.o -g -fPIC
+	${GCC} -c libtest1.c -o libtest1.o -g -fPIC
 
 libtest2.o: libtest2.c
-	gcc -c libtest2.c -o libtest2.o -g -fPIC
+	${GCC} -c libtest2.c -o libtest2.o -g -fPIC
 
 libtest1.so: libtest1.o
 	@${WLD} \

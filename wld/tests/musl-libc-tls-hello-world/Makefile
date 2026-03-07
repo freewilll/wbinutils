@@ -1,6 +1,3 @@
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
 # A couple of tests of executables that have combinations of .tdata and.or .tbss sections.
 
 test: all
@@ -11,15 +8,15 @@ all:  \
 	run-main-data-and-bss
 
 %.o: %.c
-	gcc -c $< -o $@
+	${GCC} -c $< -o $@
 
 main-bss: main-bss.o
-	gcc main-bss.o -o main-bss
+	${GCC} main-bss.o -o main-bss
 
 main-data-and-bss: main-data-and-bss.o
-	gcc main-data-and-bss.o -o main-data-and-bss
+	${GCC} main-data-and-bss.o -o main-data-and-bss
 
-%-data: %-data.o ${WLD}
+%-data: %-data.o
 	@${WLD} \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \

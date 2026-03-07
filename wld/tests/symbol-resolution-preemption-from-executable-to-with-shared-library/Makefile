@@ -1,8 +1,5 @@
 # Check that a symbol in a dynamic executable preempts the same symbol in a shared library
 
-WCC ?= ../../../../src/wcc
-WLD ?= ../../../bin/wld
-
 all: run-main
 
 main.o: main.c

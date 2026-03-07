@@ -2,24 +2,18 @@
 # due to main accessing an object in a library.
 # This happens when accessing stdout in musl, which is also tested here
 
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
-# Use musl-wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
-
 all: test
 
 test: run-main
 
 main.o: main.c
-	AS=${WAS} ${CC} -c main.c -o main.o
+	${MUSL_WCC} -c main.c -o main.o
 
 libtest1.o: libtest1.c
-	AS=${WAS} ${CC} -c libtest1.c -o libtest1.o -fPIC
+	${MUSL_WCC} -c libtest1.c -o libtest1.o -fPIC
 
 libtest2.o: libtest2.c
-	AS=${WAS} ${CC} -c libtest2.c -o libtest2.o -fPIC
+	${MUSL_WCC} -c libtest2.c -o libtest2.o -fPIC
 
 libtest1.so: libtest1.o
 	${WLD} \

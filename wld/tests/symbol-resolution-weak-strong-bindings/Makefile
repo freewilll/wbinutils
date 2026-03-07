@@ -6,8 +6,6 @@
 # These tests also have much more concise unit tests,
 # so are somewhat redundant. But they are left here anyways, since
 # they are good e2e tests.
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: \
@@ -29,60 +27,60 @@ test: \
 	run-mainw_lw_ls \
 
 %.o: %.c
-	gcc $< -c -o $@
+	${GCC} $< -c -o $@
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 %.a: %.o
 	ar rcs $@ $<
 
-mains_os_ow: mains.o libs.o libw.o ${WLD}
+mains_os_ow: mains.o libs.o libw.o
 	${WLD} mains.o libs.o libw.o -o mains_os_ow -static
 
-mains_ls_ow: mains.o libs.a libw.o ${WLD}
+mains_ls_ow: mains.o libs.a libw.o
 	${WLD} mains.o -L . -ls libw.o -o mains_ls_ow -static
 
-mains_os_lw: mains.o libs.o libw.a ${WLD}
+mains_os_lw: mains.o libs.o libw.a
 	${WLD} mains.o libs.o -L . -lw -o mains_os_lw -static
 
-mains_ls_lw: mains.o libs.a libw.a ${WLD}
+mains_ls_lw: mains.o libs.a libw.a
 	${WLD} mains.o -L . -ls -lw -o mains_ls_lw -static
 
 mains_ow_os: mains.o libs.o libw.o ${WLD1}
 	${WLD} mains.o libw.o libs.o -o mains_ow_os -static
 
-mains_ow_ls: mains.o libs.a libw.o ${WLD}
+mains_ow_ls: mains.o libs.a libw.o
 	${WLD} mains.o libw.o -L . -ls -o mains_ow_ls -static
 
-mains_lw_os: mains.o libs.o libw.a ${WLD}
+mains_lw_os: mains.o libs.o libw.a
 	${WLD} mains.o -L . -lw libs.o -o mains_lw_os -static
 
-mains_lw_ls: mains.o libs.a libw.a ${WLD}
+mains_lw_ls: mains.o libs.a libw.a
 	${WLD} mains.o -L . -lw -ls -o mains_lw_ls -static
 
-mainw_os_ow: mainw.o libs.o libw.o ${WLD}
+mainw_os_ow: mainw.o libs.o libw.o
 	${WLD} mainw.o libs.o libw.o -o mainw_os_ow -static
 
-mainw_ls_ow: mainw.o libs.a libw.o ${WLD}
+mainw_ls_ow: mainw.o libs.a libw.o
 	${WLD} mainw.o -L . -ls libw.o -o mainw_ls_ow -static
 
-mainw_os_lw: mainw.o libs.o libw.a ${WLD}
+mainw_os_lw: mainw.o libs.o libw.a
 	${WLD} mainw.o libs.o -L . -lw -o mainw_os_lw -static
 
-mainw_ls_lw: mainw.o libs.a libw.a ${WLD}
+mainw_ls_lw: mainw.o libs.a libw.a
 	${WLD} mainw.o -L . -ls -lw -o mainw_ls_lw -static
 
 mainw_ow_os: mainw.o libs.o libw.o ${WLD1}
 	${WLD} mainw.o libw.o libs.o -o mainw_ow_os -static
 
-mainw_ow_ls: mainw.o libs.a libw.o ${WLD}
+mainw_ow_ls: mainw.o libs.a libw.o
 	${WLD} mainw.o libw.o -L . -ls -o mainw_ow_ls -static
 
-mainw_lw_os: mainw.o libs.o libw.a ${WLD}
+mainw_lw_os: mainw.o libs.o libw.a
 	${WLD} mainw.o -L . -lw libs.o -o mainw_lw_os -static
 
-mainw_lw_ls: mainw.o libs.a libw.a ${WLD}
+mainw_lw_ls: mainw.o libs.a libw.a
 	${WLD} mainw.o -L . -lw -ls -o mainw_lw_ls -static
 
 run-mains_%: mains_%

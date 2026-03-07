@@ -52,6 +52,27 @@ TESTS = \
 .PHONY: test
 test: $(TESTS)
 
+WAS ?= $(abspath ../../bin/was)
+WLD ?= $(abspath ../../bin/wld)
+
+WCC_ARGS = LD=${WLD} AS=${WAS}
+
+WCC      ?= ${WCC_ARGS} $(abspath ../../../src/wcc)
+MUSL_WCC ?= ${WCC_ARGS} $(abspath ../../../src/musl-wcc)
+
+GCC      ?= gcc
+MUSL_GCC ?= musl-gcc
+AS       ?= as
+
+export WAS
+export WLD
+export WCC
+export MUSL_WCC
+
+export MUSL_GCC
+export GCC
+export AS
+
 .PHONY: $(TESTS)
 $(TESTS):
 	+$(MAKE) -C $@

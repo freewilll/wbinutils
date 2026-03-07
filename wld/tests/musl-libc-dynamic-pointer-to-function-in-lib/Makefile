@@ -1,12 +1,6 @@
 # Test a case of a function pointer to a function in a library
 # A R_X86_64_64 relocation must be present in .rela.dyn
 
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
-# Use musl-wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
-
 all: test
 
 test: run-main
@@ -15,9 +9,9 @@ test: run-main
 	${WAS} $< -o $@
 
 main.o: main.c
-	AS=${WAS} ${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
-main: main.o ${WLD}
+main: main.o
 	${WLD} \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \

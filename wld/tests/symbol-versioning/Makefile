@@ -2,19 +2,15 @@
 # Four symbols are exported in a lib: f1@V1, f1@V2 and f2@V1 and f2@V2.
 # f1 has a default version V1 and f2 a default version V2.
 
-WLD ?= ../../../bin/wld
-WCC ?= ../../../../src/musl-wcc
-GCC ?= musl-gcc
-
 all: test
 
 test: run-main
 
 libtest.so: libtest.c libtest.map
-	${GCC} libtest.c -o libtest.so -shared -Wl,--version-script=libtest.map
+	${MUSL_GCC} libtest.c -o libtest.so -shared -Wl,--version-script=libtest.map
 
 main.o: main.c
-	${GCC} -c main.c -o main.o
+	${MUSL_WCC} -c main.c -o main.o
 
 main: main.o libtest.so
 	${WLD}                                                \

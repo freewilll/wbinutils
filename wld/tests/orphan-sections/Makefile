@@ -1,11 +1,9 @@
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-orphans
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 orphans: orphans.o orphans2.o ${WLD}
 	${WLD} orphans.o orphans2.o -o orphans -static

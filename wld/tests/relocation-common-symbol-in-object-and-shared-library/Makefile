@@ -1,21 +1,19 @@
 # Test some scenarios with a common symbol in an object file that
 # is resolved by a symbol in a shared library that can be in the .bss or .data.
 
-WLD ?= ../../../bin/wld
-
 all: run-main
 
 main.o: main.c
-	gcc -c main.c -o main.o
+	${GCC} -c main.c -o main.o
 
 libtest1.o: libtest1.c
-	gcc -c libtest1.c -o libtest1.o -fPIC
+	${GCC} -c libtest1.c -o libtest1.o -fPIC
 
 libtest2.o: libtest2.c
-	gcc -c libtest2.c -o libtest2.o -fPIC
+	${GCC} -c libtest2.c -o libtest2.o -fPIC
 
 libtest3.o: libtest3.c
-	gcc -c libtest3.c -o libtest3.o -fPIC
+	${GCC} -c libtest3.c -o libtest3.o -fPIC
 
 libtest1.so: libtest1.o libtest2.o libtest3.o
 	${WLD} \

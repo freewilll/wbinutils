@@ -1,5 +1,3 @@
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main-static-relaxed run-main-static-unrelaxed run-main-dynamic-relaxed run-main-dynamic-unrelaxed

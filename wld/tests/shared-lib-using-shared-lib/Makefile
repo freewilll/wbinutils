@@ -2,11 +2,6 @@
 # main is a dynamic executable and the libs .so files.
 # This tests the GOT handling and entries in .rela.dyn for both libs.
 
-WLD ?= ../../../bin/wld
-
-# Use wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
-
 CURRENT_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 
 all: test
@@ -14,15 +9,15 @@ all: test
 test: run-main
 
 libtest1.o: libtest1.c
-	${CC} -fPIC -c libtest1.c -o libtest1.o
+	${WCC} -fPIC -c libtest1.c -o libtest1.o
 
 libtest2.o: libtest2.c
-	${CC} -fPIC -c libtest2.c -o libtest2.o
+	${WCC} -fPIC -c libtest2.c -o libtest2.o
 
 main.o: main.c
-	${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
-libtest1.so: libtest1.o libtest2.so ${WLD}
+libtest1.so: libtest1.o libtest2.so
 	@${WLD} \
 		-shared \
 		-L/usr/lib \
@@ -36,7 +31,7 @@ libtest1.so: libtest1.o libtest2.so ${WLD}
 		-lgcc_eh \
 		-lc \
 
-libtest2.so: libtest2.o ${WLD}
+libtest2.so: libtest2.o
 	@${WLD} \
 		-shared \
 		-L/usr/lib \

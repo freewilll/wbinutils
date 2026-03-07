@@ -1,16 +1,14 @@
 # Test a bug where an undefined weak symbol doesn't get upgraded to strong
 
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main
 
 %.o: %.c
-	gcc $< -c -o $@
+	${GCC} $< -c -o $@
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 liba.a: test1.o test2.o test3.o
 	ar rcs $@ test1.o test2.o test3.o

@@ -1,23 +1,17 @@
 # Test that a strong symbol in an .o file overrides a weak symbol in an .so file
 
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
-# Use musl-wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
-
 all: test
 
 test: run-main
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 main.o: main.c
-	AS=${WAS} ${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
 libtest.o: libtest.s
-	as -c libtest.s -o libtest.o
+	${AS} -c libtest.s -o libtest.o
 
 libtest.so: libtest.o ${WLD}
 	${WLD} \

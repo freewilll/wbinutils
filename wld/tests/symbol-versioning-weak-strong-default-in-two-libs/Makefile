@@ -4,10 +4,6 @@
 # The libs are loaded as -ltest1, -ltest2, main.o
 # This tests a bug where the weak default symbol would not resolve the symbol in main.
 
-WLD ?= ../../../bin/wld
-WCC ?= ../../../../src/musl-wcc
-GCC ?= musl-gcc
-
 all: test
 
 test: run-main

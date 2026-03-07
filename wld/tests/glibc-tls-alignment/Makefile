@@ -2,14 +2,11 @@
 # This caused a bug where the start of the TLS section with respect to the thread pointer
 # was incorrect since it has to be a multiple of the aligmnment.
 
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
 all: run-main
 
 %.o: %.c
 	@# Use gcc since the source files have __thread which wcc doesn't support
-	gcc -c $< -o $@
+	${GCC} -c $< -o $@
 
 # Note the unusual placement of main.o at the end. This causes the TLS segment to be sized a multiple of 4
 main: main.o test.o

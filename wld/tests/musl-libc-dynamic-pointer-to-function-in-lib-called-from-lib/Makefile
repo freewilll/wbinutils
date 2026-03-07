@@ -2,23 +2,17 @@
 # A R_X86_64_64 relocation must be present in .rela.dyn
 # This tests the case of a main calling a library calling a library
 
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
-# Use musl-wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
-
 all: test
 
 test: run-main
 
 libtest.so: libtest.c
-	${CC} libtest.c -o libtest.so -shared
+	${WCC} libtest.c -o libtest.so -shared
 
 main.o: main.c
-	${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
-main: main.o libtest.so ${WLD}
+main: main.o libtest.so
 	${WLD}                                                \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \

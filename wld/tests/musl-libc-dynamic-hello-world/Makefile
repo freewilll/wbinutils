@@ -1,15 +1,9 @@
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
-# Use musl-wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
-
 all: test
 
 test: run-main
 
 main.o: main.c
-	AS=${WAS} ${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
 main: main.o ${WLD}
 	${WLD}                                                \

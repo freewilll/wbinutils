@@ -2,8 +2,6 @@
 # so are redundant. But they are left here anyways, since
 # they are good e2e tests.
 
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: main_o1_o2 main_l1_o2 run-main_o1_l2 run-main_l1_l2
@@ -15,10 +13,10 @@ test: main_o1_o2 main_l1_o2 run-main_o1_l2 run-main_l1_l2
 # lib1 lib2 ok
 
 %.o: %.c
-	gcc $< -c -o $@
+	${GCC} $< -c -o $@
 
 %.o: %.s
-	as $< -o $@
+	${WAS} $< -o $@
 
 %.a: %.o
 	ar rcs $@ $<

@@ -1,11 +1,9 @@
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-sanity1
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 sanity1: sanity1.o ${WLD}
 	${WLD} sanity1.o -o sanity1 -static

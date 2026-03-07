@@ -1,18 +1,15 @@
 # A symbol may be undefined so long as it isn't used.
 # This happens with __pthread_create in glibc
 
-WAS = ../../../bin/was
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main
 
 %.o: %.s
-	as $< -o $@
+	${WAS} $< -o $@
 
 main.o: main.c
-	gcc -c main.c -o main.o
+	${GCC} -c main.c -o main.o
 
 main: main.o
 	${WLD} \

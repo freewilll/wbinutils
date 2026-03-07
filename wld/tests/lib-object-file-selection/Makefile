@@ -1,11 +1,9 @@
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main
 
 %.o: %.s
-	as $< -o $@
+	${WAS} $< -o $@
 
 lib1.a: lib1.o lib2.o lib3.o
 	ar rcs lib1.a lib1.o lib2.o lib3.o

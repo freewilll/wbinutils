@@ -4,18 +4,16 @@
 # both with the library and an executable that uses the library.
 # wld must convert the weak symbol to a local symbol in the library.
 
-WLD ?= ../../../bin/wld
-
 all: run-main
 
 main.o: main.c
-	gcc -c main.c -o main.o
+	${GCC} -c main.c -o main.o
 
 libtest1.o: libtest1.c
-	gcc -c libtest1.c -o libtest1.o
+	${GCC} -c libtest1.c -o libtest1.o
 
 libtest2.o: libtest2.c
-	gcc -c libtest2.c -o libtest2.o
+	${GCC} -c libtest2.c -o libtest2.o
 
 libtest1.so: libtest1.o libtest2.o
 	${WLD} \

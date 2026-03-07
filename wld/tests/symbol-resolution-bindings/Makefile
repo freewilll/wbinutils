@@ -2,17 +2,15 @@
 # so are redundant. But they are left here anyways, since
 # they are good e2e tests.
 
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main12 run-mainl12 run-main21 run-mainl21
 
 %.o: %.c
-	gcc $< -c -o $@
+	${GCC} $< -c -o $@
 
 %.o: %.s
-	as $< -o $@
+	${WAS} $< -o $@
 
 %.a: %.o
 	ar rcs $@ $<

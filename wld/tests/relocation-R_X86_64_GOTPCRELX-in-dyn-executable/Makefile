@@ -1,9 +1,5 @@
 # Test a GOTPCREL relocation in a call *foo@GOTPCREL(%rip) in a dynamic executable
 
-WLD ?= ../../../bin/wld
-WCC ?= ../../../../src/musl-wcc
-GCC ?= musl-gcc
-
 all: test
 
 test: run-main
@@ -13,7 +9,7 @@ libtest.so: libtest.c
 
 main.o: main.s
 	# gas makes GOTPCREL instructions with -mrelax-relocations=no
-	as main.s -o main.o -mrelax-relocations=no
+	${AS} main.s -o main.o -mrelax-relocations=no
 
 main: main.o libtest.so
 	@${WLD}                                               \

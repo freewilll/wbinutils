@@ -1,17 +1,15 @@
 # A library has one symbol defined twice: weak, then strong.
 # If the second object file is included, the strong symbol takes over the weak.
 
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main12 run-main21
 
 %.o: %.c
-	gcc $< -c -o $@
+	${GCC} $< -c -o $@
 
 %.o: %.s
-	as $< -o $@
+	${AS} $< -o $@
 
 liba12.a: test1.o test2.o
 	ar rcs $@ test1.o test2.o
@@ -19,10 +17,10 @@ liba12.a: test1.o test2.o
 liba21.a: test1.o test2.o
 	ar rcs $@ test2.o test1.o
 
-main12: liba12.a main.o ${WLD}
+main12: liba12.a main.o
 	${WLD} main.o -L . -la12 -o main12 -static
 
-main21: liba21.a main.o ${WLD}
+main21: liba21.a main.o
 	${WLD} main.o -L . -la21 -o main21 -static
 
 run-main12: main12

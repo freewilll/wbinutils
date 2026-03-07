@@ -1,16 +1,11 @@
 # Test a R_X86_64_64 relocation in a shared library
 
-WLD ?= ../../../bin/wld
-
-# Use musl-wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)
-
 all: test
 
 test: run-main
 
 libtest.o: libtest.c
-	gcc -c libtest.c -o libtest.o -fPIC
+	${GCC} -c libtest.c -o libtest.o -fPIC
 
 libtest.so: libtest.o
 	${WLD}                                                \
@@ -21,7 +16,7 @@ libtest.so: libtest.o
 	-shared
 
 main.o: main.c
-	gcc -c main.c -o main.o
+	${GCC} -c main.c -o main.o
 
 main: main.o libtest.so
 	${WLD}                                                \

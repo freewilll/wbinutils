@@ -1,8 +1,6 @@
 # Test a regression related to two static libs that have the same filename in it, with local symbols
 # The looking for local symbol tables was based on filename alone instead of a combination of libname and filename.
 
-WLD ?= ../../../bin/wld
-
 all: test
 
 test: run-main
@@ -14,10 +12,10 @@ lib2dir:
 	mkdir lib2dir
 
 lib1dir/lib.o: lib1.s lib1dir
-	as -o lib1dir/lib.o lib1.s
+	${AS} -o lib1dir/lib.o lib1.s
 
 lib2dir/lib.o: lib2.s lib2dir
-	as -o lib2dir/lib.o lib2.s
+	${AS} -o lib2dir/lib.o lib2.s
 
 lib1.a: lib1.o lib1dir/lib.o
 	ar rcs lib1.a lib1dir/lib.o

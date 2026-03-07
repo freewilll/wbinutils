@@ -3,11 +3,6 @@
 # This tests the case of making as shared library that has object files with relocations in it.
 # The relocations are meant to persist into the .so file and not get resolved statically.
 
-WLD ?= ../../../bin/wld
-
-# Use wcc if available, otherwise fall back to gcc
-CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
-
 CURRENT_DIR := $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 
 all: test
@@ -15,13 +10,13 @@ all: test
 test: run-main
 
 libtest.o: libtest.c
-	${CC} -fPIC -c libtest.c -o libtest.o
+	${WCC} -fPIC -c libtest.c -o libtest.o
 
 libfuncs.o: libfuncs.c
-	${CC} -fPIC -c libfuncs.c -o libfuncs.o
+	${WCC} -fPIC -c libfuncs.c -o libfuncs.o
 
 main.o: main.c
-	${CC} -c main.c -o main.o
+	${WCC} -c main.c -o main.o
 
 libtest.so: libtest.o libfuncs.o ${WLD}
 	${WLD} \
