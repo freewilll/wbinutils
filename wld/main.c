@@ -92,19 +92,19 @@ int main(int argc, char **argv) {
                 argv++;
             }
             // -dynamic-linker x
-            else if (!strcmp(argv[0], "-dynamic-linker")) {
+            else if (argc > 1 && !strcmp(argv[0], "-dynamic-linker")) {
                 dynamic_linker = argv[1];
                 argc -= 2;
                 argv += 2;
             }
             // -soname x
-            else if (!strcmp(argv[0], "-soname")) {
+            else if (argc > 1 && !strcmp(argv[0], "-soname")) {
                 soname = argv[1];
                 argc -= 2;
                 argv += 2;
             }
             // -rpath x
-            else if (!strcmp(argv[0], "-rpath")) {
+            else if (argc > 1 && !strcmp(argv[0], "-rpath")) {
                 append_to_list(rpaths, argv[1]);
                 argc -= 2;
                 argv += 2;
