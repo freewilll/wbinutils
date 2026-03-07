@@ -2,7 +2,7 @@
 # This happens with __pthread_create in glibc
 
 WAS = ../../../bin/was
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: test
 

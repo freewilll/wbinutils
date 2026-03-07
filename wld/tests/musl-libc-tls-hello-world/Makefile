@@ -1,5 +1,5 @@
 WAS = ../../../bin/was
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 # A couple of tests of executables that have combinations of .tdata and.or .tbss sections.
 

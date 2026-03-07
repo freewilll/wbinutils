@@ -3,7 +3,7 @@
 # This tests the case of making as shared library that has object files with relocations in it.
 # The relocations are meant to persist into the .so file and not get resolved statically.
 
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 # Use wcc if available, otherwise fall back to gcc
 CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
@@ -37,7 +37,7 @@ libtest.so: libtest.o libfuncs.o ${WLD}
 		-lc \
 
 main: main.o libtest.so
-	@ld \
+	${WLD} \
 		-rpath ${CURRENT_DIR} \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 		-L/usr/lib \

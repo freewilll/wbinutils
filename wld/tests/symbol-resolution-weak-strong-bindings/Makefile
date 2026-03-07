@@ -6,7 +6,7 @@
 # These tests also have much more concise unit tests,
 # so are somewhat redundant. But they are left here anyways, since
 # they are good e2e tests.
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: test
 

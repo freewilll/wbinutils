@@ -3,7 +3,7 @@
 # was incorrect since it has to be a multiple of the aligmnment.
 
 WAS = ../../../bin/was
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: run-main
 

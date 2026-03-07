@@ -1,6 +1,6 @@
 # Test a bug where an undefined weak symbol doesn't get upgraded to strong
 
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: test
 

@@ -1,7 +1,7 @@
 # Test that a strong symbol in an .o file overrides a weak symbol in an .so file
 
 WAS = ../../../bin/was
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 # Use musl-wcc if available, otherwise fall back to gcc
 CC = $(shell [ -x ../../../../src/musl-wcc ] && echo ../../../../src/musl-wcc || echo gcc)

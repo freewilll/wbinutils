@@ -1,5 +1,5 @@
 WAS = ../../../bin/was
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 # Use wcc if available, otherwise fall back to gcc
 CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)

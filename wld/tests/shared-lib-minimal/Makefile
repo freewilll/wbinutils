@@ -1,6 +1,6 @@
 # A simple executable that uses a data and function symbol from a library
 
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 # Use wcc if available, otherwise fall back to gcc
 CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
@@ -30,7 +30,7 @@ libtest.so: libtest.o ${WLD}
 		-lc \
 
 main: main.o libtest.so
-	@ld \
+	${WLD} \
 		-rpath ${CURRENT_DIR} \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 		-L/usr/lib \

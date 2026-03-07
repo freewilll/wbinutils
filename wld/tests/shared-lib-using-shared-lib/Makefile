@@ -2,7 +2,7 @@
 # main is a dynamic executable and the libs .so files.
 # This tests the GOT handling and entries in .rela.dyn for both libs.
 
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 # Use wcc if available, otherwise fall back to gcc
 CC = $(shell [ -x ../../../../src/wcc ] && echo ../../../../src/wcc || echo gcc)
@@ -49,7 +49,7 @@ libtest2.so: libtest2.o ${WLD}
 		-lc \
 
 main: main.o libtest1.so
-	@LD_LIBRARY_PATH=. ld \
+	@LD_LIBRARY_PATH=. ${WLD} \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 		-L/usr/lib \
 		-L/usr/lib/gcc/x86_64-linux-gnu/9 \

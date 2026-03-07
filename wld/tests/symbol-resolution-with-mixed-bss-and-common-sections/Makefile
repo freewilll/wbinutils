@@ -1,4 +1,4 @@
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: test
 

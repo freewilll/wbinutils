@@ -1,7 +1,7 @@
 # Test a regression related to two static libs that have the same filename in it, with local symbols
 # The looking for local symbol tables was based on filename alone instead of a combination of libname and filename.
 
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: test
 

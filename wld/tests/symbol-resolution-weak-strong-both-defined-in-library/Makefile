@@ -1,7 +1,7 @@
 # A library has one symbol defined twice: weak, then strong.
 # If the second object file is included, the strong symbol takes over the weak.
 
-WLD = ../../../bin/wld
+WLD ?= ../../../bin/wld
 
 all: test
 
