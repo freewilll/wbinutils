@@ -144,7 +144,7 @@ InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *
 }
 
 // Go down all input files which are either object files or shared libraries
-static void read_object_or_shared_library_file(List *input_elf_files, const char *path) {
+static void read_object_or_shared_library_file(List *input_elf_files, const char *path, int as_needed) {
     if (DEBUG_SYMBOL_RESOLUTION || DEBUG_SYMBOL_VERSIONS)
         printf("Examining file %s\n", path);
 
@@ -163,11 +163,14 @@ static void read_object_or_shared_library_file(List *input_elf_files, const char
 
     InputElfFile *elf_file = open_elf_file(path);
     process_elf_file_symbols(elf_file, source, 0);
+
+    if (elf_file->type == ET_DYN) elf_file->as_needed = as_needed;
+
     append_to_list(input_elf_files, elf_file);
 }
 
 // Identify the filetype and load the file
-static int read_input_file(const char *path, List *input_elf_files, StrMap *read_shared_object_files, List *library_paths) {
+static int read_input_file(const char *path, List *input_elf_files, StrMap *read_shared_object_files, List *library_paths, int as_needed) {
     // If the path isn't absolute, search for it
     if (path[0] != '/') {
         path = find_file(library_paths, path, "library");
@@ -200,7 +203,7 @@ static int read_input_file(const char *path, List *input_elf_files, StrMap *read
         }
 
         case FT_SHARED_LIBRARY:
-            read_object_or_shared_library_file(input_elf_files, path);
+            read_object_or_shared_library_file(input_elf_files, path, as_needed);
             break;
 
         default:
@@ -239,7 +242,7 @@ static void run_linker_script(const char *path, List *input_elf_files, StrMap *r
                     path = new_path;
                 }
 
-                read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
+                read_input_file(path, input_elf_files, read_shared_object_files, library_paths, input_group_item->as_needed);
             }
         }
 
@@ -252,7 +255,7 @@ static void run_linker_script(const char *path, List *input_elf_files, StrMap *r
                 for (int j = 0; j < items->length; j++) {
                     InputGroupItem *input_group_item = items->elements[j];
                     char *path = input_group_item->filename;
-                    objects_added += read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
+                    objects_added += read_input_file(path, input_elf_files, read_shared_object_files, library_paths, input_group_item->as_needed);
                 }
 
                 if (!objects_added) break;
@@ -273,11 +276,11 @@ static List *read_input_files(List *library_paths, List *input_files, int output
 
         if (input_file->is_library_name) {
             const char *path = search_for_library(output_type, library_paths, input_filename);
-            read_input_file(path, input_elf_files, read_shared_object_files, library_paths);
+            read_input_file(path, input_elf_files, read_shared_object_files, library_paths, 0);
         }
         else {
             // It's an object file
-            read_object_or_shared_library_file(input_elf_files, input_filename);
+            read_object_or_shared_library_file(input_elf_files, input_filename, 0);
         }
     }
 
@@ -307,6 +310,7 @@ static void make_shared_libraries_list(OutputElfFile *output_elf_file, List *inp
         InputElfFile *elf_file = input_elf_files->elements[i];
         if (elf_file->type == ET_DYN) {
             if (!elf_file->soname) panic("Unexpected null soname\n");
+            if (elf_file->as_needed && ! elf_file->resolves_undefined_symbol_in_object_file) continue;
             append_to_list(output_elf_file->shared_libraries, elf_file->soname);
         }
     }

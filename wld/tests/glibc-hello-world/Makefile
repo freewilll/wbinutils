@@ -36,6 +36,7 @@ run-main: main
 		echo "Message was not hello world."; \
 		exit 1; \
 	fi ;\
+
 	echo "Glibc hello world passed"
 
 clean:

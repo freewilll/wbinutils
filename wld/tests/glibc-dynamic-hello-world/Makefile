@@ -35,6 +35,10 @@ run-main: main
 		echo "Message was not hello world."; \
 		exit 1; \
 	fi ;\
+
+	## Ensure ld-linux isn't present in .dynamic section NEEDED
+	@! readelf -dW main | grep NEEDED | grep ld-linux
+
 	echo "Glibc dynamic hello world passed"
 
 clean:

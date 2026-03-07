@@ -395,7 +395,8 @@ static int handle_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol) {
                         found_symbol->binding == STB_GLOBAL &&
                         !is_bss
                     ) {
-                        found_symbol->needs_copy_relocation = 1;
+                        found_symbol->resolves_undefined_symbol_in_object_file = 1;
+                        found_symbol->src_elf_file->resolves_undefined_symbol_in_object_file = 1;
                     }
                 }
             }
@@ -538,8 +539,8 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
     // The weak symbol must resolve unversioned undefined symbols.
 
     // Multiple undefined symbols can have been resolved. We're interested if any of them came from an object file.
-    int resolved_undefined_symbol_sources = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
-    result |= !!resolved_undefined_symbol_sources;
+    int resolves_undefined_symbol_sources = resolve_undefined_symbol(esc->snv->name, esc->snv->version_index, esc->is_default_version, esc->source == SRC_LIBRARY, esc->read_only);
+    result |= !!resolves_undefined_symbol_sources;
 
     // When loading a symbol from a shared library, note if this symbol resolves an undefined symbol.
     //
@@ -549,13 +550,14 @@ static int handle_non_common_symbol(ElfSymbolContext *esc, Symbol *found_symbol)
     // - Symbol is GLOBAL
     // - Symbol is defined in a shared object
     if (
-        resolved_undefined_symbol_sources & SRC_OBJECT &&
+        resolves_undefined_symbol_sources & SRC_OBJECT &&
         found_symbol && found_symbol->type == STT_OBJECT &&
         found_symbol->binding == STB_GLOBAL &&
         esc->source == SRC_SHARED_LIBRARY
     ) {
         // Note: the relocation might be copying data from the .bss in a library, but that's ok.
-        found_symbol->needs_copy_relocation = 1;
+        found_symbol->resolves_undefined_symbol_in_object_file = 1;
+        found_symbol->src_elf_file->resolves_undefined_symbol_in_object_file = 1;
     }
 
     return result;
@@ -1797,7 +1799,7 @@ void layout_data_copy_section(OutputElfFile *output_elf_file) {
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
-        if (!symbol->needs_copy_relocation) continue;
+        if (!symbol->resolves_undefined_symbol_in_object_file) continue;
 
         // The alignment of the symbol is the alignment of the section it's in.
         // Alignment is stored in src_value for common symbols.

@@ -52,11 +52,13 @@ typedef struct input_elf_file {
     char *symbol_table_strings;
     ElfSymbol *symbol_table;
     int symbol_count;
-    uint16_t *symbol_table_version_indexes; // Indexed by symbol index, the version index of the symbol
-    int *non_default_versioned_symbols;     // Boolean list, indexed by version index
-    List *symbol_version_names;             // Version names, indexed by version index
-    int *global_version_indexes;            // A table to lookup a global version index from the ELF file version index
-    char *soname;                           // For shared libraries, DT_SONAME from dynamic section.
+    uint16_t *symbol_table_version_indexes;         // Indexed by symbol index, the version index of the symbol
+    int *non_default_versioned_symbols;             // Boolean list, indexed by version index
+    List *symbol_version_names;                     // Version names, indexed by version index
+    int *global_version_indexes;                    // A table to lookup a global version index from the ELF file version index
+    char *soname;                                   // For shared libraries, DT_SONAME from dynamic section.
+    int as_needed;                                  // Included with AS_NEEDED from a linker script.
+    int resolves_undefined_symbol_in_object_file;   // Set to 1 if any symbol from the shared library resolves an undefined symbol in an object file
 } InputElfFile;
 
 InputSection *get_input_section(InputElfFile *elf_file, char *name);
