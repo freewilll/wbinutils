@@ -146,8 +146,8 @@ int main(int argc, char **argv) {
     if (!is_static && !is_shared) output_type |= OUTPUT_TYPE_FLAG_SHARED; // For a  dynamic executable
 
     // is_pie is the default for dynamic executables, so the flag is ignored.
-    // However, the flag is invalid when making a shared library or a static executable.
-    if (is_pie && (output_type & !((OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE)))) {
+    // In other cases, the flag doesn't make sense.
+    if (is_pie && (output_type != (OUTPUT_TYPE_FLAG_SHARED | OUTPUT_TYPE_FLAG_EXECUTABLE))) {
         printf("The -pie flag can only be used with dynamic executables\n");
         exit(1);
     }
