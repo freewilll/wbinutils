@@ -2738,11 +2738,11 @@ void test_versioning_default_symbol() {
         ".dynstr",         SHT_STRTAB,      0x1044,   0x1044, 0x21,  SHF_ALLOC,                 1,
         ".gnu.version",    SHT_GNU_VERSYM,  0x1066,   0x1066, 0x04,  SHF_ALLOC,                 2,
         ".gnu.version_r",  SHT_GNU_VERNEED, 0x1070,   0x1070, 0x20,  SHF_ALLOC,                 8,
-        ".rela.plt",       SHT_RELA,        0x2000,   0x2000, 0x30,  SHF_ALLOC | SHF_INFO_LINK, 8,
-        ".plt",            SHT_PROGBITS,    0x3000,   0x3000, 0x30,  SHF_ALLOC | SHF_EXECINSTR, 8,
-        ".text",           SHT_PROGBITS,    0x3030,   0x3030, 0x05,  SHF_ALLOC | SHF_EXECINSTR, 1,
+        ".rela.plt",       SHT_RELA,        0x2000,   0x2000, 0x18,  SHF_ALLOC | SHF_INFO_LINK, 8,
+        ".plt",            SHT_PROGBITS,    0x3000,   0x3000, 0x20,  SHF_ALLOC | SHF_EXECINSTR, 8,
+        ".text",           SHT_PROGBITS,    0x3020,   0x3020, 0x05,  SHF_ALLOC | SHF_EXECINSTR, 1,
         ".dynamic",        SHT_DYNAMIC,     0x4000,   0x4000, 0xf0,  SHF_ALLOC | SHF_WRITE,     8,
-        ".got.plt",        SHT_PROGBITS,    0x40f0,   0x40f0, 0x28,  SHF_ALLOC | SHF_WRITE,     8,
+        ".got.plt",        SHT_PROGBITS,    0x40f0,   0x40f0, 0x20,  SHF_ALLOC | SHF_WRITE,     8,
         NULL
     );
 
@@ -2757,16 +2757,29 @@ void test_versioning_default_symbol() {
         DT_VERNEEDNUM,  0x1,    NULL,
         DT_VERSYM,      0x1066, NULL,
         DT_PLTGOT,      0x40f0, NULL,
-        DT_PLTRELSZ,    0x30,   NULL,
+        DT_PLTRELSZ,    0x18,   NULL,
         DT_PLTREL,      0x7,    NULL,
         DT_JMPREL,      0x2000, NULL,
         DT_DEBUG,       0,      NULL,
         DT_NULL,        0,      NULL
     );
 
+    assert_symtab(elf_file,
+    //  Value   Size   Type        Binding     Visibility   Section    Name
+        0x4000, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x40f0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got.plt", "_GLOBAL_OFFSET_TABLE_",
+        0x3020, 0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
+        END);
+
     assert_dynsym(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section    Name
         0x0000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, "UND",     "f1",
+        END);
+
+    // There should be one relocation for f1 in .got.plt
+    assert_rela_plt_relocations(elf_file,
+        // Tag              Dyn symtab index  Offset   Addend
+        R_X86_64_JUMP_SLOT, 1,                0x4108,  0x0000,
         END);
 
     // Check versym .gnu.version entries

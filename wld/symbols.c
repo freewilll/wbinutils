@@ -1082,6 +1082,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
     // Process global symbols
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
 
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
@@ -1103,6 +1104,7 @@ void make_elf_dyn_symbols(OutputElfFile *output_elf_file) {
         SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
         map_ordered_foreach(local_symbol_table->defined_symbols, it) {
             const SymbolNV *snv = map_ordered_iterator_key(&it);
+            if (snv->is_proxy_for_default) continue;
             Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
             seen_version_indexes[snv->version_index] = 1;
             if (symbol->extra & SE_IN_GOT) rela_dyn_entry_count++;
@@ -1235,6 +1237,7 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
     // Process global symbols
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (symbol->extra & SE_IN_GOT) got_entries_count++;
         if (symbol->extra & SE_IN_GOT_PLT) got_plt_entries_count++;
@@ -1246,6 +1249,7 @@ void create_got_plt_and_rela_sections(OutputElfFile *output_elf_file) {
         SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
         map_ordered_foreach(local_symbol_table->defined_symbols, it) {
             const SymbolNV *snv = map_ordered_iterator_key(&it);
+            if (snv->is_proxy_for_default) continue;
             Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
             if (symbol->extra & SE_IN_GOT) got_entries_count++;
                 if (symbol->extra & SE_IN_GOT_PLT) got_plt_entries_count++;
@@ -1293,6 +1297,7 @@ static void update_got_values_from_symbol_table(InputSection *section_got, Symbo
 
     map_ordered_foreach(symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
         if (!(symbol->extra & SE_IN_GOT)) continue;
 
@@ -1395,6 +1400,7 @@ void update_dynamic_relocatable_values(OutputElfFile *output_elf_file) {
     int got_plt_index = 3; // The first 3 entries are used by the dynamic linker
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!(symbol->extra & SE_IN_GOT_PLT)) continue;
 
@@ -1471,6 +1477,7 @@ void process_ifuncs_from_symbol_table(OutputElfFile *output_elf_file, SymbolTabl
 
     map_ordered_foreach(symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
 
         if (symbol->type == STT_GNU_IFUNC) {
@@ -1675,6 +1682,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     int i = 0;
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
 
@@ -1705,6 +1713,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
         SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
         map_ordered_foreach(local_symbol_table->defined_symbols, it) {
             const SymbolNV *snv = map_ordered_iterator_key(&it);
+            if (snv->is_proxy_for_default) continue;
             Symbol *symbol = map_ordered_get(local_symbol_table->defined_symbols, snv);
             if (!(symbol->extra & SE_IN_GOT)) continue;
             if (!section_got) panic("GOT is NULL");
@@ -1729,6 +1738,7 @@ void update_dyn_rela_section(OutputElfFile *output_elf_file) {
     // Add entries for symbols that need copying at runtime with a R_X86_64_COPY relocation
     map_ordered_foreach(global_symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
+        if (snv->is_proxy_for_default) continue;
         Symbol *symbol = map_ordered_get(global_symbol_table->defined_symbols, snv);
         if (!symbol_is_in_dynsym(output_elf_file, symbol, snv)) continue;
         if (!(symbol->extra & SE_COPY_RELOCATION)) continue;
