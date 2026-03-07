@@ -94,7 +94,8 @@ static void assert_sections(OutputElfFile *elf_file, ...) {
             got->flags != expected->flags ||
             got->align != expected->align) {
 
-            printf("Sections mismatch at position %d in expected sections list\n", i);
+            expected->name;
+            printf("Sections mismatch at position %d, %s in expected sections list\n", i, expected->name);
             fail_sections(elf_file, expected_sections);
         }
     }
@@ -531,7 +532,7 @@ static char *run_as(char *extra_args, char *assembly) {
     return strdup(object_path);
 }
 
-static char *make_lib_with_versioned_symbols(char *map_file_contents, char *object_file_path, char *lib_name) {
+static char *make_lib_with_versioned_symbols(char *map_file_contents, char *object_file_path, char *lib_name, char *soname) {
     char map_path[] = "/tmp/vermap_XXXXXX";
     int fd = mkstemp(map_path);
     if (fd == -1) { perror("mkstemp"); exit(1); }
@@ -553,7 +554,7 @@ static char *make_lib_with_versioned_symbols(char *map_file_contents, char *obje
     }
 
     char command[512];
-    snprintf(command, sizeof(command), "ld -shared -o %s %s --soname lib%s.so --version-script=%s", lib_path, object_file_path, lib_name, map_path);
+    snprintf(command, sizeof(command), "ld -shared -o %s %s --soname %s --version-script=%s", lib_path, object_file_path, soname, map_path);
     int result = system(command);
     if (result) {
         printf("ld failed with exit code %d\n", result >> 8);
@@ -2704,6 +2705,7 @@ void test_versioning_default_symbol() {
         ".symver f1_2,f1@V2;"
     );
 
+    // Write to libtest.so and use soname libtest.so.0 but
     char *library1_path = make_lib_with_versioned_symbols(
         "V1 {\n"
         "    global:\n"
@@ -2714,7 +2716,7 @@ void test_versioning_default_symbol() {
         "    global:\n"
         "        f1;\n"
         "};\n",
-        object_path1, "test");
+        object_path1, "test", "libtest.so.0");
 
     char *object_path2 = run_as(NULL,
         ".globl _start;"
@@ -2733,9 +2735,9 @@ void test_versioning_default_symbol() {
         // Name            Type             Address   Offset  Size   Flags                      Align
         ".hash",           SHT_HASH,        0x1000,   0x1000, 0x14,  SHF_ALLOC,                 8,
         ".dynsym",         SHT_DYNSYM,      0x1014,   0x1014, 0x30,  SHF_ALLOC,                 1,
-        ".dynstr",         SHT_STRTAB,      0x1044,   0x1044, 0x1d,  SHF_ALLOC,                 1,
-        ".gnu.version",    SHT_GNU_VERSYM,  0x1062,   0x1062, 0x04,  SHF_ALLOC,                 2,
-        ".gnu.version_r",  SHT_GNU_VERNEED, 0x1068,   0x1068, 0x20,  SHF_ALLOC,                 8,
+        ".dynstr",         SHT_STRTAB,      0x1044,   0x1044, 0x21,  SHF_ALLOC,                 1,
+        ".gnu.version",    SHT_GNU_VERSYM,  0x1066,   0x1066, 0x04,  SHF_ALLOC,                 2,
+        ".gnu.version_r",  SHT_GNU_VERNEED, 0x1070,   0x1070, 0x20,  SHF_ALLOC,                 8,
         ".rela.plt",       SHT_RELA,        0x2000,   0x2000, 0x30,  SHF_ALLOC | SHF_INFO_LINK, 8,
         ".plt",            SHT_PROGBITS,    0x3000,   0x3000, 0x30,  SHF_ALLOC | SHF_EXECINSTR, 8,
         ".text",           SHT_PROGBITS,    0x3030,   0x3030, 0x05,  SHF_ALLOC | SHF_EXECINSTR, 1,
@@ -2745,15 +2747,15 @@ void test_versioning_default_symbol() {
     );
 
     assert_dynamic(elf_file,
-        DT_NEEDED,      0,      "libtest.so",
+        DT_NEEDED,      0,      "libtest.so.0", // The soname of the library
         DT_STRTAB,      0x1044, NULL,
         DT_SYMTAB,      0x1014, NULL,
-        DT_STRSZ,       0x1d,   NULL,
+        DT_STRSZ,       0x21,   NULL,
         DT_SYMENT,      0x18,   NULL,
         DT_HASH,        0x1000, NULL,
-        DT_VERNEED,     0x1068, NULL,
+        DT_VERNEED,     0x1070, NULL,
         DT_VERNEEDNUM,  0x1,    NULL,
-        DT_VERSYM,      0x1062, NULL,
+        DT_VERSYM,      0x1066, NULL,
         DT_PLTGOT,      0x40f0, NULL,
         DT_PLTRELSZ,    0x30,   NULL,
         DT_PLTREL,      0x7,    NULL,
@@ -2783,7 +2785,7 @@ void test_versioning_default_symbol() {
     ElfVerneed *vn = (ElfVerneed *) verneed_section->data;
     ElfVernaux *vna = (ElfVernaux *) (verneed_section->data + sizeof(ElfVerneed));
 
-    assert_string("libtest.so", &dynstr_section->data[vn->vn_file], "Filename is libtest.so");
+    assert_string("libtest.so.0", &dynstr_section->data[vn->vn_file], "Filename is libtest.so.0"); // The soname of the library
     assert_int(1, vn->vn_cnt, "1 .gnu_version_r entry");
     assert_int(0, vn->vn_next, ".gnu_version_r has one filename");
     assert_string("V1", &dynstr_section->data[vna->vna_name], "Version is V1");
@@ -2810,7 +2812,7 @@ static void test_double_undefined_symbol_resolution_with_default() {
         "    global:\n"
         "        f1;\n"
         "};\n",
-        library1_object_path, "test");
+        library1_object_path, "test", "libtest.so");
 
     // Make libtest2.so that uses f1. It will be bound to f1@1 after linking.
     char *library2_object_path = run_as(NULL,
@@ -2889,13 +2891,13 @@ static void test_soname() {
     append_to_list(input_paths, object_path);
 
     char *lib_name;
-    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "foo", "soname");
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, "libfoo.so.0", "soname");
 
     assert_dynamic(elf_file,
-        DT_SONAME, 0,      "foo",
+        DT_SONAME, 0,      "libfoo.so.0",
         DT_STRTAB, 0x1044, NULL,
         DT_SYMTAB, 0x1014, NULL,
-        DT_STRSZ,  0x7,    NULL,
+        DT_STRSZ,  0xf,    NULL,
         DT_SYMENT, 0x18,   NULL,
         DT_HASH,   0x1000, NULL,
         DT_DEBUG,  0,      NULL,

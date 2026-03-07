@@ -306,13 +306,8 @@ static void make_shared_libraries_list(OutputElfFile *output_elf_file, List *inp
     for (int i = 0; i < input_elf_files->length; i++) {
         InputElfFile *elf_file = input_elf_files->elements[i];
         if (elf_file->type == ET_DYN) {
-            char *filename = strdup(elf_file->filename);
-
-            // Strip off any leading paths
-            char *p = strrchr(filename, '/');
-            if (p) filename = p + 1;
-
-            append_to_list(output_elf_file->shared_libraries, filename);
+            if (!elf_file->soname) panic("Unexpected null soname\n");
+            append_to_list(output_elf_file->shared_libraries, elf_file->soname);
         }
     }
 }
@@ -339,7 +334,7 @@ void dump_dynamic_section(OutputElfFile *output_elf_file) {
 
         const char *tag_name = dynamic_section_name(tag);
 
-        if (tag == DT_NEEDED) {
+        if (tag == DT_NEEDED || tag == DT_SONAME) {
             char *symbol_name = &((char *) section_dynstr->data)[val];
             printf("%3d %-20s Shared library: %s\n", i, tag_name, symbol_name);
         } else {

@@ -56,9 +56,11 @@ typedef struct input_elf_file {
     int *non_default_versioned_symbols;     // Boolean list, indexed by version index
     List *symbol_version_names;             // Version names, indexed by version index
     int *global_version_indexes;            // A table to lookup a global version index from the ELF file version index
+    char *soname;                           // For shared libraries, DT_SONAME from dynamic section.
 } InputElfFile;
 
 InputSection *get_input_section(InputElfFile *elf_file, char *name);
+InputSection *get_input_section_from_type(InputElfFile *elf_file, int type);
 InputElfFile *open_elf_file(const char *filename);
 InputElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);
 int file_is_shared_library_file(const char *filename);

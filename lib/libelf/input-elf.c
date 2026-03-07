@@ -125,6 +125,16 @@ InputSection *get_input_section(InputElfFile *elf_file, char *name) {
     return strmap_get(elf_file->section_map, name);
 }
 
+// May return NULL if not existent
+InputSection *get_input_section_from_type(InputElfFile *elf_file, int type) {
+    for (int i = 0; i < elf_file->section_list->length; i++) {
+        InputSection *input_section = elf_file->section_list->elements[i];
+        if (input_section->type == type) return input_section;
+    }
+
+    return NULL;
+}
+
 static void load_section_headers(InputElfFile *elf_file) {
     // Load all section headeres
     int section_headers_size = sizeof(ElfSectionHeader) * elf_file->elf_header->e_shnum;
@@ -300,6 +310,43 @@ static void load_symbol_versions(InputElfFile *elf_file) {
     }
 }
 
+// Find and set the soname entry, if possible for ET_DYN files.
+static void process_dynamic_section(InputElfFile *elf_file) {
+    char *soname = NULL;
+
+    InputSection *dynamic_section = get_input_section_from_type(elf_file, SHT_DYNAMIC);
+    if (dynamic_section) {
+        load_section(elf_file, dynamic_section);
+
+        InputSection *strings_section = elf_file->section_list->elements[dynamic_section->link];
+        char *strings = load_section(elf_file, strings_section);
+
+        // Loop over all dynamic section entries and find a DT_SONAME entry
+        ElfDyn *entry = dynamic_section->data;
+        ElfDyn *end = dynamic_section->data + dynamic_section->size;
+
+        while (entry < end) {
+            if (entry->d_tag == DT_SONAME) {
+                soname = &strings[entry->d_un.d_val];
+                break;
+            }
+
+            entry++;
+        }
+    }
+
+    if (!soname) {
+        // Fall back to parsing the filename
+        soname = strdup(elf_file->filename);
+
+        // Strip off any leading paths
+        char *p = strrchr(soname, '/');
+        if (p) soname = p + 1;
+    }
+
+    elf_file->soname = soname;
+}
+
 static void load_sections(InputElfFile *elf_file) {
     // Init section caches
     elf_file->section_list = new_list(32);
@@ -312,6 +359,7 @@ static void load_sections(InputElfFile *elf_file) {
     load_section_headers(elf_file);
     load_symbol_table(elf_file);
     load_symbol_versions(elf_file);
+    process_dynamic_section(elf_file);
 }
 
 static void read_common_file_data(InputElfFile *elf_file) {

@@ -1839,7 +1839,7 @@ void add_dynamic_symbol(OutputElfFile *output_elf_file) {
     }
 }
 
-// Create the .gnu.version_r section with filenames and names of all symbol versions
+// Create the .gnu.version_r section with sonames and names of all symbol versions
 void make_verneed_section(OutputElfFile *output_elf_file) {
     if (output_elf_file->type != ET_DYN) return;
 
@@ -1863,9 +1863,8 @@ void make_verneed_section(OutputElfFile *output_elf_file) {
         if (!symbol->src_elf_file || symbol->src_elf_file->type != ET_DYN) continue;
 
         // Get the basename of the lib
-        char *filename = strdup(symbol->src_elf_file->filename);
-        char *basename = strrchr(filename, '/');
-        version_index_filenames[snv->version_index] = basename ? basename + 1 : filename;
+        if (!symbol->src_elf_file->soname) panic("Unexpected null soname\n");
+        version_index_filenames[snv->version_index] = symbol->src_elf_file->soname;
     }
 
     // Make a map of library version names to a list of versions in that library
