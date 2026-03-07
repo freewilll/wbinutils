@@ -841,6 +841,10 @@ static void prepare_tls_template(OutputElfFile *output_elf_file) {
         output_elf_file->tls_template_address = tdata_section->address;
         align = tdata_section->align > tbss_section->align ? tdata_section->align : tbss_section->align;
     }
+    else {
+        // There is no TLS template
+        return;
+    }
 
     // See 3.4.6 of ELF Handling for Thread Local Storage
     // The offset from the thread pointer to the start of the template has to be a multiple of the aligment.
