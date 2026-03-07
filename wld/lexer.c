@@ -89,7 +89,7 @@ static void skip_whitespace(void) {
 static void skip_comments(void) {
     if (ip + 1 < input_end && ip[0] == '/' && ip[1] == '*') {
         ip += 2;
-        while (ip + 1 < input_end && ip[0] != '*' && ip[1] != '/') {
+        while (ip + 1 < input_end && ip[0] != '*' || ip[1] != '/') {
             if (ip[0] == '\n') {
                 cur_line++;
                 set_error_line(cur_line);
