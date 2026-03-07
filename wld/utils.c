@@ -123,7 +123,7 @@ int match_pattern(const char *string, const char *pattern) {
 int match_path_pattern(const char *path, const char *pattern) {
     char *p = strrchr(path, '/');
     if (p)
-        match_pattern(p + 1, pattern);
+        return match_pattern(p + 1, pattern);
     else
         return match_pattern(path, pattern);
 }
