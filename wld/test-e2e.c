@@ -1599,7 +1599,7 @@ static void test_two_shared_libs_with_functions() {
         END);
 
     // .got.plt must have 5 entries
-    InputSection *got_plt = get_extra_section(elf_file, GOT_PLT_SECTION_NAME);
+    InputSection *got_plt = elf_file->section_got_plt;
     if (!got_plt) panic("Could not find .got.plt");
     uint64_t *got_plt_data = got_plt->data;
 

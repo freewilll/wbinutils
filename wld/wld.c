@@ -116,12 +116,6 @@ OutputElfFile *init_output_elf_file(const char *output_filename, int output_type
     return result;
 }
 
-// Get an extra section. Returns null if it doesn't exist
-InputSection *get_extra_section(OutputElfFile *output_elf_file, char *name) {
-    InputSection *section = strmap_ordered_get(output_elf_file->extra_sections, name);
-    return section;
-}
-
 // Create an extra section. It must not already exist.
 InputSection *create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align) {
     if (strmap_ordered_get(output_elf_file->extra_sections, name))
@@ -135,12 +129,6 @@ InputSection *create_extra_section(OutputElfFile *output_elf_file, char *name, u
     strmap_ordered_put(output_elf_file->extra_sections, strdup(name), extra_section);
 
     return extra_section;
-}
-
-InputSection *get_or_create_extra_section(OutputElfFile *output_elf_file, char *name, uint32_t type, uint64_t flags, uint64_t align) {
-    InputSection *section = get_extra_section(output_elf_file, name);
-    if (section) return section;
-    return create_extra_section(output_elf_file, name, type, flags, align);
 }
 
 // Go down all input files which are either object files or shared libraries
@@ -318,11 +306,11 @@ static void make_shared_libraries_list(OutputElfFile *output_elf_file, List *inp
 
 // Print .dynamic section in a format similar to readelf's output
 void dump_dynamic_section(OutputElfFile *output_elf_file) {
-    InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+    InputSection *section_dynamic = output_elf_file->section_dynamic;
     if (!section_dynamic) panic("Expected a dynamic section in dump_dynamic_section");
     if (!section_dynamic->output_section) panic("Expected a dynamic section with output");
 
-    InputSection *section_dynstr = get_extra_section(output_elf_file, DYNSTR_SECTION_NAME);
+    InputSection *section_dynstr = output_elf_file->section_dynstr;
     if (!section_dynstr) panic("Expected a dynstr in dump_dynamic_section");
     if (!section_dynstr->output_section) panic("Expected a dynstr section with output");
 
@@ -374,7 +362,7 @@ static void make_dynamic_section_entry_count(OutputElfFile *output_elf_file, cha
     if (get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (get_non_empty_output_section(output_elf_file, FINI_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (output_elf_file->verneed_names && output_elf_file->verneed_names->length > 0) dynamic_section_entry_count += 2;
-    if (get_extra_section(output_elf_file, VERSYM_SECTION_NAME)) dynamic_section_entry_count += 1;
+    if (output_elf_file->section_versym) dynamic_section_entry_count += 1;
     if (output_elf_file->rela_dyn_entry_count > 0) dynamic_section_entry_count += 3;
     if (output_elf_file->got_plt_entries_count > 0) dynamic_section_entry_count += 4;
 
@@ -382,7 +370,7 @@ static void make_dynamic_section_entry_count(OutputElfFile *output_elf_file, cha
 }
 
 static void set_in_dynamic_section(OutputElfFile *output_elf_file, int index, int64_t tag, uint64_t val_or_addr) {
-    InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+    InputSection *section_dynamic = output_elf_file->section_dynamic;
 
     if (index >= output_elf_file->dynamic_section_entry_count)
         panic("Exceeded dynamic_section_entry_count=%d", output_elf_file->dynamic_section_entry_count);
@@ -395,9 +383,9 @@ static void set_in_dynamic_section(OutputElfFile *output_elf_file, int index, in
 static void create_interp_section(OutputElfFile *output_elf_file, char *dynamic_linker) {
     if (!dynamic_linker) return;
 
-    InputSection *section_dynamic = create_extra_section(output_elf_file, INTERP_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC, 1);
-    section_dynamic->size = strlen(dynamic_linker) + 1;
-    section_dynamic->data = dynamic_linker;
+    output_elf_file->section_interp = create_extra_section(output_elf_file, INTERP_SECTION_NAME, SHT_PROGBITS, SHF_ALLOC, 1);
+    output_elf_file->section_interp->size = strlen(dynamic_linker) + 1;
+    output_elf_file->section_interp->data = dynamic_linker;
 }
 
 // Add several sections if it's a shared library
@@ -407,9 +395,9 @@ static void create_dynamic_sections(OutputElfFile *output_elf_file, List *input_
     make_shared_libraries_list(output_elf_file, input_elf_files);
     make_dynamic_section_entry_count(output_elf_file, soname, rpaths);
 
-    InputSection *section_dynamic = create_extra_section(output_elf_file, DYNAMIC_SECTION_NAME, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE, 8);
-    section_dynamic->size = output_elf_file->dynamic_section_entry_count * sizeof(ElfDyn);
-    section_dynamic->data = calloc(1, section_dynamic->size);
+    output_elf_file->section_dynamic = create_extra_section(output_elf_file, DYNAMIC_SECTION_NAME, SHT_DYNAMIC, SHF_ALLOC | SHF_WRITE, 8);
+    output_elf_file->section_dynamic->size = output_elf_file->dynamic_section_entry_count * sizeof(ElfDyn);
+    output_elf_file->section_dynamic->data = calloc(1, output_elf_file->section_dynamic->size);
 
     output_elf_file->section_hash = create_extra_section(output_elf_file, HASH_SECTION_NAME, SHT_HASH, SHF_ALLOC, 8);
 
@@ -451,15 +439,15 @@ static void create_dynamic_sections(OutputElfFile *output_elf_file, List *input_
 static void update_dynamic_sections(OutputElfFile *output_elf_file, char *soname, List *rpaths) {
     if (output_elf_file->type != ET_DYN) return;
 
-    InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+    InputSection *section_dynamic = output_elf_file->section_dynamic;
     InputSection *section_dynstr = output_elf_file->section_dynstr;
     InputSection *section_dynsym = output_elf_file->section_dynsym;
     InputSection *section_hash = output_elf_file->section_hash;
     InputSection *section_rela_dyn = output_elf_file->section_rela_dyn;
     InputSection *section_rela_plt = output_elf_file->section_rela_plt;
     InputSection *section_got_plt = output_elf_file->section_got_plt;
-    InputSection *section_verneed = get_extra_section(output_elf_file, VERNEED_SECTION_NAME);
-    InputSection *section_versym = get_extra_section(output_elf_file, VERSYM_SECTION_NAME);
+    InputSection *section_verneed = output_elf_file->section_verneed;
+    InputSection *section_versym = output_elf_file->section_versym;
     OutputSection *section_init = get_non_empty_output_section(output_elf_file, INIT_SECTION_NAME);
     OutputSection *section_fini = get_non_empty_output_section(output_elf_file, FINI_SECTION_NAME);
     OutputSection *section_init_array = get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME);
@@ -527,7 +515,7 @@ static void associate_sections(OutputElfFile *output_elf_file) {
     if (output_elf_file->type == ET_DYN) {
         InputSection *section_dynstr = output_elf_file->section_dynstr;
 
-        InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+        InputSection *section_dynamic = output_elf_file->section_dynamic;
         ElfSectionHeader *h = &output_elf_file->elf_section_headers[section_dynamic->output_section->index];
         h->sh_link = section_dynstr->output_section->index;
 
@@ -542,7 +530,7 @@ static void associate_sections(OutputElfFile *output_elf_file) {
         h = &output_elf_file->elf_section_headers[section_hash->output_section->index];
         h->sh_link = section_dynsym->output_section->index;
 
-        InputSection *section_verneed = get_extra_section(output_elf_file, VERNEED_SECTION_NAME);
+        InputSection *section_verneed = output_elf_file->section_verneed;
         if (section_verneed) {
             section_verneed->output_section->link = section_dynstr->output_section->index;
             section_verneed->output_section->info = section_verneed->info;
@@ -552,7 +540,7 @@ static void associate_sections(OutputElfFile *output_elf_file) {
             h->sh_entsize = sizeof(ElfVerneed);
         }
 
-        InputSection *section_versym = get_extra_section(output_elf_file, VERSYM_SECTION_NAME);
+        InputSection *section_versym = output_elf_file->section_versym;
         if (section_versym) {
             section_versym->output_section->link = section_dynsym->output_section->index;
             h = &output_elf_file->elf_section_headers[section_versym->output_section->index];
@@ -663,18 +651,18 @@ void dump_program_segments(OutputElfFile *output_elf_file) {
 // Make the ELF program segment headers. Include the special TLS section if required.
 static void make_elf_program_segment_headers(OutputElfFile *output_elf_file, char *dynamic_linker) {
     if (dynamic_linker) {
-        InputSection *interp_section = get_extra_section(output_elf_file, INTERP_SECTION_NAME);
+        InputSection *section_interp = output_elf_file->section_interp;
 
         ElfProgramSegmentHeader *dl_program_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
 
         dl_program_segment->p_type   = PT_INTERP;
         dl_program_segment->p_flags  = PF_R;
         dl_program_segment->p_align  = 1;
-        dl_program_segment->p_filesz = interp_section->size;
-        dl_program_segment->p_memsz  = interp_section->size;
-        dl_program_segment->p_offset = interp_section->output_section->offset;
-        dl_program_segment->p_vaddr  = interp_section->output_section->address;
-        dl_program_segment->p_paddr  = interp_section->output_section->address;
+        dl_program_segment->p_filesz = section_interp->size;
+        dl_program_segment->p_memsz  = section_interp->size;
+        dl_program_segment->p_offset = section_interp->output_section->offset;
+        dl_program_segment->p_vaddr  = section_interp->output_section->address;
+        dl_program_segment->p_paddr  = section_interp->output_section->address;
 
         append_to_list(output_elf_file->program_segments_list, dl_program_segment);
     }
@@ -702,7 +690,7 @@ static void make_elf_program_segment_headers(OutputElfFile *output_elf_file, cha
     }
 
     if (output_elf_file->type == ET_DYN) {
-        InputSection *section_dynamic = get_extra_section(output_elf_file, DYNAMIC_SECTION_NAME);
+        InputSection *section_dynamic = output_elf_file->section_dynamic;
 
         ElfProgramSegmentHeader *tls_program_segment = calloc(1, sizeof(ElfProgramSegmentHeader));
 

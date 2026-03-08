@@ -53,7 +53,17 @@ typedef struct output_elf  {
     struct input_section *section_hash;                     // Used by wld
     struct input_section *section_rela_dyn;                 // Used by wld
     struct input_section *section_rela_plt;                 // Used by wld
+    struct input_section *section_rela_iplt;                // Used by wld
+    struct input_section *section_got;                      // Used by wld
     struct input_section *section_got_plt;                  // Used by wld
+    struct input_section *section_got_iplt;                 // Used by wld
+    struct input_section *section_plt;                      // Used by wld
+    struct input_section *section_iplt;                     // Used by wld
+    struct input_section *section_dynamic;                  // Used by wld
+    struct input_section *section_versym;                   // Used by wld
+    struct input_section *section_verneed;                  // Used by wld
+    struct input_section *section_interp;                   // Used by wld
+    struct input_section *section_data_copy;                // Used by wld
     int local_symbol_end;                                   // Index of last local symbol
     uint64_t entrypoint;                                    // Entry point of executable
     uint64_t tls_template_offset;                           // Offset in the file for Thread Local Storage (TLS) template
