@@ -983,12 +983,13 @@ void make_symbol_values_from_symbol_table(OutputElfFile *output_elf_file, Symbol
 }
 
 // Add a local or global symbol to the ELF file
-static void add_elf_symbols_from_symbol_table (OutputElfFile *output_elf_file, SymbolTable *symbol_table, int binding) {
+static void add_elf_symbols_from_symbol_table(OutputElfFile *output_elf_file, SymbolTable *symbol_table, int local) {
     map_ordered_foreach(symbol_table->defined_symbols, it) {
         const SymbolNV *snv = map_ordered_iterator_key(&it);
         if (!strcmp(snv->name, ".")) continue;
         Symbol *symbol = map_ordered_get(symbol_table->defined_symbols, snv);
-        if (symbol->binding != binding) continue;
+        if (symbol->binding == STB_LOCAL & !local) continue;
+        if (symbol->binding != STB_LOCAL & local) continue;
 
         // Don't add a symbol if it has only been seen in a shared library
         if (output_elf_file->type == ET_DYN && !(symbol->sources & (SRC_INTERNAL | SRC_OBJECT | SRC_LIBRARY))) continue;
@@ -997,7 +998,7 @@ static void add_elf_symbols_from_symbol_table (OutputElfFile *output_elf_file, S
         symbol->dst_index = add_elf_symbol(output_elf_file, symbol->name, 0, symbol->size, symbol->binding, symbol->type, symbol->other, section_index);
 
         // Update the symtab info section so that it points to the last local symbol
-        if (binding == STB_LOCAL) output_elf_file->section_symtab->info = symbol->dst_index + 1;
+        if (local) output_elf_file->section_symtab->info = symbol->dst_index + 1;
     }
 }
 
@@ -1020,18 +1021,17 @@ void make_elf_symbols(OutputElfFile *output_elf_file) {
     }
 
     // Add global "local" builtin special symbols
-    add_elf_symbols_from_symbol_table(output_elf_file, global_symbol_table, STB_LOCAL);
+    add_elf_symbols_from_symbol_table(output_elf_file, global_symbol_table, 1);
 
     // Add local symbols
     strmap_ordered_foreach(local_symbol_tables, it) {
         const char *filename = strmap_ordered_iterator_key(&it);
         SymbolTable *local_symbol_table = strmap_ordered_get(local_symbol_tables, filename);
-        add_elf_symbols_from_symbol_table(output_elf_file, local_symbol_table, STB_LOCAL);
+        add_elf_symbols_from_symbol_table(output_elf_file, local_symbol_table, 1);
     }
 
     // Add global symbols
-    add_elf_symbols_from_symbol_table(output_elf_file, global_symbol_table, STB_GLOBAL);
-
+    add_elf_symbols_from_symbol_table(output_elf_file, global_symbol_table, 0);
 }
 
 // Add a string to the dynstr section unless name is "".

@@ -2918,6 +2918,27 @@ static void test_soname() {
     );
 }
 
+void test_weak_symbol_in_symtab() {
+    char *object_path = run_as("-mrelax-relocations=no",
+        ".section .data;"
+        ".weak i;"
+        ".type i, @object;"
+        "i: .long 1;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "weak_symbol_in_symtab");
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility   Section     Name
+        0x2000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x2070,    0,     STT_OBJECT, STB_WEAK,   STV_DEFAULT, ".data",    "i",
+        END);
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -2961,4 +2982,5 @@ int main() {
     test_double_undefined_symbol_resolution_with_default();
     test_silly_bss_section_loading_bug();
     test_soname();
+    test_weak_symbol_in_symtab();
 }
