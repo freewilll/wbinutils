@@ -84,6 +84,10 @@ stack_ok:
     movq $-1, %rax;                                           andq reg00@GOTPCREL(%rip), %rax ; cmpq reg00@GOTPCREL(%rip), %rax ; jne exit_with_not_ok
     movq $0, %rax ;                                           orq  reg00@GOTPCREL(%rip), %rax ; cmpq reg00@GOTPCREL(%rip), %rax ; jne exit_with_not_ok
 
+    # The test instuction
+    lea reg00(%rip), %rax; testq reg00@GOTPCREL(%rip), %rax; jz exit_with_not_ok
+    lea reg00(%rip), %r9;  testq reg00@GOTPCREL(%rip), %r9;  jz exit_with_not_ok
+
     .extern external_data
     movq external_data@GOTPCREL(%rip), %rax
     movq (%rax), %rax

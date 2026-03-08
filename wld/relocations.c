@@ -427,6 +427,14 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
+            // testq foo@GOTPCREL(%%rip), raxreg to testq $%s, raxreg
+            else if (!output_is_shared && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x85) {
+                if (DEBUG_RELOCATION_RELAXATION)
+                    printf("Relaxing testq %s@GOTPCREL(%%rip), raxreg to testq $%s, raxreg\n", debug_symbol_name,  debug_symbol_name);
+                convert_Gvqp_to_Evqp(input_data, 0xf7, 1);
+                return;
+            }
+
             // Relax binary operations
             R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x03, 0, "add")
             R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x0b, 1, "or")
@@ -652,8 +660,12 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             int use_absolute_address = *output2 == 0x81; // 0x81 is a binop $foo, %rax
 
             // Check if the instruction is a mov with an absolute address
-            // 0xc7 is mov $foo, %eax
+            // 0xc7 is mov $foo, %rax
             if (*output2 == 0xc7 && DECODE_MOD_RM_MODE(*mod_rm) == MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING)
+                use_absolute_address = 1;
+
+            // 0xf7 is test $rax, %rax
+            if (*output2 == 0xf7 && DECODE_MOD_RM_MODE(*mod_rm) == MOD_RM_MODE_REGISTER_DIRECT_ADDRESSING)
                 use_absolute_address = 1;
 
             // The instruction has been relaxed from a mov to a lea

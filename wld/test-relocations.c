@@ -310,12 +310,12 @@ int test_R_X86_64_GOTPCRELX_in_shared_object(void) {
 }
 
 // Test a binary operation relaxation
-void test_R_x86_64_REX_GOTPCRELX_binop(int opcode, int opcode_field) {
-    uint8_t output_data[] = {0x4c, opcode, 0x0d, 0x00, 0x00, 0x00, 0x00};           // OP 0x0(%rip), %r9
+void test_R_x86_64_REX_GOTPCRELX_binop(int org_opcode, int new_opcode, int new_opcode_field) {
+    uint8_t output_data[] = {0x4c, org_opcode, 0x0d, 0x00, 0x00, 0x00, 0x00};       // OP 0x0(%rip), %r9
     reset(OT_STATIC_EXEC, output_data, R_X86_64_REX_GOTPCRELX, 3, 0x10);
     set_value(0x401000);
     run();
-    assert_data(output_data, 0x49, 0x81, 0xC1 | opcode_field << 3, 0x00, 0x10, 0x40, 0x00, END); // OP $0x401000, %r9
+    assert_data(output_data, 0x49, new_opcode, 0xC1 | new_opcode_field << 3, 0x00, 0x10, 0x40, 0x00, END); // OP $0x401000, %r9
 }
 
 int test_R_X86_64_REX_GOTPCRELX() {
@@ -359,14 +359,15 @@ int test_R_X86_64_REX_GOTPCRELX() {
     assert_data(output_data6, 0x49, 0x81, 0xe9, 0x00, 0x10, 0x40, 0x00, END);       // sub $0x401000, %r9
 
     // Test the 8 binary operations cases
-    test_R_x86_64_REX_GOTPCRELX_binop(0x03, 0); // add
-    test_R_x86_64_REX_GOTPCRELX_binop(0x0b, 1); // or
-    test_R_x86_64_REX_GOTPCRELX_binop(0x13, 2); // adc
-    test_R_x86_64_REX_GOTPCRELX_binop(0x1b, 3); // sbb
-    test_R_x86_64_REX_GOTPCRELX_binop(0x23, 4); // and
-    test_R_x86_64_REX_GOTPCRELX_binop(0x2b, 5); // sub
-    test_R_x86_64_REX_GOTPCRELX_binop(0x33, 6); // xor
-    test_R_x86_64_REX_GOTPCRELX_binop(0x3b, 7); // cmp
+    test_R_x86_64_REX_GOTPCRELX_binop(0x03, 0x81, 0); // add
+    test_R_x86_64_REX_GOTPCRELX_binop(0x0b, 0x81, 1); // or
+    test_R_x86_64_REX_GOTPCRELX_binop(0x13, 0x81, 2); // adc
+    test_R_x86_64_REX_GOTPCRELX_binop(0x1b, 0x81, 3); // sbb
+    test_R_x86_64_REX_GOTPCRELX_binop(0x23, 0x81, 4); // and
+    test_R_x86_64_REX_GOTPCRELX_binop(0x2b, 0x81, 5); // sub
+    test_R_x86_64_REX_GOTPCRELX_binop(0x33, 0x81, 6); // xor
+    test_R_x86_64_REX_GOTPCRELX_binop(0x3b, 0x81, 7); // cmp
+    test_R_x86_64_REX_GOTPCRELX_binop(0x85, 0xf7, 1); // test
 }
 
 int test_R_X86_64_REX_GOTPCRELX_in_shared_object() {
