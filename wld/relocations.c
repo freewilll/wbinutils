@@ -349,22 +349,29 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
-            // callq foo(%rip)
             else if (offset > 1 && opcode == 0xff) {
                 if (DEBUG_RELOCATION_RELAXATION)
                     printf("Relaxing callq %s(%%rip) to addr32 callq %s RIP-relative\n", debug_symbol_name,  debug_symbol_name);
 
-                if (*pmod_rm == 0x15) { // reg=2, the opcode extension r/m=5 is [rip + disp32]. So mod/rm = reg << 3 + r/m = 0x15
+                // callq foo(%rip)
+                if (*pmod_rm == 0x15) { // reg=2, the opcode extension for callq r/m=5 is [rip + disp32]. So mod/rm = reg << 3 + r/m = 0x15
                     *popcode = 0x67; // Replace the opcode with the address size override prefix 0x67
                     *pmod_rm = 0xe8; // Replace mod/rm with the new opcode 0xe8
                 }
+                // jmpq foo(%rip)
+                else if (*pmod_rm == 0x25) { // reg=4, the opcode extension for jmpq, r/m=5 is [rip + disp32]
+                    // The instructions is shortened one byte, so a single-byte nop needs adding at the end
+                    *popcode = 0xe9; // jmpq;
+                    popcode[5] = 0x90; // Put a nop at the end
+                }
+
                 else
-                    panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#02x %#02x\n", opcode, *pmod_rm);
+                    panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX (1): %#02x %#02x\n", opcode, *pmod_rm);
 
                 return;
             }
 
-            panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX: %#x\n", opcode);
+            panic("Unhandled instruction rewrite for R_X86_64_GOTPCRELX (2): %#x\n", opcode);
         }
 
         case R_X86_64_REX_GOTPCRELX: {
@@ -605,12 +612,24 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
                 break;
             }
 
-            // addr32 callq foo RIP-relative encoded as 0x67 0xe8 which was converted from callq foo(%rip)
-            // Make a RIP-relative address
+
+                // addr32 callq foo RIP-relative encoded as 0x67 0xe8 which was converted from callq foo(%rip)
             else if (output_offset > 1 && *output2 == 0x67 && *output1 == 0xe8) {
+                // Make a RIP-relative address
                 uint64_t value = S + A - P;
                 if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
                 *output = value;
+                break;
+            }
+
+            // jmpq PC-relative
+            else if (*output2 == 0xe9) {
+                // Make a RIP-relative address
+                // The instruction is shortened, so the displacement needs to be increased.
+                uint64_t value = S + A - P + 1;
+                if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+                uint32_t *output = (uint32_t *) (output_pointer - 1);
+                *output = value; // The -1 is due to the opcode being 1 byte smaller
                 break;
             }
 

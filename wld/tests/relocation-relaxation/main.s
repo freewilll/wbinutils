@@ -101,6 +101,11 @@ stack_ok:
     cmp $202, %rax
     jne exit_with_not_ok
 
+    # Check jmp *func(%rip)
+    jmp *jmp@GOTPCREL(%rip)
+    jmp exit_with_not_ok
+jmp:
+
     # Check a GOTPCREL for an undefined weak symbol works as it should
     .weak weak_fn        # undefined weak symbol
     movq weak_fn@GOTPCREL(%rip), %rax

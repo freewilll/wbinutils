@@ -291,6 +291,13 @@ int test_R_X86_64_GOTPCRELX(void) {
     set_value(0x401000);
     run();
     assert_data(output_data2, 0x67, 0xe8, 0x0e, 0x10, 0x00, 0x00, END);             // addr32 callq *0x100e(%rip)
+
+    // S + A - P + 1 =  0x401000 + 0x10 - 0x401002 = 0x100f, the +1 is since the instruction is one byte shorter
+    uint8_t output_data3[] = {0xff, 0x25, 0x00, 0x00, 0x00, 0x00};                  // jmpq *0x0(%rip)
+    reset(OT_STATIC_EXEC, output_data3, R_X86_64_GOTPCRELX, 2, 0x10);
+    set_value(0x401000);
+    run();
+    assert_data(output_data3, 0xe9, 0x0f, 0x10, 0x00, 0x00, 0x90, END);             // jmpq *0x100f(%rip) and nop
 }
 
 int test_R_X86_64_GOTPCRELX_in_shared_object(void) {
@@ -299,7 +306,6 @@ int test_R_X86_64_GOTPCRELX_in_shared_object(void) {
     state.symbol->src_elf_file->type = ET_DYN;
     set_got_offset(0x20);
     run();
-    // got_address + got_offset + A - P = 0x500000 + 0x20 + 0 - 0x400002 = 0x10001e
     assert_data(output_data, 0xff, 0x15, 0x1e, 0x00, 0x10, 0x00, END);              // call 0x10001e(%rip)
 }
 
