@@ -65,9 +65,9 @@
 #define SHT_GROUP         17          // Section group
 #define SHT_SYMTAB_SHNDX  18          // Extended section indeces
 #define	SHT_NUM           19          // Number of defined types.
-#define SHT_GNU_VERDEF    0x6ffffffd  // GNU Version definition section.
-#define SHT_GNU_VERNEED   0x6ffffffe  // GNU Version needs section
-#define SHT_GNU_VERSYM    0x6fffffff  // GNU Version symbol table
+#define SHT_GNU_VERDEF    0x6ffffffd  // GNU Version definition section, .gnu.version_d
+#define SHT_GNU_VERNEED   0x6ffffffe  // GNU Version needs section, .gnu.version_r
+#define SHT_GNU_VERSYM    0x6fffffff  // GNU Version symbol table, .gnu.version
 
 // Program segment types
 #define	PT_NULL           0     // Program header table entry unused

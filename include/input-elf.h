@@ -51,7 +51,6 @@ typedef struct input_elf_file {
     int resolves_undefined_symbol_in_object_file;   // Set to 1 if any symbol from the shared library resolves an undefined symbol in an object file
 } InputElfFile;
 
-InputSection *get_input_section(InputElfFile *elf_file, char *name);
 InputSection *get_input_section_from_type(InputElfFile *elf_file, int type);
 InputElfFile *open_elf_file(const char *filename);
 InputElfFile *open_elf_file_in_archive(FILE *f, const char *filename, int offset);

@@ -135,12 +135,7 @@ static void check_file(InputElfFile *elf_file) {
         error("ELF file isn't for x86_64: %s", elf_file->filename);
 }
 
-// May return NULL if not existent
-InputSection *get_input_section(InputElfFile *elf_file, char *name) {
-    return strmap_get(elf_file->section_map, name);
-}
-
-// May return NULL if not existent
+// Get the first input section matching a type. May return NULL if not existent
 InputSection *get_input_section_from_type(InputElfFile *elf_file, int type) {
     for (int i = 0; i < elf_file->section_list->length; i++) {
         InputSection *input_section = elf_file->section_list->elements[i];
@@ -184,8 +179,8 @@ static void load_symbol_table(InputElfFile *elf_file) {
     // Look up symbol table.
     // If a .dynsym exists, which is the case for .so files, use that. Otherwise,
     // fall back to .symtab, if present.
-    InputSection *dynsym_section = get_input_section(elf_file, ".dynsym");
-    InputSection *symtab_section = get_input_section(elf_file, ".symtab");
+    InputSection *dynsym_section = get_input_section_from_type(elf_file, SHT_DYNSYM);
+    InputSection *symtab_section = get_input_section_from_type(elf_file,SHT_SYMTAB);
     InputSection *symbols_section = dynsym_section ? dynsym_section : (symtab_section ? symtab_section : NULL);
 
     if (symbols_section) {
@@ -208,7 +203,7 @@ static void load_symbol_versions(InputElfFile *elf_file) {
     elf_file->symbol_version_names = new_list(32);
 
     // Look up symbol version indexes
-    InputSection *gnu_version = get_input_section(elf_file, ".gnu.version");
+    InputSection *gnu_version = get_input_section_from_type(elf_file, SHT_GNU_VERSYM);
     if (!gnu_version) return;
     load_section(elf_file, gnu_version);
 
@@ -227,7 +222,7 @@ static void load_symbol_versions(InputElfFile *elf_file) {
     }
 
     // Parse VERDEF section
-    InputSection *gnu_version_d = get_input_section(elf_file, ".gnu.version_d");
+    InputSection *gnu_version_d = get_input_section_from_type(elf_file, SHT_GNU_VERDEF);
     if (gnu_version_d) {
         if (DEBUG_SYMBOL_VERSIONS) printf("Verdef for %s:\n", elf_file->filename);
 
@@ -273,7 +268,7 @@ static void load_symbol_versions(InputElfFile *elf_file) {
     }
 
     // Parse VERNEED section
-    InputSection *gnu_version_r = get_input_section(elf_file, ".gnu.version_r");
+    InputSection *gnu_version_r = get_input_section_from_type(elf_file, SHT_GNU_VERNEED);
     if (gnu_version_r) {
         load_section(elf_file, gnu_version_r);
         void *gnu_version_r_data = gnu_version_r->data;
