@@ -12,6 +12,21 @@
 
 #define DEBUG_SYMBOL_VERSIONS 0
 
+const char *SYMBOL_TYPE_NAMES[] = {
+    "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?"
+};
+
+const char *SYMBOL_BINDING_NAMES[] = {
+    "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
+    "?", "?", "?", "?", "?", "?", "?", "?",
+};
+
+const char *SYMBOL_VISIBILITY_NAMES[] = {
+    "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
+};
+
+
 static int read_header(InputElfFile *elf_file, int fail_on_read_error) {
     fseek(elf_file->file, elf_file->file_offset, SEEK_SET);
     elf_file->elf_header = malloc(sizeof(ElfHeader));

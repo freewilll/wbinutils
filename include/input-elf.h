@@ -8,19 +8,9 @@
 #include "strmap.h"
 #include "output-elf.h"
 
-static const char *SYMBOL_TYPE_NAMES[] = {
-    "NOTYPE", "OBJECT", "FUNC", "SECTION", "FILE", "COMMON", "?", "?",
-    "?", "?", "?", "?", "?", "?", "?", "?"
-};
-
-static const char *SYMBOL_BINDING_NAMES[] = {
-    "LOCAL", "GLOBAL", "WEAK", "?", "?", "?", "?", "?",
-    "?", "?", "?", "?", "?", "?", "?", "?",
-};
-
-static const char *SYMBOL_VISIBILITY_NAMES[] = {
-    "DEFAULT", "INTERNAL", "HIDDEN", "PROTECTED",
-};
+extern const char *SYMBOL_TYPE_NAMES[];
+extern const char *SYMBOL_BINDING_NAMES[];
+extern const char *SYMBOL_VISIBILITY_NAMES[];
 
 typedef struct input_section {
     char *name;                           // Section name
