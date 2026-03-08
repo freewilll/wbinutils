@@ -369,6 +369,8 @@ static void make_dynamic_section_entry_count(OutputElfFile *output_elf_file, cha
     int dynamic_section_entry_count = BASE_DYNAMIC_SECTION_ENTRY_COUNT + output_elf_file->shared_libraries->length;
     if (soname) dynamic_section_entry_count++;
     if (rpaths->length > 0) dynamic_section_entry_count++;
+    if (get_non_empty_output_section(output_elf_file, INIT_SECTION_NAME)) dynamic_section_entry_count += 1;
+    if (get_non_empty_output_section(output_elf_file, FINI_SECTION_NAME)) dynamic_section_entry_count += 1;
     if (get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (get_non_empty_output_section(output_elf_file, FINI_ARRAY_SECTION_NAME)) dynamic_section_entry_count += 2;
     if (output_elf_file->verneed_names && output_elf_file->verneed_names->length > 0) dynamic_section_entry_count += 2;
@@ -458,6 +460,8 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file, char *soname
     InputSection *section_got_plt = output_elf_file->section_got_plt;
     InputSection *section_verneed = get_extra_section(output_elf_file, VERNEED_SECTION_NAME);
     InputSection *section_versym = get_extra_section(output_elf_file, VERSYM_SECTION_NAME);
+    OutputSection *section_init = get_non_empty_output_section(output_elf_file, INIT_SECTION_NAME);
+    OutputSection *section_fini = get_non_empty_output_section(output_elf_file, FINI_SECTION_NAME);
     OutputSection *section_init_array = get_non_empty_output_section(output_elf_file, INIT_ARRAY_SECTION_NAME);
     OutputSection *section_fini_array = get_non_empty_output_section(output_elf_file, FINI_ARRAY_SECTION_NAME);
 
@@ -470,6 +474,14 @@ static void update_dynamic_sections(OutputElfFile *output_elf_file, char *soname
     set_in_dynamic_section(output_elf_file, pos++, DT_STRSZ,  section_dynstr->size);
     set_in_dynamic_section(output_elf_file, pos++, DT_SYMENT, sizeof(ElfSymbol));
     set_in_dynamic_section(output_elf_file, pos++, DT_HASH, section_hash->output_section->address);
+
+    if (section_init) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_INIT, section_init->address);
+    }
+
+    if (section_fini) {
+        set_in_dynamic_section(output_elf_file, pos++, DT_FINI, section_fini->address);
+    }
 
     if (section_init_array) {
         set_in_dynamic_section(output_elf_file, pos++, DT_INIT_ARRAY, section_init_array->address);

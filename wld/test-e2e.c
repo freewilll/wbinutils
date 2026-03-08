@@ -2939,6 +2939,34 @@ void test_weak_symbol_in_symtab() {
         END);
 }
 
+void test_dynamic_section_has_dt_init() {
+    char *object_path = run_was(
+        ".section .init, \"ax\", @progbits;"
+        "nop;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    char *lib_name;
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_SHARED, &lib_name, 0, NULL, "dynamic_section_has_dt_init");
+
+    OutputSection *init_section = get_output_section(elf_file, INIT_SECTION_NAME);
+    if (!init_section) panic("No .init section");
+    if (!init_section->size) panic("Expected non-empty .init section");
+
+    assert_dynamic(elf_file,
+        DT_STRTAB,      0x1028,     NULL,
+        DT_SYMTAB,      0x1010,     NULL,
+        DT_STRSZ,       0x01,       NULL,
+        DT_SYMENT,      0x18,       NULL,
+        DT_HASH,        0x1000,     NULL,
+        DT_INIT,        0x2000,     NULL,
+        DT_DEBUG,       0,          NULL,
+        DT_NULL,        0,          NULL
+    );
+}
+
 int main() {
     test_sanity();
     test_empty_object_file();
@@ -2983,4 +3011,5 @@ int main() {
     test_silly_bss_section_loading_bug();
     test_soname();
     test_weak_symbol_in_symtab();
+    test_dynamic_section_has_dt_init();
 }

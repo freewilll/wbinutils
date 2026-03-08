@@ -34,6 +34,8 @@
 #define VERSYM_SECTION_NAME     ".gnu.version"
 #define VERNEED_SECTION_NAME    ".gnu.version_r"
 #define VERDEF_SECTION_NAME     ".gnu.version_d"
+#define INIT_SECTION_NAME       ".init"
+#define FINI_SECTION_NAME       ".fini"
 #define INIT_ARRAY_SECTION_NAME ".init_array"
 #define FINI_ARRAY_SECTION_NAME ".fini_array"
 
