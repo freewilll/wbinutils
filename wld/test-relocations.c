@@ -309,6 +309,15 @@ int test_R_X86_64_GOTPCRELX_in_shared_object(void) {
     assert_data(output_data, 0xff, 0x15, 0x1e, 0x00, 0x10, 0x00, END);              // call 0x10001e(%rip)
 }
 
+// Test a binary operation relaxation
+void test_R_x86_64_REX_GOTPCRELX_binop(int opcode, int opcode_field) {
+    uint8_t output_data[] = {0x4c, opcode, 0x0d, 0x00, 0x00, 0x00, 0x00};           // OP 0x0(%rip), %r9
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_REX_GOTPCRELX, 3, 0x10);
+    set_value(0x401000);
+    run();
+    assert_data(output_data, 0x49, 0x81, 0xC1 | opcode_field << 3, 0x00, 0x10, 0x40, 0x00, END); // OP $0x401000, %r9
+}
+
 int test_R_X86_64_REX_GOTPCRELX() {
     // mov
     uint8_t output_data[] = {0x48, 0x8b, 0x0d, 0x00, 0x00, 0x00, 0x00};             // mov 0x0(%rip), %rcx
@@ -348,6 +357,16 @@ int test_R_X86_64_REX_GOTPCRELX() {
     set_value(0x401000);
     run();
     assert_data(output_data6, 0x49, 0x81, 0xe9, 0x00, 0x10, 0x40, 0x00, END);       // sub $0x401000, %r9
+
+    // Test the 8 binary operations cases
+    test_R_x86_64_REX_GOTPCRELX_binop(0x03, 0); // add
+    test_R_x86_64_REX_GOTPCRELX_binop(0x0b, 1); // or
+    test_R_x86_64_REX_GOTPCRELX_binop(0x13, 2); // adc
+    test_R_x86_64_REX_GOTPCRELX_binop(0x1b, 3); // sbb
+    test_R_x86_64_REX_GOTPCRELX_binop(0x23, 4); // and
+    test_R_x86_64_REX_GOTPCRELX_binop(0x2b, 5); // sub
+    test_R_x86_64_REX_GOTPCRELX_binop(0x33, 6); // xor
+    test_R_x86_64_REX_GOTPCRELX_binop(0x3b, 7); // cmp
 }
 
 int test_R_X86_64_REX_GOTPCRELX_in_shared_object() {

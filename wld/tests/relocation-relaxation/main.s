@@ -73,22 +73,16 @@ stack_ok:
     lea reg14(%rip), %r14 ; cmpq reg14@GOTPCREL(%rip), %r14 ; jne exit_with_not_ok
     lea reg15(%rip), %r15 ; cmpq reg15@GOTPCREL(%rip), %r15 ; jne exit_with_not_ok
 
-    # Check subtraction instructions
-    # Not doing rsp and rbp for convenience. They aren't special cases in the encoding anyways.
-    leaq reg00(%rip), %rax ; subq reg00@GOTPCREL(%rip), %rax ; jnz exit_with_not_ok
-    leaq reg01(%rip), %rcx ; subq reg01@GOTPCREL(%rip), %rcx ; jnz exit_with_not_ok
-    leaq reg02(%rip), %rdx ; subq reg02@GOTPCREL(%rip), %rdx ; jnz exit_with_not_ok
-    leaq reg03(%rip), %rbx ; subq reg03@GOTPCREL(%rip), %rbx ; jnz exit_with_not_ok
-    leaq reg06(%rip), %rsi ; subq reg06@GOTPCREL(%rip), %rsi ; jnz exit_with_not_ok
-    leaq reg07(%rip), %rdi ; subq reg07@GOTPCREL(%rip), %rdi ; jnz exit_with_not_ok
-    leaq reg08(%rip), %r8  ; subq reg08@GOTPCREL(%rip), %r8  ; jnz exit_with_not_ok
-    leaq reg09(%rip), %r9  ; subq reg09@GOTPCREL(%rip), %r9  ; jnz exit_with_not_ok
-    leaq reg10(%rip), %r10 ; subq reg10@GOTPCREL(%rip), %r10 ; jnz exit_with_not_ok
-    leaq reg11(%rip), %r11 ; subq reg11@GOTPCREL(%rip), %r11 ; jnz exit_with_not_ok
-    leaq reg12(%rip), %r12 ; subq reg12@GOTPCREL(%rip), %r12 ; jnz exit_with_not_ok
-    leaq reg13(%rip), %r13 ; subq reg13@GOTPCREL(%rip), %r13 ; jnz exit_with_not_ok
-    leaq reg14(%rip), %r14 ; subq reg14@GOTPCREL(%rip), %r14 ; jnz exit_with_not_ok
-    leaq reg15(%rip), %r15 ; subq reg15@GOTPCREL(%rip), %r15 ; jnz exit_with_not_ok
+    # A couple of more instructions
+    lea reg00(%rip), %rax ; neg %rax;                         addq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    lea reg00(%rip), %rax ; neg %rax;           clc;          adcq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    lea reg00(%rip), %rax ; neg %rax; dec %rax; stc;          adcq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    lea reg00(%rip), %rax ;                                   subq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    lea reg00(%rip), %rax ;                     clc;          sbbq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    lea reg00(%rip), %rax ;           inc %rax; stc;          sbbq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    lea reg00(%rip), %rax;                                    xorq reg00@GOTPCREL(%rip), %rax ;                                   jnz exit_with_not_ok
+    movq $-1, %rax;                                           andq reg00@GOTPCREL(%rip), %rax ; cmpq reg00@GOTPCREL(%rip), %rax ; jne exit_with_not_ok
+    movq $0, %rax ;                                           orq  reg00@GOTPCREL(%rip), %rax ; cmpq reg00@GOTPCREL(%rip), %rax ; jne exit_with_not_ok
 
     .extern external_data
     movq external_data@GOTPCREL(%rip), %rax

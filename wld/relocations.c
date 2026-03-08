@@ -243,6 +243,15 @@ static void add_R_X86_64_64_relocation(OutputElfFile *output_elf_file, InputElfF
     append_to_list(output_elf_file->rela_dyn_R_X86_64_64_relocations, rrdr);
 }
 
+// Helper macro for binops cases of the R_X86_64_REX_GOTPCRELX relaxations
+#define R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(org_opcode, opcode_field, name) \
+    else if (!output_is_shared && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == org_opcode) { \
+        if (DEBUG_RELOCATION_RELAXATION) \
+            printf("Relaxing " name "q %s@GOTPCREL(%%rip), raxreg to " name "q $%s, raxreg\n", debug_symbol_name,  debug_symbol_name); \
+        convert_Gvqp_to_Evqp(input_data, 0x81, opcode_field); \
+        return; \
+    }
+
 // Given an input file and a relocation, relax any instructions where possible and determine if the symbol needs to be in the GOT.
 // The instructions are rewritten in the loaded input ELF section.
 // apply_relocation() puts the relocated values in the output ELF file.
@@ -418,22 +427,17 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
                 return;
             }
 
-            else if (!output_is_shared && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x3b) {
-                if (DEBUG_RELOCATION_RELAXATION)
-                    printf("Relaxing cmpq %s@GOTPCREL(%%rip), raxreg to cmpq $%s, raxreg\n", debug_symbol_name,  debug_symbol_name);
+            // Relax binary operations
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x03, 0, "add")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x0b, 1, "or")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x13, 2, "adc")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x1b, 3, "sbb")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x23, 4, "and")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x2b, 5, "sub")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x33, 6, "xor")
+            R_X86_64_REX_GOTPCRELX_BINOP_RELAXATION(0x3b, 7, "cmp")
 
-                convert_Gvqp_to_Evqp(input_data, 0x81, 7);
-                return;
-            }
-
-            else if (!output_is_shared && offset > 2 && (*pprefix == 0x48 || *pprefix == 0x4c) && opcode == 0x2b) {
-                if (DEBUG_RELOCATION_RELAXATION)
-                    printf("Relaxing subq %s@GOTPCREL(%%rip), raxreg to subq $%s, raxreg\n", debug_symbol_name,  debug_symbol_name);
-
-                convert_Gvqp_to_Evqp(input_data, 0x81, 5);
-                return;
-            }
-
+            // Fall back to a GOT/PLT relocation
             add_got_or_plt_relocation(input_elf_file, relocation, SE_IN_GOT);
             return;
         }
@@ -612,8 +616,7 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
                 break;
             }
 
-
-                // addr32 callq foo RIP-relative encoded as 0x67 0xe8 which was converted from callq foo(%rip)
+            // addr32 callq foo RIP-relative encoded as 0x67 0xe8 which was converted from callq foo(%rip)
             else if (output_offset > 1 && *output2 == 0x67 && *output1 == 0xe8) {
                 // Make a RIP-relative address
                 uint64_t value = S + A - P;

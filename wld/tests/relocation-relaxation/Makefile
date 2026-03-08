@@ -19,7 +19,7 @@ main-dynamic-unrelaxed.o: main.s
 	as $< -o $@ -mrelax-relocations=no
 
 main-static-relaxed: main-static-relaxed.o libtest.o
-	${WLD}                                                \
+	@${WLD}                                               \
 	-static                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
@@ -34,7 +34,7 @@ main-static-relaxed: main-static-relaxed.o libtest.o
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
 main-static-unrelaxed: main-static-unrelaxed.o libtest.o
-	${WLD}                                                \
+	@${WLD}                                               \
 	-static                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
@@ -49,7 +49,7 @@ main-static-unrelaxed: main-static-unrelaxed.o libtest.o
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
 main-dynamic-relaxed: main-dynamic-relaxed.o libtest.o
-	${WLD}                                                \
+	@${WLD}                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
 	libtest.o                                             \
@@ -62,7 +62,7 @@ main-dynamic-relaxed: main-dynamic-relaxed.o libtest.o
 	-pie                                                  \
 
 main-dynamic-unrelaxed: main-dynamic-unrelaxed.o libtest.o
-	${WLD}                                                \
+	@${WLD}                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
 	libtest.o                                             \
