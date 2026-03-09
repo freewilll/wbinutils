@@ -26,6 +26,9 @@ make was
 ```
 
 Run tests
+
+The tests require gcc and wcc to be installed. See [wcc](https://github.com/freewilll/wcc) for how to build it. If you check out and build wcc at the same level as wbinutils, the default test path will work.
+
 ```
 make test
 ```

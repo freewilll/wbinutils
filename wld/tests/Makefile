@@ -57,8 +57,9 @@ WLD ?= $(abspath ../../bin/wld)
 
 WCC_ARGS = LD=${WLD} AS=${WAS}
 
-WCC      ?= ${WCC_ARGS} $(abspath ../../../src/wcc)
-MUSL_WCC ?= ${WCC_ARGS} $(abspath ../../../src/musl-wcc)
+# Assume that the wcc repository has been checked out in the same place as wbinutils.
+WCC      ?= ${WCC_ARGS} $(abspath ../../../wcc/wcc)
+MUSL_WCC ?= ${WCC_ARGS} $(abspath ../../../wcc/musl-wcc)
 
 GCC      ?= gcc
 MUSL_GCC ?= musl-gcc
