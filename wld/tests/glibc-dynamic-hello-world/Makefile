@@ -1,20 +1,28 @@
+$(LOCAL_BUILD_DIR):
+	@mkdir -p $@
+
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/glibc-dynamic-hello-world
+LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/glibc-dynamic-hello-world
+
+all: | $(LOCAL_BUILD_DIR)
 all: test
 
+test: | $(LOCAL_BUILD_DIR)
 test: run-main
 
-main.o: main.c
-	${WCC} -c main.c -o main.o -g
+$(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
+	${WCC} -c $(LOCAL_SRC_DIR)/main.c -o $(LOCAL_BUILD_DIR)/main.o -g
 
-main: main.o
+$(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
 	-dynamic-linker /lib64/ld-linux-x86-64.so.2  \
 	-L /usr/lib                                  \
 	-L /usr/lib/gcc/x86_64-linux-gnu/9           \
-	-o main                                      \
+	-o $(LOCAL_BUILD_DIR)/main                   \
 	/usr/lib/x86_64-linux-gnu/crt1.o             \
 	/usr/lib/x86_64-linux-gnu/crti.o             \
 	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o  \
-	main.o                                       \
+	$(LOCAL_BUILD_DIR)/main.o                    \
 	-lc                                          \
 	-lgcc                                        \
 	-lgcc_eh                                     \
@@ -22,8 +30,8 @@ main: main.o
 	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o    \
 	/usr/lib/x86_64-linux-gnu/crtn.o \
 
-run-main: main
-	@./main # Catch non-zero error
+run-main: $(LOCAL_BUILD_DIR)/main
+	@$(LOCAL_BUILD_DIR)/main # Catch non-zero error
 	@MSG=$$(./main);\
 	if [ "$$MSG" != "Hello World!" ]; then \
 		echo "Message was not hello world."; \
@@ -31,10 +39,10 @@ run-main: main
 	fi ;\
 
 	## Ensure ld-linux isn't present in .dynamic section NEEDED
-	@! readelf -dW main | grep NEEDED | grep ld-linux
+	@! readelf -dW $(LOCAL_BUILD_DIR)/main | grep NEEDED | grep ld-linux
 
 	echo "Glibc dynamic hello world passed"
 
 clean:
-	@rm -f *.o
-	@rm -f main
+	@rm -f $(LOCAL_BUILD_DIR)/*.o
+	@rm -f $(LOCAL_BUILD_DIR)/main

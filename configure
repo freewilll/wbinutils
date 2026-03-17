@@ -26,8 +26,20 @@ for arg in "$@"; do
     shift || true
 done
 
+SRC_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BUILD_DIR=$(pwd)
+
 # Write out config.mk
 CONFIG_MK_PATH=config.mk
 cat > $CONFIG_MK_PATH <<END
 PREFIX := $PREFIX
 END
+
+if [ "$SRC_DIR" != "$BUILD_DIR" ]
+then
+# Write out Makefile
+MAKEFILE=Makefile
+cat > $MAKEFILE <<END
+include $SRC_DIR/Makefile
+END
+fi

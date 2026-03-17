@@ -1,29 +1,37 @@
+$(LOCAL_BUILD_DIR):
+	@mkdir -p $@
+
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/musl-libc-hello-world
+LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/musl-libc-hello-world
+
+all: | $(LOCAL_BUILD_DIR)
 all: test
 
+test: | $(LOCAL_BUILD_DIR)
 test: run-main
 
-%.o: %.s
+$(LOCAL_BUILD_DIR)/%.o: $(LOCAL_SRC_DIR)/%.s | $(LOCAL_BUILD_DIR)
 	${WAS} $< -o $@
 
-main.o: main.c
-	${WCC} -c main.c -o main.o
+$(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
+	${WCC} -c $(LOCAL_SRC_DIR)/main.c -o $(LOCAL_BUILD_DIR)/main.o
 
-main: main.o
+$(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
 	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
 	-L/usr/lib/x86_64-linux-musl                          \
 	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
-	main.o                                                \
-	-o main                                               \
+	$(LOCAL_BUILD_DIR)/main.o                             \
+	-o $(LOCAL_BUILD_DIR)/main                            \
 	-lc -lgcc -lgcc_eh                                    \
 	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 	-static
 
-run-main: main
-	@./main # Catch non-zero error
+run-main: $(LOCAL_BUILD_DIR)/main
+	@$(LOCAL_BUILD_DIR)/main # Catch non-zero error
 	@MSG=$$(./main);\
 	if [ "$$MSG" != "Hello World!" ]; then \
 		echo "Message was not hello world."; \
@@ -32,5 +40,5 @@ run-main: main
 	echo "Musl hello world passed"
 
 clean:
-	@rm -f *.o
-	@rm -f main
+	@rm -f $(LOCAL_BUILD_DIR)/*.o
+	@rm -f $(LOCAL_BUILD_DIR)/main

@@ -1,4 +1,7 @@
-TARGET = ../bin/was
+LOCAL_BUILD_DIR := $(BUILD_DIR)/was
+LOCAL_SRC_DIR := $(SRC_DIR)/was
+
+TARGET = $(BUILD_DIR)/bin/was
 
 all: ${TARGET}
 
@@ -20,6 +23,7 @@ HEADERS = \
 	was/parser.h \
 	was/relocations.h \
 	was/symbols.h \
+	was/test-utils.h \
 	was/utils.h \
 	was/was.h \
 
@@ -46,63 +50,80 @@ LIBS = \
 	strmap \
 	strmap_ordered \
 
-HEADERS_PATH := ${HEADERS:%=../include/%}
+HEADERS_PATH := ${HEADERS:%=$(SRC_DIR)/include/%}
+LIBS_PATH := ${LIBS:%=$(BUILD_DIR)/lib/lib%.a}
 
-LIBS_PREFIXED_L := ${LIBS:%=-l%}
-LIBS_PATH := ${LIBS:%=../lib/lib%.a}
+OBJECTS := $(addprefix $(LOCAL_BUILD_DIR)/, $(OBJECTS))
 
-%.o: %.c ${HEADERS_PATH}
-	gcc -g -Werror -I ../include -c $< -o $@
+DEPFILES = \
+	${OBJECTS:.o=.d} \
+	$(LOCAL_BUILD_DIR)/main.d \
+	$(LOCAL_BUILD_DIR)/test-utils.d \
+	$(LOCAL_BUILD_DIR)/test-instr.d \
+	$(LOCAL_BUILD_DIR)/test-data.d \
+	$(LOCAL_BUILD_DIR)/test-expr.d
 
-scripts/venv:
-	python3 -m virtualenv scripts/venv
-	scripts/venv/bin/pip install bs4 lxml jinja2
+CFLAGS = -g -Werror -I $(SRC_DIR)/include -MMD -MP
 
-# Requires a python virtualenv to be setup in scripts/venv
-opcodes-generated.c: scripts/parse-x86reference.xml.py scripts/opcodes.j2 scripts/venv
-	scripts/venv/bin/python3 scripts/parse-x86reference.xml.py ../../x86reference-2.xml opcodes-generated.c
+$(LOCAL_BUILD_DIR)/%.o: $(LOCAL_SRC_DIR)/%.c ${HEADERS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc ${CFLAGS} -c $< -o $@
 
-${TARGET}: ${OBJECTS} main.o ${HEADERS_PATH} ${LIBS_PATH}
-	gcc -g -Werror -L../lib ${OBJECTS} ${LIBS_PREFIXED_L} main.o -o ${TARGET}
+$(LOCAL_BUILD_DIR)/scripts/venv:
+	python3 -m virtualenv $@
+	$@/bin/pip install -r $(LOCAL_SRC_DIR)/scripts/requirements.txt
+
+# Keep generated files in the build tree when regeneration is requested.
+$(LOCAL_BUILD_DIR)/opcodes-generated.c: $(LOCAL_SRC_DIR)/scripts/parse-x86reference.xml.py $(LOCAL_SRC_DIR)/scripts/opcodes.j2 $(LOCAL_BUILD_DIR)/scripts/venv
+	mkdir -p $(LOCAL_BUILD_DIR)
+	$(LOCAL_BUILD_DIR)/scripts/venv/bin/python3 $(LOCAL_SRC_DIR)/scripts/parse-x86reference.xml.py $(SRC_DIR)/x86reference-2.xml $@
+
+${TARGET}: ${OBJECTS} $(LOCAL_BUILD_DIR)/main.o ${HEADERS_PATH} ${LIBS_PATH}
+	mkdir -p $(dir $@)
+	gcc -g -Werror ${OBJECTS} ${LIBS_PATH} $(LOCAL_BUILD_DIR)/main.o -o ${TARGET}
+
+-include ${DEPFILES}
 
 .PHONY: test
 test: ${TARGET} run-test-instr run-test-data run-test-expr
-	make -C tests
+	+$(MAKE) -C $(LOCAL_SRC_DIR)/tests test
 
-test-utils.o: test-utils.c ../include/was/test-utils.h
-	gcc -g -Werror  -Wunused -I ../include -c $< -o $@
+$(LOCAL_BUILD_DIR)/test-instr: ${OBJECTS} $(LOCAL_BUILD_DIR)/test-instr.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH}
+	gcc -g -Werror ${OBJECTS} $(LOCAL_BUILD_DIR)/test-instr.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH} -o $@
 
-test-instr: ${OBJECTS} test-instr.o test-utils.o
-	gcc -g -Werror -L../lib ${OBJECTS} test-instr.o test-utils.o ${LIBS_PREFIXED_L} -o test-instr
+$(LOCAL_BUILD_DIR)/test-data: ${OBJECTS} $(LOCAL_BUILD_DIR)/test-data.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH}
+	gcc -g -Werror ${OBJECTS} $(LOCAL_BUILD_DIR)/test-data.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH} -o $@
 
-test-data: ${OBJECTS} test-data.o test-utils.o
-	gcc -g -Werror -L../lib ${OBJECTS} test-data.o test-utils.o ${LIBS_PREFIXED_L} -o test-data
-
-test-expr: ${OBJECTS} test-expr.o test-utils.o
-	gcc -g -Werror -L../lib ${OBJECTS} test-expr.o test-utils.o ${LIBS_PREFIXED_L} -o test-expr
+$(LOCAL_BUILD_DIR)/test-expr: ${OBJECTS} $(LOCAL_BUILD_DIR)/test-expr.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH}
+	gcc -g -Werror ${OBJECTS} $(LOCAL_BUILD_DIR)/test-expr.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH} -o $@
 
 .PHONY: run-test-instr
-run-test-instr: test-instr
-	./test-instr
+run-test-instr: $(LOCAL_BUILD_DIR)/test-instr
+	$<
 
 .PHONY: run-test-data
-run-test-data: test-data
-	./test-data
+run-test-data: $(LOCAL_BUILD_DIR)/test-data
+	$<
 
 .PHONY: run-test-expr
-run-test-expr: test-expr
-	./test-expr
+run-test-expr: $(LOCAL_BUILD_DIR)/test-expr
+	$<
 
 clean:
-	@rm -f *.o
-	@rm -f was
-	@rm -f test-instr
-	@rm -f test-expr
-	@rm -f test-data
-	@rm -Rf build/willos
-
-	make -C tests clean
+	@rm -f $(OBJECTS)
+	@rm -f ${OBJECTS:.o=.d}
+	@rm -f $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/main.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-utils.o $(LOCAL_BUILD_DIR)/test-utils.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-instr.o $(LOCAL_BUILD_DIR)/test-instr.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-data.o $(LOCAL_BUILD_DIR)/test-data.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-expr.o $(LOCAL_BUILD_DIR)/test-expr.d
+	@rm -f $(TARGET)
+	@rm -f $(LOCAL_BUILD_DIR)/test-instr
+	@rm -f $(LOCAL_BUILD_DIR)/test-expr
+	@rm -f $(LOCAL_BUILD_DIR)/test-data
+	@rm -Rf $(LOCAL_BUILD_DIR)/build/willos
+	@+$(MAKE) -C $(LOCAL_SRC_DIR)/tests clean
 
 # Not done by default since it doesn't change that often
 clean-venv:
-	@rm -Rf scripts/venv
+	@rm -Rf $(LOCAL_BUILD_DIR)/scripts/venv

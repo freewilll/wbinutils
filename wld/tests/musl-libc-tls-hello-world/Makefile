@@ -1,22 +1,29 @@
+$(LOCAL_BUILD_DIR):
+	@mkdir -p $@
+
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/musl-libc-tls-hello-world
+LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/musl-libc-tls-hello-world
+
 # A couple of tests of executables that have combinations of .tdata and.or .tbss sections.
 
+test: | $(LOCAL_BUILD_DIR)
 test: all
 
-all:  \
+all: | $(LOCAL_BUILD_DIR)\
 	run-main-data \
 	run-main-bss \
 	run-main-data-and-bss
 
-%.o: %.c
+$(LOCAL_BUILD_DIR)/%.o: $(LOCAL_SRC_DIR)/%.c | $(LOCAL_BUILD_DIR)
 	${GCC} -c $< -o $@
 
-main-bss: main-bss.o
-	${GCC} main-bss.o -o main-bss
+$(LOCAL_BUILD_DIR)/main-bss: $(LOCAL_BUILD_DIR)/main-bss.o
+	${GCC} $(LOCAL_BUILD_DIR)/main-bss.o -o $(LOCAL_BUILD_DIR)/main-bss
 
-main-data-and-bss: main-data-and-bss.o
-	${GCC} main-data-and-bss.o -o main-data-and-bss
+$(LOCAL_BUILD_DIR)/main-data-and-bss: $(LOCAL_BUILD_DIR)/main-data-and-bss.o
+	${GCC} $(LOCAL_BUILD_DIR)/main-data-and-bss.o -o $(LOCAL_BUILD_DIR)/main-data-and-bss
 
-%-data: %-data.o
+$(LOCAL_BUILD_DIR)/%-data: $(LOCAL_BUILD_DIR)/%-data.o | $(LOCAL_BUILD_DIR)
 	@${WLD} \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
@@ -31,8 +38,8 @@ main-data-and-bss: main-data-and-bss.o
 	-static
 
 .PHONY: run-main-data
-run-main-data: main-data
-	@./main-data # Catch non-zero error
+run-main-data: $(LOCAL_BUILD_DIR)/main-data
+	@$(LOCAL_BUILD_DIR)/main-data # Catch non-zero error
 	@MSG=$$(./main-data);\
 	if [ "$$MSG" != "Hello World! 42" ]; then \
 		echo "Message was not Hello World! 42"; \
@@ -41,8 +48,8 @@ run-main-data: main-data
 	echo "Musl hello world data passed"
 
 .PHONY: run-main-bss
-run-main-bss: main-bss
-	@./main-bss # Catch non-zero error exit code
+run-main-bss: $(LOCAL_BUILD_DIR)/main-bss
+	@$(LOCAL_BUILD_DIR)/main-bss # Catch non-zero error exit code
 	@MSG=$$(./main-bss);\
 	if [ "$$MSG" != "Hello World! 0" ]; then \
 		echo "Message was not Hello World! 0"; \
@@ -51,8 +58,8 @@ run-main-bss: main-bss
 	echo "Musl hello world bss passed"
 
 .PHONY: run-main-bss
-run-main-data-and-bss: main-data-and-bss
-	@./main-data-and-bss # Catch non-zero error exit code
+run-main-data-and-bss: $(LOCAL_BUILD_DIR)/main-data-and-bss
+	@$(LOCAL_BUILD_DIR)/main-data-and-bss # Catch non-zero error exit code
 	@MSG=$$(./main-data-and-bss);\
 	if [ "$$MSG" != "Hello World! 42" ]; then \
 		echo "Message was not Hello World! 42"; \
@@ -61,7 +68,7 @@ run-main-data-and-bss: main-data-and-bss
 	echo "Musl hello world data and bss passed"
 
 clean:
-	@rm -f *.o
-	@rm -f main-data
-	@rm -f main-bss
-	@rm -f main-data-and-bss
+	@rm -f $(LOCAL_BUILD_DIR)/*.o
+	@rm -f $(LOCAL_BUILD_DIR)/main-data
+	@rm -f $(LOCAL_BUILD_DIR)/main-bss
+	@rm -f $(LOCAL_BUILD_DIR)/main-data-and-bss

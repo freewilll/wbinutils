@@ -1,4 +1,7 @@
-TARGET = ../bin/wld
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld
+LOCAL_SRC_DIR := $(SRC_DIR)/wld
+
+TARGET = $(BUILD_DIR)/bin/wld
 
 all: ${TARGET}
 
@@ -43,89 +46,141 @@ LIBS = \
 	strmap \
 	strmap_ordered \
 
-HEADERS_PATH := ${HEADERS:%=../include/%}
+HEADERS_PATH := ${HEADERS:%=$(SRC_DIR)/include/%}
+LIBS_PATH := ${LIBS:%=$(BUILD_DIR)/lib/lib%.a}
 
-LIBS_PREFIXED_L := ${LIBS:%=-l%}
-LIBS_PATH := ${LIBS:%=../lib/lib%.a}
+OBJECTS := $(addprefix $(LOCAL_BUILD_DIR)/, $(OBJECTS))
 
 LINKER_SCRIPTS_HEADERS = \
-	default.ld.h \
-	default-shared.ld.h \
+	$(LOCAL_BUILD_DIR)/default.ld.h \
+	$(LOCAL_BUILD_DIR)/default-shared.ld.h \
 
-%.o: %.c ${HEADERS_PATH} ${LINKER_SCRIPTS_HEADERS}
-	gcc -g -Werror -I . -I ../include -c $< -o $@
+DEPFILES = \
+	${OBJECTS:.o=.d} \
+	$(LOCAL_BUILD_DIR)/main.d \
+	$(LOCAL_BUILD_DIR)/test-archive-loading.d \
+	$(LOCAL_BUILD_DIR)/test-symbol-resolution.d \
+	$(LOCAL_BUILD_DIR)/test-relocations.d \
+	$(LOCAL_BUILD_DIR)/test-parser.d \
+	$(LOCAL_BUILD_DIR)/test-expr.d \
+	$(LOCAL_BUILD_DIR)/test-utils.d \
+	$(LOCAL_BUILD_DIR)/test-e2e.d
 
-default.ld.h: default-linker-script.template.h
-	gcc -E default-linker-script.template.h -D STATIC > default.ld.h
+CFLAGS = -g -Werror -I $(LOCAL_BUILD_DIR) -I $(LOCAL_SRC_DIR) -I $(SRC_DIR)/include -MMD -MP
 
-default-shared.ld.h: default-linker-script.template.h
-	gcc -E default-linker-script.template.h -D SHARED > default-shared.ld.h
+$(LOCAL_BUILD_DIR)/%.o: $(LOCAL_SRC_DIR)/%.c ${HEADERS_PATH} ${LINKER_SCRIPTS_HEADERS}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc ${CFLAGS} -c $< -o $@
 
-libwld.a: ${OBJECTS} ${LIBS_PATH} ${LINKER_SCRIPTS_HEADERS}
-	rm -f libwld.a
-	ar rcsT libwld.a ${OBJECTS} ${LIBS_PATH}
+$(LOCAL_BUILD_DIR)/default.ld.h: $(LOCAL_SRC_DIR)/default-linker-script.template.h
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -E $< -D STATIC > $@
 
-${TARGET}: libwld.a main.o ${LIBS_PATH}
-	gcc -g -Werror -I . -I ../include main.o libwld.a -o ${TARGET}
+$(LOCAL_BUILD_DIR)/default-shared.ld.h: $(LOCAL_SRC_DIR)/default-linker-script.template.h
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -E $< -D SHARED > $@
 
+$(LOCAL_BUILD_DIR)/libwld.a: ${OBJECTS} ${LIBS_PATH} ${LINKER_SCRIPTS_HEADERS}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	ar rcs $@ ${OBJECTS}
+
+${TARGET}: $(LOCAL_BUILD_DIR)/libwld.a $(LOCAL_BUILD_DIR)/main.o ${LIBS_PATH}
+	mkdir -p $(dir $@)
+	gcc -g -Werror -I $(LOCAL_BUILD_DIR) -I $(LOCAL_SRC_DIR) -I $(SRC_DIR)/include $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o ${TARGET}
+
+-include ${DEPFILES}
+
+.PHONY: test
 test: ${TARGET} run-test-archive-loading run-test-symbol-resolution run-test-relocations run-test-parser run-test-expr run-test-utils run-test-e2e
-	+$(MAKE) -C tests
+	+$(MAKE) -C $(LOCAL_SRC_DIR)/tests test
 
-libtest-archive-loading.a: test-archive-loading.o
-	ar rcs libtest-archive-loading.a test-archive-loading.o
+$(LOCAL_BUILD_DIR)/libtest-archive-loading.a: $(LOCAL_BUILD_DIR)/test-archive-loading.o
+	mkdir -p $(LOCAL_BUILD_DIR)
+	ar rcs $@ $<
 
-libtest-archive-loading-long.a: test-archive-loading.o
-	cp test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
-	ar rcs libtest-archive-loading-long.a test-archive-loading.o /tmp/a-very-very-very-long-object-filename.o
+$(LOCAL_BUILD_DIR)/libtest-archive-loading-long.a: $(LOCAL_BUILD_DIR)/test-archive-loading.o
+	mkdir -p $(LOCAL_BUILD_DIR)
+	cp $< $(LOCAL_BUILD_DIR)/a-very-very-very-long-object-filename.o
+	ar rcs $@ $< $(LOCAL_BUILD_DIR)/a-very-very-very-long-object-filename.o
 
-test-archive-loading: libwld.a test-archive-loading.o libtest-archive-loading-long.a
-	ar rcs libtest-archive-loading.a test-archive-loading.o
-	gcc -g -Werror -I . -I ../include test-archive-loading.o libwld.a  -o test-archive-loading
+$(LOCAL_BUILD_DIR)/test-archive-loading: $(LOCAL_BUILD_DIR)/libwld.a $(LOCAL_BUILD_DIR)/test-archive-loading.o $(LOCAL_BUILD_DIR)/libtest-archive-loading-long.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror -I $(LOCAL_BUILD_DIR) -I $(LOCAL_SRC_DIR) -I $(SRC_DIR)/include $(LOCAL_BUILD_DIR)/test-archive-loading.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-archive-loading
-run-test-archive-loading: test-archive-loading libtest-archive-loading.a libtest-archive-loading-long.a
-	./test-archive-loading
+run-test-archive-loading: $(LOCAL_BUILD_DIR)/test-archive-loading $(LOCAL_BUILD_DIR)/libtest-archive-loading.a $(LOCAL_BUILD_DIR)/libtest-archive-loading-long.a
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
 
-test-%: test-%.o libwld.a
-	gcc -g -Werror $< libwld.a -o $@
+$(LOCAL_BUILD_DIR)/test-symbol-resolution: $(LOCAL_BUILD_DIR)/test-symbol-resolution.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror $< $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-symbol-resolution
-run-test-symbol-resolution: test-symbol-resolution
-	./test-symbol-resolution
+run-test-symbol-resolution: $(LOCAL_BUILD_DIR)/test-symbol-resolution
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
+
+$(LOCAL_BUILD_DIR)/test-relocations: $(LOCAL_BUILD_DIR)/test-relocations.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror $< $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-relocations
-run-test-relocations: test-relocations
-	./test-relocations
+run-test-relocations: $(LOCAL_BUILD_DIR)/test-relocations
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
+
+$(LOCAL_BUILD_DIR)/test-parser: $(LOCAL_BUILD_DIR)/test-parser.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror $< $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-parser
-run-test-parser: test-parser
-	./test-parser
+run-test-parser: $(LOCAL_BUILD_DIR)/test-parser
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
+
+$(LOCAL_BUILD_DIR)/test-expr: $(LOCAL_BUILD_DIR)/test-expr.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror $< $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-expr
-run-test-expr: test-expr
-	./test-expr
+run-test-expr: $(LOCAL_BUILD_DIR)/test-expr
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
+
+$(LOCAL_BUILD_DIR)/test-utils: $(LOCAL_BUILD_DIR)/test-utils.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror $< $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-utils
-run-test-utils: test-utils
-	./test-utils
+run-test-utils: $(LOCAL_BUILD_DIR)/test-utils
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
+
+$(LOCAL_BUILD_DIR)/test-e2e: $(LOCAL_BUILD_DIR)/test-e2e.o $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH}
+	mkdir -p $(LOCAL_BUILD_DIR)
+	gcc -g -Werror $< $(LOCAL_BUILD_DIR)/libwld.a ${LIBS_PATH} -o $@
 
 .PHONY: run-test-e2e
-run-test-e2e: test-e2e
-	./test-e2e
+run-test-e2e: $(LOCAL_BUILD_DIR)/test-e2e
+	cd $(LOCAL_BUILD_DIR) && ./$(notdir $<)
 
 clean:
-	@rm -f *.o
-	@rm -f default.ld.h
-	@rm -f default-shared.ld.h
-	@rm -f libwld.a
+	@rm -f $(OBJECTS)
+	@rm -f ${OBJECTS:.o=.d}
+	@rm -f $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/main.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-archive-loading.o $(LOCAL_BUILD_DIR)/test-archive-loading.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-symbol-resolution.o $(LOCAL_BUILD_DIR)/test-symbol-resolution.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-relocations.o $(LOCAL_BUILD_DIR)/test-relocations.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-parser.o $(LOCAL_BUILD_DIR)/test-parser.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-expr.o $(LOCAL_BUILD_DIR)/test-expr.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-utils.o $(LOCAL_BUILD_DIR)/test-utils.d
+	@rm -f $(LOCAL_BUILD_DIR)/test-e2e.o $(LOCAL_BUILD_DIR)/test-e2e.d
+	@rm -f $(LINKER_SCRIPTS_HEADERS)
+	@rm -f $(LOCAL_BUILD_DIR)/libwld.a
 	@rm -f ${TARGET}
-	@+$(MAKE) -C tests clean
-	@rm -f test-archive-loading
-	@rm -f libtest-archive-loading.a
-	@rm -f libtest-archive-loading-long.a
-	@rm -f test-symbol-resolution
-	@rm -f test-relocations
-	@rm -f test-parser
-	@rm -f test-expr
-	@rm -f test-utils
-	@rm -f test-e2e
+	@rm -f $(LOCAL_BUILD_DIR)/test-archive-loading
+	@rm -f $(LOCAL_BUILD_DIR)/libtest-archive-loading.a
+	@rm -f $(LOCAL_BUILD_DIR)/libtest-archive-loading-long.a
+	@rm -f $(LOCAL_BUILD_DIR)/a-very-very-very-long-object-filename.o
+	@rm -f $(LOCAL_BUILD_DIR)/test-symbol-resolution
+	@rm -f $(LOCAL_BUILD_DIR)/test-relocations
+	@rm -f $(LOCAL_BUILD_DIR)/test-parser
+	@rm -f $(LOCAL_BUILD_DIR)/test-expr
+	@rm -f $(LOCAL_BUILD_DIR)/test-utils
+	@rm -f $(LOCAL_BUILD_DIR)/test-e2e
+	@+$(MAKE) -C $(LOCAL_SRC_DIR)/tests clean

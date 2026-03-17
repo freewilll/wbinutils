@@ -1,57 +1,65 @@
+$(LOCAL_BUILD_DIR):
+	@mkdir -p $@
+
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/musl-libc-dynamic-fprintf-to-stdout
+LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/musl-libc-dynamic-fprintf-to-stdout
+
 # This tests use case of wld adding a R_X86_64_COPY relocation
-# due to main accessing an object in a library.
+# due to $(LOCAL_BUILD_DIR)/main accessing an object in a library.
 # This happens when accessing stdout in musl, which is also tested here
 
+all: | $(LOCAL_BUILD_DIR)
 all: test
 
+test: | $(LOCAL_BUILD_DIR)
 test: run-main
 
-main.o: main.c
-	${MUSL_WCC} -c main.c -o main.o
+$(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
+	${MUSL_WCC} -c $(LOCAL_SRC_DIR)/main.c -o $(LOCAL_BUILD_DIR)/main.o
 
-libtest1.o: libtest1.c
-	${MUSL_WCC} -c libtest1.c -o libtest1.o -fPIC
+$(LOCAL_BUILD_DIR)/libtest1.o: $(LOCAL_SRC_DIR)/libtest1.c
+	${MUSL_WCC} -c $(LOCAL_SRC_DIR)/libtest1.c -o $(LOCAL_BUILD_DIR)/libtest1.o -fPIC
 
-libtest2.o: libtest2.c
-	${MUSL_WCC} -c libtest2.c -o libtest2.o -fPIC
+$(LOCAL_BUILD_DIR)/libtest2.o: $(LOCAL_SRC_DIR)/libtest2.c
+	${MUSL_WCC} -c $(LOCAL_SRC_DIR)/libtest2.c -o $(LOCAL_BUILD_DIR)/libtest2.o -fPIC
 
-libtest1.so: libtest1.o
+$(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o
 	${WLD} \
 		-shared \
 		-L/usr/lib \
 		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
-		-o libtest1.so \
-		libtest1.o \
+		-o $(LOCAL_BUILD_DIR)/libtest1.so \
+		$(LOCAL_BUILD_DIR)/libtest1.o \
 		-L/usr/lib/x86_64-linux-musl \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
 		-lc \
 
-libtest2.so: libtest2.o libtest1.so
+$(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest2.o $(LOCAL_BUILD_DIR)/libtest1.so
 	${WLD} \
 		-shared \
 		-L/usr/lib \
 		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
-		-o libtest2.so \
-		libtest2.o \
+		-o $(LOCAL_BUILD_DIR)/libtest2.so \
+		$(LOCAL_BUILD_DIR)/libtest2.o \
 		-L/usr/lib/x86_64-linux-musl \
-		-L . \
+		-L $(LOCAL_BUILD_DIR) \
 		-ltest1 \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
 		-lc \
-		-L . \
+		-L $(LOCAL_BUILD_DIR) \
 		-ltest1
 
-main: main.o libtest1.so libtest2.so
+$(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR)/libtest2.so
 	${WLD}                                                \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
-	main.o                                                \
-	-o main                                               \
-	-L .                                                  \
+	$(LOCAL_BUILD_DIR)/main.o                             \
+	-o $(LOCAL_BUILD_DIR)/main                            \
+	-L $(LOCAL_BUILD_DIR)                                 \
 	-ltest1                                               \
 	-ltest2                                               \
 	-L/usr/lib/x86_64-linux-musl                          \
@@ -60,9 +68,9 @@ main: main.o libtest1.so libtest2.so
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 	-pie
 
-run-main: main
-	LD_LIBRARY_PATH=. ./main
-	@MSG=$$(LD_LIBRARY_PATH=. ./main);\
+run-main: $(LOCAL_BUILD_DIR)/main
+	LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) $(LOCAL_BUILD_DIR)/main
+	@MSG=$$(LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) $(LOCAL_BUILD_DIR)/main);\
 	if [ "$$MSG" != "Hello World!" ]; then \
 		echo "Message was not hello world."; \
 		exit 1; \
@@ -71,7 +79,7 @@ run-main: main
 	echo "Using object in shared library and musl stdout passed"
 
 clean:
-	@rm -f *.o
-	@rm -f main
-	@rm -f libtest.so
-	@rm -f libtest2.so
+	@rm -f $(LOCAL_BUILD_DIR)/*.o
+	@rm -f $(LOCAL_BUILD_DIR)/main
+	@rm -f $(LOCAL_BUILD_DIR)/libtest.so
+	@rm -f $(LOCAL_BUILD_DIR)/libtest2.so

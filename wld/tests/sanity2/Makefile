@@ -1,15 +1,22 @@
+$(LOCAL_BUILD_DIR):
+	@mkdir -p $@
+
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/sanity2
+LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/sanity2
+
+all: | $(LOCAL_BUILD_DIR)
 all: run-sanity2ab run-sanity2ba
 
-%.o: %.s
+$(LOCAL_BUILD_DIR)/%.o: $(LOCAL_SRC_DIR)/%.s | $(LOCAL_BUILD_DIR)
 	${AS} $< -o $@
 
-sanity2ab: ${WLD} sanity2a.o sanity2b.o
-	${WLD} sanity2a.o sanity2b.o -o sanity2ab -static
+$(LOCAL_BUILD_DIR)/sanity2ab: ${WLD} $(LOCAL_BUILD_DIR)/sanity2a.o $(LOCAL_BUILD_DIR)/sanity2b.o
+	${WLD} $(LOCAL_BUILD_DIR)/sanity2a.o $(LOCAL_BUILD_DIR)/sanity2b.o -o $(LOCAL_BUILD_DIR)/sanity2ab -static
 
-sanity2ba: ${WLD} sanity2a.o sanity2b.o
-	${WLD} sanity2b.o sanity2a.o -o sanity2ba -static
+$(LOCAL_BUILD_DIR)/sanity2ba: ${WLD} $(LOCAL_BUILD_DIR)/sanity2a.o $(LOCAL_BUILD_DIR)/sanity2b.o
+	${WLD} $(LOCAL_BUILD_DIR)/sanity2b.o $(LOCAL_BUILD_DIR)/sanity2a.o -o $(LOCAL_BUILD_DIR)/sanity2ba -static
 
-run-sanity2ab: sanity2ab
+run-sanity2ab: $(LOCAL_BUILD_DIR)/sanity2ab
 	@MSG=$$(./sanity2ab); ERR=$$? ;\
 	if [ "$$ERR" != "42" ]; then \
 		echo "Exit code was $$ERR, not 42."; \
@@ -21,7 +28,7 @@ run-sanity2ab: sanity2ab
 	fi ;\
 	echo "Sanity 2ab test passed"
 
-run-sanity2ba: sanity2ba
+run-sanity2ba: $(LOCAL_BUILD_DIR)/sanity2ba
 	@MSG=$$(./sanity2ba); ERR=$$? ;\
 	if [ "$$ERR" != "42" ]; then \
 		echo "Exit code was $$ERR, not 42."; \
@@ -34,6 +41,6 @@ run-sanity2ba: sanity2ba
 	echo "Sanity 2ba test passed"
 
 clean:
-	@rm -f *.o
-	@rm -f sanity2ab
-	@rm -f sanity2ba
+	@rm -f $(LOCAL_BUILD_DIR)/*.o
+	@rm -f $(LOCAL_BUILD_DIR)/sanity2ab
+	@rm -f $(LOCAL_BUILD_DIR)/sanity2ba

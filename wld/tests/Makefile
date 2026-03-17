@@ -1,3 +1,6 @@
+LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests
+LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests
+
 all: test
 
 TESTS = \
@@ -52,14 +55,14 @@ TESTS = \
 .PHONY: test
 test: $(TESTS)
 
-WAS ?= $(abspath ../../bin/was)
-WLD ?= $(abspath ../../bin/wld)
+WAS ?= $(BUILD_DIR)/bin/was
+WLD ?= $(BUILD_DIR)/bin/wld
 
 WCC_ARGS = LD=${WLD} AS=${WAS}
 
 # Assume that the wcc repository has been checked out in the same place as wbinutils.
-WCC      ?= ${WCC_ARGS} $(abspath ../../../wcc/wcc)
-MUSL_WCC ?= ${WCC_ARGS} $(abspath ../../../wcc/musl-wcc)
+WCC      ?= ${WCC_ARGS} $(abspath $(SRC_DIR)/../wcc/wcc)
+MUSL_WCC ?= ${WCC_ARGS} $(abspath $(SRC_DIR)/../wcc/musl-wcc)
 
 GCC      ?= gcc
 MUSL_GCC ?= musl-gcc
@@ -75,10 +78,30 @@ export GCC
 export AS
 
 .PHONY: $(TESTS)
+ifneq ($(BUILD_DIR),$(SRC_DIR))
+$(TESTS):
+	@mkdir -p $(LOCAL_BUILD_DIR)/$@
+	+$(MAKE) -C $(LOCAL_BUILD_DIR)/$@ -f $(LOCAL_SRC_DIR)/$@/Makefile
+else
 $(TESTS):
 	+$(MAKE) -C $@
+endif
 
 clean:
+ifneq ($(BUILD_DIR),$(SRC_DIR))
+	@case "$(LOCAL_BUILD_DIR)" in \
+		""|"/"|".") \
+			echo "Refusing to remove unsafe test build dir: $(LOCAL_BUILD_DIR)"; \
+			exit 1; \
+			;; \
+		"$(LOCAL_SRC_DIR)"|$(LOCAL_SRC_DIR)/*) \
+			echo "Refusing to remove source test dir: $(LOCAL_BUILD_DIR)"; \
+			exit 1; \
+			;; \
+	esac
+	@rm -rf $(LOCAL_BUILD_DIR)
+else
 	@for d in $(TESTS); do \
 		$(MAKE) -C $$d clean; \
 	done
+endif
