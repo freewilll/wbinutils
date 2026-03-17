@@ -1,0 +1,33 @@
+#!/bin/sh
+
+set -e
+
+PREFIX=/usr # Default prefix
+
+# Show the help
+help() {
+    cat <<END
+Usage: ./configure [options]
+
+Flags:
+--prefix=PATH Install prefix, default: /usr
+-h, --help    Print this help text.
+END
+    exit 0
+}
+
+# Parse args
+for arg in "$@"; do
+    case $arg in
+    --prefix=*)   PREFIX="${arg#*=}" ;;
+    -h|--help) help ;;
+    *) echo "Unknown arg: $arg" >&2; exit 1 ;;
+    esac
+    shift || true
+done
+
+# Write out config.mk
+CONFIG_MK_PATH=config.mk
+cat > $CONFIG_MK_PATH <<END
+PREFIX := $PREFIX
+END

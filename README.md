@@ -16,3 +16,9 @@ The toolchain is able to create the following:
 The glibc and musl C libraries are both supported.
 
 See the individual READMEs for more details.
+
+# Installation
+```
+$ ./configure
+$ make install
+```

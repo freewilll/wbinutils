@@ -16,3 +16,4 @@ test2
 libtest.a
 libtest2.a
 .vscode
+config.mk

@@ -1,3 +1,7 @@
+-include config.mk
+
+INSTALL_BIN_DIR = ${PREFIX}/bin
+
 LIBS = \
 	lib/libelf.a \
 	lib/liblist.a \
@@ -47,6 +51,11 @@ test: bin/was bin/wld lib/liblist.a lib/libstrmap.a lib/libstrmap_ordered.a lib/
 	+${MAKE} -C lib/libstrmap_ordered test
 	+${MAKE} -C lib/libmap_ordered test
 
+install: bin/was bin/wld
+	mkdir -p '${INSTALL_BIN_DIR}'
+	cp bin/was '${INSTALL_BIN_DIR}/was'
+	cp bin/wld '${INSTALL_BIN_DIR}/wld'
+
 clean:
 	+${MAKE} -C lib/liblist clean
 	+${MAKE} -C lib/libstrmap clean
@@ -56,3 +65,6 @@ clean:
 	+${MAKE} -C lib/libelf clean
 	+${MAKE} -C was clean
 	+${MAKE} -C wld clean
+
+distclean: clean
+	@rm -f config.mk
