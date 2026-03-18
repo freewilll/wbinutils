@@ -58,11 +58,11 @@ test: $(TESTS)
 WAS ?= $(BUILD_DIR)/bin/was
 WLD ?= $(BUILD_DIR)/bin/wld
 
-WCC_ARGS = LD=${WLD} AS=${WAS}
+WCC_ENV = LD=${WLD} AS=${WAS}
 
 # Assume that the wcc repository has been checked out in the same place as wbinutils.
-WCC      ?= ${WCC_ARGS} $(abspath $(SRC_DIR)/../wcc/wcc)
-MUSL_WCC ?= ${WCC_ARGS} $(abspath $(SRC_DIR)/../wcc/musl-wcc)
+WCC      ?= ${WCC_ENV} $(abspath $(SRC_DIR)/../wcc/wcc)
+MUSL_WCC ?= ${WCC_ENV} $(abspath $(SRC_DIR)/../wcc/musl-wcc)
 
 GCC      ?= gcc
 MUSL_GCC ?= musl-gcc
