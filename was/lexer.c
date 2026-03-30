@@ -31,10 +31,13 @@ void free_lexer(void) {
 }
 
 static void start_lexer(void) {
+    const int initial_size = 128;
+
     ip = input;
     cur_line = 1;
     cur_identifier = malloc(MAX_IDENTIFIER_SIZE);
-    cur_string_literal.data = malloc(MAX_STRING_LITERAL_SIZE * 4);
+    cur_string_literal.data = malloc(initial_size);
+    cur_string_literal.allocated = initial_size;
     seen_instruction = 0;
     seen_directive = 0;
     cur_register = 0;
@@ -155,11 +158,18 @@ static void lex_integer(void) {
 }
 
 static void lex_string_literal(void) {
-    int size = 0;
-
-    ip += 1;
+    // Make a copy for convenience, it'll get written back at the end of the function
     char *data = cur_string_literal.data;
+
+    int size = 0;
+    ip += 1;
+
     while (input_end - ip >= 1 && *ip != '"') {
+        if (size >= cur_string_literal.allocated) {
+            cur_string_literal.allocated *= 2;
+            data = realloc(data, cur_string_literal.allocated);
+        }
+
         if (*ip != '\\') data[(size)++] = *ip++;
         else if (input_end - ip >= 2 && *ip == '\\') {
                  if (ip[1] == '\'') { ip += 2; data[(size)++] = '\''; }
@@ -181,20 +191,24 @@ static void lex_string_literal(void) {
             }
             else error_in_file("Unknown \\ escape in string literal");
         }
-
-        data[size] = 0;
     }
 
     if (*ip != '"') error_in_file("Expecting terminating \" in string literal");
     ip++;
 
-    if (size >= MAX_STRING_LITERAL_SIZE) panic("Exceeded maximum string literal size %d", MAX_STRING_LITERAL_SIZE);
+    if (size >= cur_string_literal.allocated) {
+        cur_string_literal.allocated *= 2;
+        data = realloc(data, cur_string_literal.allocated);
+    }
 
     data[size] = 0;
 
     cur_token = TOK_STRING_LITERAL;
 
     cur_string_literal.size = size + 1;
+
+    // Write data back since it may have been reallocated
+    cur_string_literal.data = data;
 }
 
 #define FIND_REG(regs, outcome, alt) \

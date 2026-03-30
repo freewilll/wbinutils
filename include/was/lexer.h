@@ -2,11 +2,11 @@
 #define _LEXER_H
 
 #define MAX_IDENTIFIER_SIZE           1024
-#define MAX_STRING_LITERAL_SIZE       4095
 
 typedef struct string_literal {
     char *data;
     int size;
+    int allocated;
 } StringLiteral;
 
 enum {
