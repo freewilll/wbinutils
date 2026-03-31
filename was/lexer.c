@@ -362,6 +362,7 @@ void next(void) {
             if (!seen_directive && !is_label && cur_identifier[0] == '.') {
                 // Parse directive or identifier starting with dot
                      if (!strcmp(cur_identifier, ".align"   )) { cur_token = TOK_DIRECTIVE_ALIGN;   seen_directive = 1; }
+                else if (!strcmp(cur_identifier, ".bss"     )) { cur_token = TOK_DIRECTIVE_BSS;     seen_directive = 1; }
                 else if (!strcmp(cur_identifier, ".byte"    )) { cur_token = TOK_DIRECTIVE_BYTE;    seen_directive = 1; }
                 else if (!strcmp(cur_identifier, ".comm"    )) { cur_token = TOK_DIRECTIVE_COMM;    seen_directive = 1; }
                 else if (!strcmp(cur_identifier, ".data"    )) { cur_token = TOK_DIRECTIVE_DATA;    seen_directive = 1; }

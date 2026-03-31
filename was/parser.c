@@ -140,6 +140,10 @@ Chunk *parse_directive_statement(void) {
             set_current_section(".data");
             break;
 
+        case TOK_DIRECTIVE_BSS:
+            set_current_section(".bss");
+            break;
+
         case TOK_DIRECTIVE_FILE: {
             if (cur_token == TOK_INTEGER) {
                 int number = cur_long;
@@ -677,7 +681,7 @@ void parse(void) {
         else if (cur_token == TOK_EOF)
             break;
         else
-            error("Syntax error at token %d", cur_token);
+            error_in_file("Syntax error at token %d", cur_token);
 
         for (int i = 0; i < labels->length; i++) free(labels->elements[i]);
         free_list(labels);

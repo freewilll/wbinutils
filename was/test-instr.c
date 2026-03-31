@@ -1318,6 +1318,20 @@ void test_symbol_types_and_binding(void) {
         12, 4, STT_OBJECT, STB_LOCAL, bss_index, "foo3",
         END);
 
+    // A .bss symbol with a .zero after it
+    test_full_assembly("a .bss symbol with .zero", ".bss; foo: .zero 8", END);
+    assert_symbols(0, 0, STT_NOTYPE, STB_LOCAL, bss_index, "foo", END);
+
+    // A .bss symbol with a .zero after it + size + type
+    test_full_assembly("a .bss symbol with .zero",
+        ".bss;"
+        ".globl foo;"
+        ".size foo, 8;"
+        ".type foo, @object;"
+        "foo: .zero 8",
+        END);
+    assert_symbols(0, 8, STT_OBJECT, STB_GLOBAL, bss_index, "foo", END);
+
     // A .local followed by a .globl
     test_full_assembly("a .local followed by a .globl", ".local foo; .globl foo", END);
     assert_symbols(0, 0, STT_NOTYPE, STB_GLOBAL, SHN_UNDEF, "foo", END);
