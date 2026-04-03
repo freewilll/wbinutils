@@ -281,8 +281,16 @@ Chunk *parse_directive_statement(void) {
                     type = SHT_PROGBITS;
                 else if (!strcmp(cur_identifier, "@nobits"))
                     type = SHT_NOBITS;
+                else if (!strcmp(cur_identifier, "@note"))
+                    type = SHT_NOTE;
+                else if (!strcmp(cur_identifier, "@init_array"))
+                    type = SHT_INIT_ARRAY;
+                else if (!strcmp(cur_identifier, "@fini_array"))
+                    type = SHT_FINI_ARRAY;
+                else if (!strcmp(cur_identifier, "@preinit_array"))
+                    type = SHT_PREINIT_ARRAY;
                 else
-                    error("Unhandledsection type %s", cur_identifier);
+                    error("Unhandled section type %s", cur_identifier);
                 next();
             }
 

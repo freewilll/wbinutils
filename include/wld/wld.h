@@ -45,11 +45,17 @@
 #define DEBUG_RELOCATION_RELAXATION 0
 #define DEBUG_LAYOUT                0
 
-// Section types that are included when not referenced in the linker script
+// Section types that are included when not referenced in the linker script.
+// See https://maskray.me/blog/2024-06-02-understanding-orphan-sections
+// This is a simplified version of what clang does.
 #define ORPHANED_SECTION_TYPE(type) \
     ( \
-        ((type) == SHT_PROGBITS) || \
-        ((type) == SHT_NOBITS) \
+        ((type) == SHT_PROGBITS)      || \
+        ((type) == SHT_NOBITS)        || \
+        ((type) == SHT_NOTE)          || \
+        ((type) == SHT_INIT_ARRAY)    || \
+        ((type) == SHT_FINI_ARRAY)    || \
+        ((type) == SHT_PREINIT_ARRAY) \
     )
 
 typedef struct input_file {

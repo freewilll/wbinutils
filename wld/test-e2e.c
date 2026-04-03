@@ -896,6 +896,41 @@ static void test_orphan_sections_no_rearrangement(void) {
     );
 }
 
+static void test_orphan_sections_inclusion(void) {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    movl $1, %eax;"
+        "    lea code(%rip), %rdi;"
+        "    mov (%rdi), %ebx;"
+        "    int $0x80;"
+        ".section .data;"
+        "    code: .long 0;"
+        // Note, this aren't realistic values, sizes or alignments.
+        ".section .note, \"a\", @note; .long 0;"
+        ".section .init_array, \"aw\", @init_array; .long 0;"
+        ".section .fini_array, \"aw\", @fini_array; .long 0;"
+        ".section .preinit_array, \"aw\", @preinit_array; .long 0;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 0, NULL, "orphan_sections_inclusion");
+
+    assert_sections(elf_file,
+        // Name           Type                Address   Offset  Size   Flags                       Align
+        ".text",          SHT_PROGBITS,       0x401000, 0x1000, 0x10,  SHF_ALLOC | SHF_EXECINSTR,  16,
+        ".preinit_array", SHT_PREINIT_ARRAY,  0x402000, 0x2000, 0x04,  SHF_ALLOC | SHF_WRITE,      1,
+        ".init_array",    SHT_INIT_ARRAY,     0x402004, 0x2004, 0x04,  SHF_ALLOC | SHF_WRITE,      1,
+        ".fini_array",    SHT_FINI_ARRAY,     0x402008, 0x2008, 0x04,  SHF_ALLOC | SHF_WRITE ,     1,
+        ".data",          SHT_PROGBITS,       0x40200c, 0x200c, 0x04,  SHF_ALLOC | SHF_WRITE,      4,
+        ".note",          SHT_NOTE,           0x403000, 0x3000, 0x04,  SHF_ALLOC ,                 1,
+        NULL
+    );
+}
+
 // This tests a secton with an odd name. There is also a .data section
 // with the same permissions. The orphan section should be placed after it.
 // The .bss section is to ensure that the .orphan section actually gets moved.
@@ -3054,6 +3089,7 @@ int main() {
     test_segments_are_page_aligned();
     test_orphan_sections_rearrangement();
     test_orphan_sections_no_rearrangement();
+    test_orphan_sections_inclusion();
     test_tls();
     test_tls_aligment();
     test_two_bss_sections();
