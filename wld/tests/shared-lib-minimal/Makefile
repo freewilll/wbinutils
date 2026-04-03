@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/shared-lib-minimal
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/shared-lib-minimal
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # A simple executable that uses a data and function symbol from a library
 
@@ -24,7 +25,7 @@ $(LOCAL_BUILD_DIR)/libtest.so: $(LOCAL_BUILD_DIR)/libtest.o
 	${WLD} \
 		-shared \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest.so \
 		$(LOCAL_BUILD_DIR)/libtest.o \
 		-lc \
@@ -37,7 +38,7 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest.so
 		-rpath ${CURRENT_DIR} \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \
 		-L $(LOCAL_BUILD_DIR) \

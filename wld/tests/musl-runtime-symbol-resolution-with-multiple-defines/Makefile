@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/musl-runtime-symbol-resolution-with-multiple-defines
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/musl-runtime-symbol-resolution-with-multiple-defines
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # Test two cases:
 # 1. An object $(LOCAL_BUILD_DIR)/file defines a variable. Two libraries also define it, but the definition in the object $(LOCAL_BUILD_DIR)/file comes first
@@ -30,7 +31,7 @@ $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o
 	@${WLD} \
 		-shared \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest1.so \
 		$(LOCAL_BUILD_DIR)/libtest1.o \
 		-L/usr/lib/x86_64-linux-musl \
@@ -43,7 +44,7 @@ $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR
 	@${WLD} \
 		-shared \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest2.so \
 		$(LOCAL_BUILD_DIR)/libtest2.o \
 		-L/usr/lib/x86_64-linux-musl \

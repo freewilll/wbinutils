@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/symbol-versioning-weak-strong-default-in-two-libs
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/symbol-versioning-weak-strong-default-in-two-libs
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # Test a case where two .so files are used by an executable
 # .so1 defines f() as a weak non-default symbol
@@ -34,16 +35,16 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.s
 	@${WLD}                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	$(GCC_CRTBEGINS)                                      \
 	-L/usr/lib/x86_64-linux-musl                          \
-	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	-L$(GCC_LIBRARY_PATH)                                 \
 	$(LOCAL_BUILD_DIR)/main.o                             \
 	-o $(LOCAL_BUILD_DIR)/main                            \
 	-lc -lgcc -lgcc_eh                                    \
 	-L$(LOCAL_BUILD_DIR)                                  \
 	-ltest1                                               \
 	-ltest2                                               \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	$(GCC_CRTENDS)                                        \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
 

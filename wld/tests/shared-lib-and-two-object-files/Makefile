@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/shared-lib-and-two-object-files
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/shared-lib-and-two-object-files
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # A executable that uses a data and function symbol from a library
 # The library itself has two object files, with one using data and a function from the other
@@ -30,7 +31,7 @@ $(LOCAL_BUILD_DIR)/libtest.so: $(LOCAL_BUILD_DIR)/libtest.o $(LOCAL_BUILD_DIR)/l
 	${WLD} \
 		-shared \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest.so \
 		$(LOCAL_BUILD_DIR)/libtest.o \
 		$(LOCAL_BUILD_DIR)/libfuncs.o \
@@ -44,7 +45,7 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest.so
 		-rpath ${CURRENT_DIR} \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \
 		-L $(LOCAL_BUILD_DIR) \

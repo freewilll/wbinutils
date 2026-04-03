@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/glibc-math
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/glibc-math
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 all: | $(LOCAL_BUILD_DIR)
 all: test
@@ -19,7 +20,7 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-static \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \

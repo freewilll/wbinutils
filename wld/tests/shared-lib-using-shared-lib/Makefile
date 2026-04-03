@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/shared-lib-using-shared-lib
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/shared-lib-using-shared-lib
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # There are three files with dependencies: $(LOCAL_SRC_DIR)/main.c -> $(LOCAL_SRC_DIR)/libtest1.c -> $(LOCAL_SRC_DIR)/libtest2.c
 # $(LOCAL_BUILD_DIR)/main is a dynamic executable and the libs .so files.
@@ -29,7 +30,7 @@ $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o $(LOCAL_BUILD_DIR)
 	@${WLD} \
 		-shared \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest1.so \
 		$(LOCAL_BUILD_DIR)/libtest1.o \
 		-L $(LOCAL_BUILD_DIR) \
@@ -43,7 +44,7 @@ $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest2.o
 	@${WLD} \
 		-shared \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest2.so \
 		$(LOCAL_BUILD_DIR)/libtest2.o \
 		-lc \
@@ -55,7 +56,7 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.s
 	@LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) ${WLD} \
 		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \
 		-L $(LOCAL_BUILD_DIR) \

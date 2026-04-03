@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/relocation-R_X86_64_GOTPCRELX-in-dyn-executable
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/relocation-R_X86_64_GOTPCRELX-in-dyn-executable
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # Test a GOTPCREL relocation in a call *foo@GOTPCREL(%rip) in a dynamic executable
 
@@ -23,14 +24,14 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest.so
 	@${WLD}                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	$(GCC_CRTBEGINS)                                      \
 	-L/usr/lib/x86_64-linux-musl                          \
-	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	-L$(GCC_LIBRARY_PATH)                                 \
 	$(LOCAL_BUILD_DIR)/main.o                             \
 	-o $(LOCAL_BUILD_DIR)/main                            \
 	-lc -lgcc -lgcc_eh                                    \
 	-L$(LOCAL_BUILD_DIR) -ltest                           \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	$(GCC_CRTENDS)                                        \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
 

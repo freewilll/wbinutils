@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/musl-libc-tls-hello-world
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/musl-libc-tls-hello-world
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # A couple of tests of executables that have combinations of .tdata and.or .tbss sections.
 
@@ -27,13 +28,13 @@ $(LOCAL_BUILD_DIR)/%-data: $(LOCAL_BUILD_DIR)/%-data.o | $(LOCAL_BUILD_DIR)
 	@${WLD} \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	$(GCC_CRTBEGINS)                                      \
 	-L/usr/lib/x86_64-linux-musl                          \
-	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	-L$(GCC_LIBRARY_PATH)                                 \
 	$<                                                    \
 	-o $@                                                 \
 	-lc -lgcc -lgcc_eh                                    \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	$(GCC_CRTENDS)                                        \
 	/usr/lib/x86_64-linux-musl/crtn.o				      \
 	-static
 

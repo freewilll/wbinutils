@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/undefined-unreferenced-symbol
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/undefined-unreferenced-symbol
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # A symbol may be undefined so long as it isn't used.
 # This happens with __pthread_create in glibc
@@ -22,7 +23,7 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
 		-L/usr/lib \
-		-L/usr/lib/gcc/x86_64-linux-gnu/9 \
+		-L$(GCC_LIBRARY_PATH) \
 		-static \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \

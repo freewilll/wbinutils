@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/relocation-relaxation
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/relocation-relaxation
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 all: | $(LOCAL_BUILD_DIR)
 all: test
@@ -34,14 +35,14 @@ $(LOCAL_BUILD_DIR)/main-static-relaxed: $(LOCAL_BUILD_DIR)/main-static-relaxed.o
 	-static                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	$(GCC_CRTBEGINS)                                      \
 	-L/usr/lib/x86_64-linux-musl                          \
-	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	-L$(GCC_LIBRARY_PATH)                                 \
 	$(LOCAL_BUILD_DIR)/main-static-relaxed.o              \
 	$(LOCAL_BUILD_DIR)/libtest.o                          \
 	-o $(LOCAL_BUILD_DIR)/main-static-relaxed             \
 	-lc -lgcc -lgcc_eh                                    \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	$(GCC_CRTENDS)                                        \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
 $(LOCAL_BUILD_DIR)/main-static-unrelaxed: $(LOCAL_BUILD_DIR)/main-static-unrelaxed.o $(LOCAL_BUILD_DIR)/libtest.o
@@ -49,14 +50,14 @@ $(LOCAL_BUILD_DIR)/main-static-unrelaxed: $(LOCAL_BUILD_DIR)/main-static-unrelax
 	-static                                               \
 	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
 	/usr/lib/x86_64-linux-musl/crti.o                     \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o           \
+	$(GCC_CRTBEGINS)                                      \
 	-L/usr/lib/x86_64-linux-musl                          \
-	-L/usr/lib/gcc/x86_64-linux-gnu/9                     \
+	-L$(GCC_LIBRARY_PATH)                                 \
 	$(LOCAL_BUILD_DIR)/libtest.o                          \
 	$(LOCAL_BUILD_DIR)/main-static-unrelaxed.o            \
 	-o $(LOCAL_BUILD_DIR)/main-static-unrelaxed           \
 	-lc -lgcc -lgcc_eh                                    \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o             \
+	$(GCC_CRTENDS)                                        \
 	/usr/lib/x86_64-linux-musl/crtn.o                     \
 
 $(LOCAL_BUILD_DIR)/main-dynamic-relaxed: $(LOCAL_BUILD_DIR)/main-dynamic-relaxed.o $(LOCAL_BUILD_DIR)/libtest.o

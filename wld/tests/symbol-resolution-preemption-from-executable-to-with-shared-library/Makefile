@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/symbol-resolution-preemption-from-executable-to-with-shared-library
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/symbol-resolution-preemption-from-executable-to-with-shared-library
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # Check that a symbol in a dynamic executable preempts the same symbol in a shared library
 
@@ -22,7 +23,7 @@ $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1a.o
 	${WLD} \
 	-shared                            \
 	-L /usr/lib                        \
-	-L /usr/lib/gcc/x86_64-linux-gnu/9 \
+	-L $(GCC_LIBRARY_PATH) \
 	-o $(LOCAL_BUILD_DIR)/libtest1.so  \
 	$(LOCAL_BUILD_DIR)/libtest1a.o     \
 	-lc
@@ -32,11 +33,11 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.s
 	${WLD} \
 	-dynamic-linker /lib64/ld-linux-x86-64.so.2  \
 	-L /usr/lib                                  \
-	-L /usr/lib/gcc/x86_64-linux-gnu/9           \
+	-L $(GCC_LIBRARY_PATH)                       \
 	-o $(LOCAL_BUILD_DIR)/main                   \
 	/usr/lib/x86_64-linux-gnu/crt1.o             \
 	/usr/lib/x86_64-linux-gnu/crti.o             \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o  \
+	$(GCC_CRTBEGINS)                             \
 	$(LOCAL_BUILD_DIR)/main.o                    \
 	$(LOCAL_BUILD_DIR)/libtest1.so               \
 	-rpath $(LOCAL_BUILD_DIR)                    \
@@ -44,7 +45,7 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.s
 	-lgcc                                        \
 	-lgcc_eh                                     \
 	-lc                                          \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o    \
+	$(GCC_CRTENDS)                               \
 	/usr/lib/x86_64-linux-gnu/crtn.o             \
 	-pie
 

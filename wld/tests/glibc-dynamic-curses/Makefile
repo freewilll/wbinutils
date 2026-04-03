@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/glibc-dynamic-curses
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/glibc-dynamic-curses
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 all: | $(LOCAL_BUILD_DIR)
 all: test
@@ -18,18 +19,18 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
 	-dynamic-linker /lib64/ld-linux-x86-64.so.2  \
 	-L /usr/lib                                  \
-	-L /usr/lib/gcc/x86_64-linux-gnu/9           \
+	-L $(GCC_LIBRARY_PATH)                       \
 	-o $(LOCAL_BUILD_DIR)/main                   \
 	/usr/lib/x86_64-linux-gnu/crt1.o             \
 	/usr/lib/x86_64-linux-gnu/crti.o             \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o  \
+	$(GCC_CRTBEGINS)                             \
 	$(LOCAL_BUILD_DIR)/main.o                    \
 	-lc                                          \
 	-lgcc                                        \
 	-lgcc_eh                                     \
 	-lc                                          \
 	-lcurses                                     \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o    \
+	$(GCC_CRTENDS)                               \
 	/usr/lib/x86_64-linux-gnu/crtn.o \
 
 run-main: $(LOCAL_BUILD_DIR)/main

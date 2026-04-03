@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/glibc-tls-alignment
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/glibc-tls-alignment
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # Test the TLS segment size not being a multiple of the aligment.
 # This caused a bug where the start of the TLS section with respect to the thread pointer
@@ -22,16 +23,16 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/test.o
 	-L \
 	/usr/lib \
 	-L \
-	/usr/lib/gcc/x86_64-linux-gnu/9 \
+	$(GCC_LIBRARY_PATH) \
 	-o $(LOCAL_BUILD_DIR)/main \
 	/usr/lib/x86_64-linux-gnu/crt1.o \
 	/usr/lib/x86_64-linux-gnu/crti.o \
-	/usr/lib/gcc/x86_64-linux-gnu/9/crtbeginS.o \
+	$(GCC_CRTBEGINS) \
 	-lc \
 	-lgcc \
 	-lgcc_eh \
 	$(LOCAL_BUILD_DIR)/test.o \
-	-lc /usr/lib/gcc/x86_64-linux-gnu/9/crtendS.o \
+	-lc $(GCC_CRTENDS) \
 	/usr/lib/x86_64-linux-gnu/crtn.o \
 	$(LOCAL_BUILD_DIR)/main.o
 
