@@ -775,6 +775,7 @@ static void test_sanity() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT,  ".text", "__ehdr_start",
         0x402000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",  "code",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",  "_start",
         END);
@@ -1167,8 +1168,9 @@ static void test_etext_undefined() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility    Section  Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT,  ".text", "__ehdr_start",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
-        0x401013,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "etext",                    // Set by linker
+        0x401013,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "etext",
         END);
 }
 
@@ -1210,6 +1212,7 @@ static void test_defined_etext() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section   Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT,  ".text", "__ehdr_start",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         0x403010,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".data",  "etext",
         END);
@@ -1251,6 +1254,7 @@ static void test_unused_etext() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".text", "__ehdr_start",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         END);
 }
@@ -1286,8 +1290,45 @@ static void test___end_symbol() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility    Section  Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT,  ".text", "__ehdr_start",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
-        0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "_end",        // Set by linker
+        0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "_end",
+        END);
+}
+
+static void test___ehdr_start_symbol() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    lea __ehdr_start(%rip), %rdi;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "undefined __ehdr_start");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x13,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        NULL
+    );
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x140,   0x140,  PF_R,         0x1000,
+        PT_LOAD,          0x1000,  0x401000,  0x13,    0x13,   PF_R | PF_X,  0x1000,
+        END
+    );
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility    Section  Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT,  ".text", "__ehdr_start",
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
         END);
 }
 
@@ -1355,6 +1396,7 @@ static void test_automatic_start_stop_symbols() {
 
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section  Name
+        0x400000,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".text", "__ehdr_start",
         0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text", "_start",
         0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__start_foo",
         0x402004,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, "ABS",   "__stop_foo",
@@ -1741,6 +1783,7 @@ static void test_dynamic_executable_with_GOT_entry_for_local_symbol() {
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section     Name
         0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x0000  ,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".hash",    "__ehdr_start",
         0x30a0,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".got",     "_GLOBAL_OFFSET_TABLE_",
         0x30a8,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "foo",
         0x2000,    0,     STT_FUNC,   STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
@@ -2000,6 +2043,7 @@ static void test_dynamic_executable_sanity() {
     assert_symtab(elf_file,
     //  Value      Size   Type        Binding     Visibility   Section     Name
         0x3000,    0,     STT_OBJECT, STB_LOCAL,  STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x0000  ,  0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".hash",    "__ehdr_start",
         0x3070,    0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".data",    "code",
         0x2000,    0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",    "_start",
         END);
@@ -2803,6 +2847,7 @@ void test_versioning_default_symbol() {
     assert_symtab(elf_file,
     //  Value   Size   Type        Binding     Visibility   Section    Name
         0x4000, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".dynamic", "_DYNAMIC",
+        0x0000, 0,     STT_NOTYPE, STB_LOCAL,  STV_DEFAULT, ".hash",    "__ehdr_start",
         0x40f0, 0,     STT_OBJECT, STB_LOCAL, STV_DEFAULT, ".got.plt", "_GLOBAL_OFFSET_TABLE_",
         0x3020, 0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT, ".text",   "_start",
         END);
@@ -3017,6 +3062,7 @@ int main() {
     test_defined_etext();
     test_unused_etext();
     test___end_symbol();
+    test___ehdr_start_symbol();
     test_undefined_symbol();
     test_automatic_start_stop_symbols();
     test_shared_library_no_dependencies();

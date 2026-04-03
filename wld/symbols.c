@@ -1191,6 +1191,12 @@ void update_elf_symbols(OutputElfFile *output_elf_file) {
             elf_symbol->st_value = symbol->dst_value;
             elf_symbol->st_shndx = symbol->is_abs ? SHN_ABS : symbol->output_section->index;
         }
+
+        if (output_elf_file->is_executable && !strcmp(symbol->name, EHDR_START_SYMBOL_NAME)) {
+            ElfSymbol *elf_symbols = (ElfSymbol *) output_elf_file->section_symtab->data;
+            ElfSymbol *elf_symbol = &elf_symbols[symbol->dst_index];
+            elf_symbol->st_shndx = 1; // Mimicking what gcc does, the section index is one there.
+        }
     }
 
     // Local symbols
@@ -1979,4 +1985,15 @@ void make_versym_section(OutputElfFile *output_elf_file) {
         }
         entries[symbol->dst_dynsym_index] = version_index;
     }
+}
+
+// Add __ehdr_start symbol pointing to the in-memory start of the executable
+void add___ehdr_start_symbol(OutputElfFile *output_elf_file) {
+    if (!output_elf_file->is_executable) return;
+
+    int version_index = 0;
+    Symbol *symbol = add_defined_symbol(global_symbol_table, EHDR_START_SYMBOL_NAME, version_index, STT_NOTYPE, STB_LOCAL, 0, 0, SRC_INTERNAL);
+    resolve_undefined_symbol(EHDR_START_SYMBOL_NAME, 0, 0, 0, 0);
+    symbol->is_abs = 1;
+    symbol->dst_value = output_elf_file->type == ET_EXEC ? 0x400000 : 0;
 }

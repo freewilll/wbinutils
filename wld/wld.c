@@ -939,6 +939,9 @@ OutputElfFile *run(
     // Add a _DYNAMIC symbol for ET_DYN outputs
     add_dynamic_symbol(output_elf_file);
 
+    // Add __ehdr_start symbol pointing to the in-memory start of the executable
+    add___ehdr_start_symbol(output_elf_file);
+
     // For all PROVIDE and PROVIDE_HIDDEN symbols, check if there are any undefined symbols that match
     resolve_provided_symbols(output_elf_file);
 
