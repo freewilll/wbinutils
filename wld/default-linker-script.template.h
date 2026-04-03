@@ -71,6 +71,7 @@ static char *DEFAULT_LINKER_SCRIPT_STATIC =
     "    .got.plt:   { *(.got.plt) *(.got.iplt)                                 }\n"
     "    .data :     { *(.data .data.*)                                         }\n"
     "    .bss :      { *(.bss .bss.*) *(COMMON)                                 }\n"
+    "    PROVIDE(_end = .);                                                      \n"
     "                                                                            \n"
     "    .debug_info :   { *(.debug_info)                                       }\n"
     "    .debug_abbrev : { *(.debug_abbrev)                                     }\n"

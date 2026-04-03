@@ -1255,6 +1255,42 @@ static void test_unused_etext() {
         END);
 }
 
+static void test___end_symbol() {
+    char *object_path = run_was(
+        ".globl _start;"
+        ".text;"
+        "_start:;"
+        "    lea _end(%rip), %rdi;"
+        "    movl $1, %eax;"
+        "    movl $0, %ebx;"
+        "    int $0x80;"
+    );
+
+    List *input_paths = new_list(1);
+    append_to_list(input_paths, object_path);
+
+    OutputElfFile *elf_file = run_wld(input_paths, OUTPUT_TYPE_FLAG_STATIC | OUTPUT_TYPE_FLAG_EXECUTABLE,  NULL, 1, NULL, "undefined _end");
+
+    assert_sections(elf_file,
+        // Name           Type            Address   Offset  Size   Flags                      Align
+        ".text",          SHT_PROGBITS,   0x401000, 0x1000, 0x13,  SHF_ALLOC | SHF_EXECINSTR, 16,
+        NULL
+    );
+
+    assert_program_segments(elf_file,
+        // Type           Offset   VirtAddr   FileSiz  MemSiz  Flags         Align
+        PT_LOAD,          0x0000,  0x400000,  0x140,   0x140,  PF_R,         0x1000,
+        PT_LOAD,          0x1000,  0x401000,  0x13,    0x13,   PF_R | PF_X,  0x1000,
+        END
+    );
+
+    assert_symtab(elf_file,
+    //  Value      Size   Type        Binding     Visibility    Section  Name
+        0x401000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  ".text", "_start",
+        0x402000,  0,     STT_NOTYPE, STB_GLOBAL, STV_DEFAULT,  "ABS",   "_end",        // Set by linker
+        END);
+}
+
 // Test undefined symbol error output
 static void test_undefined_symbol() {
     char *object_path = run_was(
@@ -2980,6 +3016,7 @@ int main() {
     test_etext_undefined();
     test_defined_etext();
     test_unused_etext();
+    test___end_symbol();
     test_undefined_symbol();
     test_automatic_start_stop_symbols();
     test_shared_library_no_dependencies();
