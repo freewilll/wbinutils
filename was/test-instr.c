@@ -1407,6 +1407,12 @@ static void test_section_creation(void) {
     test_full_assembly(".section .foo", ".section .foo", END);
     assert_section(".foo", SHT_PROGBITS, 0);
 
+    test_full_assembly(".section .foo-bar", ".section .foo-bar", END);
+    assert_section(".foo-bar", SHT_PROGBITS, 0);
+
+    test_full_assembly(".section .foo-bar-", ".section .foo-bar-", END);
+    assert_section(".foo-bar-", SHT_PROGBITS, 0);
+
     test_full_assembly(".section .foo, \"\"", ".section .foo, \"\"", END);
     assert_section(".foo", SHT_PROGBITS, 0);
 
@@ -1424,6 +1430,7 @@ static void test_section_creation(void) {
 
     test_full_assembly(".section .tbss, \"awT\", @nobits", ".section .tbss, \"awT\", @nobits", END);
     assert_section(".tbss", SHT_NOBITS, SHF_ALLOC | SHF_WRITE | SHF_TLS);
+
 }
 
 static void test_align(void) {

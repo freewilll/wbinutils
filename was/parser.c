@@ -238,6 +238,7 @@ Chunk *parse_directive_statement(void) {
         case TOK_DIRECTIVE_SECTION:
             // Parse:
             //.- section .testing1
+            //.- section .testing1-foo
             //.- section .testing1, ""
             //.- section .debug_info,"",@progbits
             //.- section .debug_str,"MS"
@@ -249,6 +250,23 @@ Chunk *parse_directive_statement(void) {
             expect(TOK_IDENTIFIER, "section name");
             char *name = strdup(cur_identifier);
             next();
+
+            // Section names can have dashes in them, e.g. .note.GNU-stack.
+            // Loop until we get a non-identifier or non-dash
+            while (cur_token == TOK_IDENTIFIER || cur_token == TOK_MINUS) {
+                int existing_len = strlen(name);
+
+                if (cur_token == TOK_IDENTIFIER) {
+                    name = realloc(name, existing_len + strlen(cur_identifier) + 1);
+                    sprintf(name, "%s%s", name, cur_identifier);
+                }
+                else {
+                    name = realloc(name, existing_len + 2);
+                    name[existing_len] = '-';
+                    name[existing_len + 1] = 0;
+                }
+                next();
+            }
 
             int flags = 0;
             if (cur_token == TOK_COMMA) {
