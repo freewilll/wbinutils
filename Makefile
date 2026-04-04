@@ -62,6 +62,7 @@ test: bin/was bin/wld lib/liblist.a lib/libstrmap.a lib/libstrmap_ordered.a lib/
 	+${MAKE} -C ${SRC_DIR}/lib/libstrmap test
 	+${MAKE} -C ${SRC_DIR}/lib/libstrmap_ordered test
 	+${MAKE} -C ${SRC_DIR}/lib/libmap_ordered test
+	@echo wbinutils tests passed
 
 install: bin/was bin/wld
 	mkdir -p '${INSTALL_BIN_DIR}'

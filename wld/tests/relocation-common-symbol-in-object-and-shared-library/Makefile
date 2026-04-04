@@ -12,16 +12,16 @@ all: | $(LOCAL_BUILD_DIR)
 all: run-main
 
 $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
-	${GCC} -c $(LOCAL_SRC_DIR)/main.c -o $(LOCAL_BUILD_DIR)/main.o
+	${GCC} -fcommon -c $(LOCAL_SRC_DIR)/main.c -o $(LOCAL_BUILD_DIR)/main.o
 
 $(LOCAL_BUILD_DIR)/libtest1.o: $(LOCAL_SRC_DIR)/libtest1.c
-	${GCC} -c $(LOCAL_SRC_DIR)/libtest1.c -o $(LOCAL_BUILD_DIR)/libtest1.o -fPIC
+	${GCC} -fcommon -c $(LOCAL_SRC_DIR)/libtest1.c -o $(LOCAL_BUILD_DIR)/libtest1.o -fPIC
 
 $(LOCAL_BUILD_DIR)/libtest2.o: $(LOCAL_SRC_DIR)/libtest2.c
-	${GCC} -c $(LOCAL_SRC_DIR)/libtest2.c -o $(LOCAL_BUILD_DIR)/libtest2.o -fPIC
+	${GCC} -fcommon -c $(LOCAL_SRC_DIR)/libtest2.c -o $(LOCAL_BUILD_DIR)/libtest2.o -fPIC
 
 $(LOCAL_BUILD_DIR)/libtest3.o: $(LOCAL_SRC_DIR)/libtest3.c
-	${GCC} -c $(LOCAL_SRC_DIR)/libtest3.c -o $(LOCAL_BUILD_DIR)/libtest3.o -fPIC
+	${GCC} -fcommon -c $(LOCAL_SRC_DIR)/libtest3.c -o $(LOCAL_BUILD_DIR)/libtest3.o -fPIC
 
 $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o $(LOCAL_BUILD_DIR)/libtest2.o $(LOCAL_BUILD_DIR)/libtest3.o
 	${WLD} \

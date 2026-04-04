@@ -87,6 +87,7 @@ ${TARGET}: ${OBJECTS} $(LOCAL_BUILD_DIR)/main.o ${HEADERS_PATH} ${LIBS_PATH}
 .PHONY: test
 test: ${TARGET} run-test-instr run-test-data run-test-expr
 	+$(MAKE) -C $(LOCAL_SRC_DIR)/tests test
+	@echo was tests passed
 
 $(LOCAL_BUILD_DIR)/test-instr: ${OBJECTS} $(LOCAL_BUILD_DIR)/test-instr.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH}
 	gcc -g -Werror ${OBJECTS} $(LOCAL_BUILD_DIR)/test-instr.o $(LOCAL_BUILD_DIR)/test-utils.o ${LIBS_PATH} -o $@

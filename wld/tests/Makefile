@@ -54,6 +54,7 @@ TESTS = \
 
 .PHONY: test
 test: $(TESTS)
+	@echo wld tests passed
 
 WAS ?= $(BUILD_DIR)/bin/was
 WLD ?= $(BUILD_DIR)/bin/wld

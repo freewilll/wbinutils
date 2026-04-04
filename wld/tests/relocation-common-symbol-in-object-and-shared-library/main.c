@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int def1;           // Req!uires a COPY relocation
+int def1;           // Requires a COPY relocation
 extern int def2;    // Requires a COPY relocation
 int undef1;         // Doesn't require a COPY relocation, since it goes into the executable's .bss
 extern int undef2;  // Requires a COPY relocation, since it's in the .bss in libtest2
