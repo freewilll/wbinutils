@@ -10,8 +10,8 @@
 
 List *current_linker_script;
 
-static SectionsCommand *parse_sections_command();
-static SectionsCommandOutputItem *parse_sections_command_output_item();
+static SectionsCommand *parse_sections_command(void);
+static SectionsCommandOutputItem *parse_sections_command_output_item(void);
 
 // Parse functions used in a sections assignment statement like PROVIDE()
 SectionsCommand *parse_sections_command_flag_function() {
@@ -63,7 +63,7 @@ static SectionsCommandOutputItem *parse_sections_command_output_item_flag_functi
     return output_item;
 }
 
-static SectionsCommandOutputItem *parse_sections_command_output_item() {
+static SectionsCommandOutputItem *parse_sections_command_output_item(void) {
     if (cur_token == TOK_KEEP) {
         SectionsCommandOutputItem *sections_command_output_item = parse_flag_output_function();
         sections_command_output_item->input_section.keep = 1;
@@ -149,7 +149,7 @@ static SectionsCommand *parse_sections_output(char *identifier) {
 
     // Loop over output items
     while (1) {
-        SectionsCommandOutputItem *output_item = parse_sections_command_output_item(command);
+        SectionsCommandOutputItem *output_item = parse_sections_command_output_item();
         append_to_list(output_items, output_item);
 
         while (cur_token == TOK_SEMICOLON) next();
@@ -162,7 +162,7 @@ static SectionsCommand *parse_sections_output(char *identifier) {
     return command;
 }
 
-static SectionsCommand *parse_sections_command() {
+static SectionsCommand *parse_sections_command(void) {
     if (cur_token == TOK_PROVIDE) {
         SectionsCommand *command = parse_sections_command_flag_function();
         command->assignment.provide = 1;
@@ -216,7 +216,7 @@ static void parse_sections(void) {
     while (1) {
         while (cur_token == TOK_SEMICOLON) next();
         if (cur_token == TOK_RCURLY) break;
-        SectionsCommand *command = parse_sections_command(section_commands);
+        SectionsCommand *command = parse_sections_command();
         append_to_list(section_commands, command);
     }
 
