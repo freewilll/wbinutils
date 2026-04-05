@@ -75,15 +75,39 @@ static void assert_sections(OutputElfFile *elf_file, ...) {
         append_to_list(expected_sections, section);
     }
 
-    // The executable has 4 extra sections: null, symtab, strtab and shstrtab
-    if (elf_file->sections_list->length - 4 != expected_sections->length) {
-        printf("Sections lengths mismatch: expected %d, got %d\n", elf_file->sections_list->length - 4, expected_sections->length);
-        fail_sections(elf_file, expected_sections);
-    }
+    int got_sections_index = 0;
+    int expected_sections_index = 0;
 
-    for (int i = 0; i < expected_sections->length; i++) {
-        OutputSection *got = elf_file->sections_list->elements[i + 1];
-        OutputSection *expected = expected_sections->elements[i];
+    while (1) {
+        // Skip past uninteresting sections
+        while (1) {
+            if (got_sections_index >= elf_file->sections_list->length) break;
+
+            OutputSection *got = elf_file->sections_list->elements[got_sections_index];
+            int is_strtab = !strcmp(got->name, ".strtab");
+            int is_shstrtab = !strcmp(got->name, ".shstrtab");
+            int is_symtab = !strcmp(got->name, ".symtab");
+            if (got->type != SHT_NULL && !is_strtab && !is_shstrtab && !is_symtab) break;
+            got_sections_index++;
+        }
+
+        if (expected_sections_index >= expected_sections->length &&
+            got_sections_index >= elf_file->sections_list->length)
+            // All is well
+            return;
+
+        if (expected_sections_index >= expected_sections->length) {
+            printf("Got more sections than expected\n");
+            fail_sections(elf_file, expected_sections);
+        }
+
+        if (got_sections_index >= elf_file->sections_list->length) {
+            printf("Expected more sections than got\n");
+            fail_sections(elf_file, expected_sections);
+        }
+
+        OutputSection *got = elf_file->sections_list->elements[got_sections_index];
+        OutputSection *expected = expected_sections->elements[expected_sections_index];
 
         if (
             strcmp(got->name, expected->name) ||
@@ -94,10 +118,13 @@ static void assert_sections(OutputElfFile *elf_file, ...) {
             got->flags != expected->flags ||
             got->align != expected->align) {
 
-            expected->name;
-            printf("Sections mismatch at position %d, %s in expected sections list\n", i, expected->name);
+            printf("Sections mismatch, got=%s, expected=%s at indexes got=%d, expected=%d\n",
+                got->name, expected->name, got_sections_index, expected_sections_index);
             fail_sections(elf_file, expected_sections);
         }
+
+        got_sections_index++;
+        expected_sections_index++;
     }
 }
 
@@ -142,7 +169,7 @@ static void assert_program_segments(OutputElfFile *elf_file, ...) {
     }
 
     if (elf_file->program_segments_list->length != expected_program_segments->length) {
-        printf("Sections lengths mismatch: expected %d, got %d\n", elf_file->program_segments_list->length , expected_program_segments->length);
+        printf("Segment lengths mismatch: expected %d, got %d\n", elf_file->program_segments_list->length , expected_program_segments->length);
         fail_program_segments(elf_file, expected_program_segments);
     }
 
@@ -526,6 +553,15 @@ static char *run_as(char *extra_args, char *assembly) {
     int result = system(command);
     if (result) {
         printf("Was failed with exit code %d\n", result >> 8);
+        exit(1);
+    }
+
+    // Remove .note.gnu.property section which a version of as > 2.44 adds automatically.
+    // This ensures one set of assertions work with multiple versions of as.
+    snprintf(command, sizeof(command), "objcopy --remove-section .note.gnu.property %s", object_path);
+    result = system(command);
+    if (result) {
+        printf("%s failed with exit code %d\n", command, result >> 8);
         exit(1);
     }
 
