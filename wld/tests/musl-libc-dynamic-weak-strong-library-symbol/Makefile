@@ -25,11 +25,11 @@ $(LOCAL_BUILD_DIR)/libtest.o: $(LOCAL_SRC_DIR)/libtest.s
 $(LOCAL_BUILD_DIR)/libtest.so: $(LOCAL_BUILD_DIR)/libtest.o ${WLD}
 	${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest.so \
 		$(LOCAL_BUILD_DIR)/libtest.o \
-		-L/usr/lib/x86_64-linux-musl \
+		-L$(MUSL_LIBC_LIBRARY_PATH) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
@@ -37,19 +37,19 @@ $(LOCAL_BUILD_DIR)/libtest.so: $(LOCAL_BUILD_DIR)/libtest.o ${WLD}
 
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest.so ${WLD}
 	${WLD} \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(GCC_CRTBEGINS)                                      \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-L$(GCC_LIBRARY_PATH)                                 \
-	$(LOCAL_BUILD_DIR)/main.o                             \
-	-o $(LOCAL_BUILD_DIR)/main                            \
- 	-L $(LOCAL_BUILD_DIR)                                 \
- 	-ltest                                                \
-	-lc -lgcc -lgcc_eh                                    \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	$(GCC_CRTENDS)                                        \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(GCC_CRTBEGINS) \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-L$(GCC_LIBRARY_PATH) \
+	$(LOCAL_BUILD_DIR)/main.o \
+	-o $(LOCAL_BUILD_DIR)/main \
+ 	-L $(LOCAL_BUILD_DIR) \
+ 	-ltest \
+	-lc -lgcc -lgcc_eh \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	$(GCC_CRTENDS) \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o
 
 run-main: $(LOCAL_BUILD_DIR)/main
 	@LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) $(LOCAL_BUILD_DIR)/main

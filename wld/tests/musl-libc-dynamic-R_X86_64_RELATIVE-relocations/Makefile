@@ -3,6 +3,7 @@ $(LOCAL_BUILD_DIR):
 
 LOCAL_BUILD_DIR := $(BUILD_DIR)/wld/tests/musl-libc-dynamic-R_X86_64_RELATIVE-relocations
 LOCAL_SRC_DIR := $(SRC_DIR)/wld/tests/musl-libc-dynamic-R_X86_64_RELATIVE-relocations
+include $(LOCAL_SRC_DIR)/../gcc-runtime.mk
 
 # Test the conversion of a R_X86_64_64 to a R_X86_64_RELATIVE in dynamic executables
 
@@ -16,15 +17,15 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 	${MUSL_WCC} -c $(LOCAL_SRC_DIR)/main.c -o $(LOCAL_BUILD_DIR)/main.o
 
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
-	${WLD}                                                \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/main.o                             \
-	-o $(LOCAL_BUILD_DIR)/main                            \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/main.o \
+	-o $(LOCAL_BUILD_DIR)/main \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o
 
 run-main: $(LOCAL_BUILD_DIR)/main
 	 $(LOCAL_BUILD_DIR)/main

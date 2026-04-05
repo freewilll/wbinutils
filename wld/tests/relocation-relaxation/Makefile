@@ -31,60 +31,60 @@ $(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed.o: $(LOCAL_SRC_DIR)/main.s
 	as $< -o $@ -mrelax-relocations=no
 
 $(LOCAL_BUILD_DIR)/main-static-relaxed: $(LOCAL_BUILD_DIR)/main-static-relaxed.o $(LOCAL_BUILD_DIR)/libtest.o
-	@${WLD}                                               \
-	-static                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(GCC_CRTBEGINS)                                      \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-L$(GCC_LIBRARY_PATH)                                 \
-	$(LOCAL_BUILD_DIR)/main-static-relaxed.o              \
-	$(LOCAL_BUILD_DIR)/libtest.o                          \
-	-o $(LOCAL_BUILD_DIR)/main-static-relaxed             \
-	-lc -lgcc -lgcc_eh                                    \
-	$(GCC_CRTENDS)                                        \
-	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	@${WLD} \
+	-static \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(GCC_CRTBEGINS) \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-L$(GCC_LIBRARY_PATH) \
+	$(LOCAL_BUILD_DIR)/main-static-relaxed.o \
+	$(LOCAL_BUILD_DIR)/libtest.o \
+	-o $(LOCAL_BUILD_DIR)/main-static-relaxed \
+	-lc -lgcc -lgcc_eh \
+	$(GCC_CRTENDS) \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
 
 $(LOCAL_BUILD_DIR)/main-static-unrelaxed: $(LOCAL_BUILD_DIR)/main-static-unrelaxed.o $(LOCAL_BUILD_DIR)/libtest.o
-	@${WLD}                                               \
-	-static                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(GCC_CRTBEGINS)                                      \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-L$(GCC_LIBRARY_PATH)                                 \
-	$(LOCAL_BUILD_DIR)/libtest.o                          \
-	$(LOCAL_BUILD_DIR)/main-static-unrelaxed.o            \
-	-o $(LOCAL_BUILD_DIR)/main-static-unrelaxed           \
-	-lc -lgcc -lgcc_eh                                    \
-	$(GCC_CRTENDS)                                        \
-	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	@${WLD} \
+	-static \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(GCC_CRTBEGINS) \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-L$(GCC_LIBRARY_PATH) \
+	$(LOCAL_BUILD_DIR)/libtest.o \
+	$(LOCAL_BUILD_DIR)/main-static-unrelaxed.o \
+	-o $(LOCAL_BUILD_DIR)/main-static-unrelaxed \
+	-lc -lgcc -lgcc_eh \
+	$(GCC_CRTENDS) \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
 
 $(LOCAL_BUILD_DIR)/main-dynamic-relaxed: $(LOCAL_BUILD_DIR)/main-dynamic-relaxed.o $(LOCAL_BUILD_DIR)/libtest.o
-	@${WLD}                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/libtest.o                          \
-	$(LOCAL_BUILD_DIR)/main-dynamic-relaxed.o             \
-	-o $(LOCAL_BUILD_DIR)/main-dynamic-relaxed            \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o                     \
-	-pie                                                  \
+	@${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/libtest.o \
+	$(LOCAL_BUILD_DIR)/main-dynamic-relaxed.o \
+	-o $(LOCAL_BUILD_DIR)/main-dynamic-relaxed \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
+	-pie \
 
 $(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed: $(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed.o $(LOCAL_BUILD_DIR)/libtest.o
-	@${WLD}                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/libtest.o                          \
-	$(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed.o           \
-	-o $(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed          \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o                     \
-	-pie                                                  \
+	@${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/libtest.o \
+	$(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed.o \
+	-o $(LOCAL_BUILD_DIR)/main-dynamic-unrelaxed \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
+	-pie \
 
 run-main-static-relaxed: $(LOCAL_BUILD_DIR)/main-static-relaxed
 	$(LOCAL_BUILD_DIR)/main-static-relaxed

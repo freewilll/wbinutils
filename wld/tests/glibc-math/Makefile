@@ -19,19 +19,19 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-static \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \
-		/usr/lib/x86_64-linux-gnu/crt1.o \
-		/usr/lib/x86_64-linux-gnu/crti.o \
+		$(FILE_crt1) \
+		$(FILE_crti) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
 		-lc \
 		-lm \
-		/usr/lib/x86_64-linux-gnu/crtn.o \
+		$(FILE_crtn) \
 		-static
 
 run-main: $(LOCAL_BUILD_DIR)/main

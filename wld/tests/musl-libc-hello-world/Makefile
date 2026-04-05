@@ -19,16 +19,16 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o
 	${WLD} \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(GCC_CRTBEGINS)                                      \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-L$(GCC_LIBRARY_PATH)                                 \
-	$(LOCAL_BUILD_DIR)/main.o                             \
-	-o $(LOCAL_BUILD_DIR)/main                            \
-	-lc -lgcc -lgcc_eh                                    \
-	$(GCC_CRTENDS)                                        \
-	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(GCC_CRTBEGINS) \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-L$(GCC_LIBRARY_PATH) \
+	$(LOCAL_BUILD_DIR)/main.o \
+	-o $(LOCAL_BUILD_DIR)/main \
+	-lc -lgcc -lgcc_eh \
+	$(GCC_CRTENDS) \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
 	-static
 
 run-main: $(LOCAL_BUILD_DIR)/main

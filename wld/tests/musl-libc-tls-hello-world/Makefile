@@ -26,16 +26,16 @@ $(LOCAL_BUILD_DIR)/main-data-and-bss: $(LOCAL_BUILD_DIR)/main-data-and-bss.o
 
 $(LOCAL_BUILD_DIR)/%-data: $(LOCAL_BUILD_DIR)/%-data.o | $(LOCAL_BUILD_DIR)
 	@${WLD} \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(GCC_CRTBEGINS)                                      \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-L$(GCC_LIBRARY_PATH)                                 \
-	$<                                                    \
-	-o $@                                                 \
-	-lc -lgcc -lgcc_eh                                    \
-	$(GCC_CRTENDS)                                        \
-	/usr/lib/x86_64-linux-musl/crtn.o				      \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(GCC_CRTBEGINS) \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-L$(GCC_LIBRARY_PATH) \
+	$< \
+	-o $@ \
+	-lc -lgcc -lgcc_eh \
+	$(GCC_CRTENDS) \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
 	-static
 
 .PHONY: run-main-data

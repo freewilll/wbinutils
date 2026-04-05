@@ -21,19 +21,19 @@ $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/test.o
 	@${WLD} \
 	-static \
 	-L \
-	/usr/lib \
+	$(GLIBC_LIBC_LIBRARY_PATH) \
 	-L \
 	$(GCC_LIBRARY_PATH) \
 	-o $(LOCAL_BUILD_DIR)/main \
-	/usr/lib/x86_64-linux-gnu/crt1.o \
-	/usr/lib/x86_64-linux-gnu/crti.o \
+	$(FILE_crt1) \
+	$(FILE_crti) \
 	$(GCC_CRTBEGINS) \
 	-lc \
 	-lgcc \
 	-lgcc_eh \
 	$(LOCAL_BUILD_DIR)/test.o \
 	-lc $(GCC_CRTENDS) \
-	/usr/lib/x86_64-linux-gnu/crtn.o \
+	$(FILE_crtn) \
 	$(LOCAL_BUILD_DIR)/main.o
 
 .PHONY: run-main

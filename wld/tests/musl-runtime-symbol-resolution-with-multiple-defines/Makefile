@@ -30,11 +30,11 @@ $(LOCAL_BUILD_DIR)/libtest2.o: $(LOCAL_SRC_DIR)/libtest2.c
 $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o
 	@${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest1.so \
 		$(LOCAL_BUILD_DIR)/libtest1.o \
-		-L/usr/lib/x86_64-linux-musl \
+		-L$(MUSL_LIBC_LIBRARY_PATH) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
@@ -43,11 +43,11 @@ $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o
 $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR)/libtest2.o
 	@${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest2.so \
 		$(LOCAL_BUILD_DIR)/libtest2.o \
-		-L/usr/lib/x86_64-linux-musl \
+		-L$(MUSL_LIBC_LIBRARY_PATH) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
@@ -56,46 +56,46 @@ $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR
 		-ltest1
 
 $(LOCAL_BUILD_DIR)/main-with-def: $(LOCAL_BUILD_DIR)/main-with-def.o $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR)/libtest2.so
-	@${WLD}                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/main-with-def.o                  \
-	-o $(LOCAL_BUILD_DIR)/main-with-def                 \
-	-L $(LOCAL_BUILD_DIR)                               \
-	-ltest1                                               \
-	-ltest2                                               \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	@${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/main-with-def.o \
+	-o $(LOCAL_BUILD_DIR)/main-with-def \
+	-L $(LOCAL_BUILD_DIR) \
+	-ltest1 \
+	-ltest2 \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o
 
 $(LOCAL_BUILD_DIR)/main-no-def-test1-first: $(LOCAL_BUILD_DIR)/main-no-def.o $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR)/libtest2.so
-	@${WLD}                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/main-no-def.o                      \
-	-o $(LOCAL_BUILD_DIR)/main-no-def-test1-first         \
-	-L $(LOCAL_BUILD_DIR)                                 \
-	-ltest1                                               \
-	-ltest2                                               \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	@${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/main-no-def.o \
+	-o $(LOCAL_BUILD_DIR)/main-no-def-test1-first \
+	-L $(LOCAL_BUILD_DIR) \
+	-ltest1 \
+	-ltest2 \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o
 
 $(LOCAL_BUILD_DIR)/main-no-def-test2-first: $(LOCAL_BUILD_DIR)/main-no-def.o $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR)/libtest2.so
-	@${WLD}                                               \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/main-no-def.o                      \
-	-o $(LOCAL_BUILD_DIR)/main-no-def-test2-first         \
-	-L $(LOCAL_BUILD_DIR)                                 \
-	-ltest2                                               \
-	-ltest1                                               \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o
+	@${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/main-no-def.o \
+	-o $(LOCAL_BUILD_DIR)/main-no-def-test2-first \
+	-L $(LOCAL_BUILD_DIR) \
+	-ltest2 \
+	-ltest1 \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o
 
 run-main-with-def: $(LOCAL_BUILD_DIR)/main-with-def
 	LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) $(LOCAL_BUILD_DIR)/main-with-def; \

@@ -27,11 +27,11 @@ $(LOCAL_BUILD_DIR)/libtest2.o: $(LOCAL_SRC_DIR)/libtest2.c
 $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o
 	${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest1.so \
 		$(LOCAL_BUILD_DIR)/libtest1.o \
-		-L/usr/lib/x86_64-linux-musl \
+		-L$(MUSL_LIBC_LIBRARY_PATH) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
@@ -40,11 +40,11 @@ $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o
 $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest2.o $(LOCAL_BUILD_DIR)/libtest1.so
 	${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest2.so \
 		$(LOCAL_BUILD_DIR)/libtest2.o \
-		-L/usr/lib/x86_64-linux-musl \
+		-L$(MUSL_LIBC_LIBRARY_PATH) \
 		-L $(LOCAL_BUILD_DIR) \
 		-ltest1 \
 		-lc \
@@ -55,18 +55,18 @@ $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest2.o $(LOCAL_BUILD_DIR)
 		-ltest1
 
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.so $(LOCAL_BUILD_DIR)/libtest2.so
-	${WLD}                                                \
-	/usr/lib/x86_64-linux-musl/Scrt1.o                    \
-	/usr/lib/x86_64-linux-musl/crti.o                     \
-	$(LOCAL_BUILD_DIR)/main.o                             \
-	-o $(LOCAL_BUILD_DIR)/main                            \
-	-L $(LOCAL_BUILD_DIR)                                 \
-	-ltest1                                               \
-	-ltest2                                               \
-	-L/usr/lib/x86_64-linux-musl                          \
-	-dynamic-linker /lib/ld-musl-x86_64.so.1              \
-	-lc                                                   \
-	/usr/lib/x86_64-linux-musl/crtn.o                     \
+	${WLD} \
+	$(MUSL_LIBC_LIBRARY_PATH)/Scrt1.o \
+	$(MUSL_LIBC_LIBRARY_PATH)/crti.o \
+	$(LOCAL_BUILD_DIR)/main.o \
+	-o $(LOCAL_BUILD_DIR)/main \
+	-L $(LOCAL_BUILD_DIR) \
+	-ltest1 \
+	-ltest2 \
+	-L$(MUSL_LIBC_LIBRARY_PATH) \
+	-dynamic-linker $(MUSL_DYNAMIC_LINKER) \
+	-lc \
+	$(MUSL_LIBC_LIBRARY_PATH)/crtn.o \
 	-pie
 
 run-main: $(LOCAL_BUILD_DIR)/main

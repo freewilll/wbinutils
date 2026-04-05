@@ -24,7 +24,7 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 $(LOCAL_BUILD_DIR)/libtest.so: $(LOCAL_BUILD_DIR)/libtest.o
 	${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest.so \
 		$(LOCAL_BUILD_DIR)/libtest.o \
@@ -36,20 +36,20 @@ $(LOCAL_BUILD_DIR)/libtest.so: $(LOCAL_BUILD_DIR)/libtest.o
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest.so
 	${WLD} \
 		-rpath ${CURRENT_DIR} \
-		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
-		-L/usr/lib \
+		-dynamic-linker $(GLIBC_DYNAMIC_LINKER) \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \
 		-L $(LOCAL_BUILD_DIR) \
 		-ltest \
-		/usr/lib/x86_64-linux-gnu/crt1.o \
-		/usr/lib/x86_64-linux-gnu/crti.o \
+		$(FILE_crt1) \
+		$(FILE_crti) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
 		-lc \
-		/usr/lib/x86_64-linux-gnu/crtn.o \
+		$(FILE_crtn) \
 
 run-main: $(LOCAL_BUILD_DIR)/main
 	$(LOCAL_BUILD_DIR)/main

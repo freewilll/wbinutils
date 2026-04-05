@@ -29,7 +29,7 @@ $(LOCAL_BUILD_DIR)/main.o: $(LOCAL_SRC_DIR)/main.c
 $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o $(LOCAL_BUILD_DIR)/libtest2.so
 	@${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest1.so \
 		$(LOCAL_BUILD_DIR)/libtest1.o \
@@ -43,7 +43,7 @@ $(LOCAL_BUILD_DIR)/libtest1.so: $(LOCAL_BUILD_DIR)/libtest1.o $(LOCAL_BUILD_DIR)
 $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest2.o
 	@${WLD} \
 		-shared \
-		-L/usr/lib \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/libtest2.so \
 		$(LOCAL_BUILD_DIR)/libtest2.o \
@@ -54,20 +54,20 @@ $(LOCAL_BUILD_DIR)/libtest2.so: $(LOCAL_BUILD_DIR)/libtest2.o
 
 $(LOCAL_BUILD_DIR)/main: $(LOCAL_BUILD_DIR)/main.o $(LOCAL_BUILD_DIR)/libtest1.so
 	@LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) ${WLD} \
-		-dynamic-linker /lib64/ld-linux-x86-64.so.2 \
-		-L/usr/lib \
+		-dynamic-linker $(GLIBC_DYNAMIC_LINKER) \
+		-L$(GLIBC_LIBC_LIBRARY_PATH) \
 		-L$(GCC_LIBRARY_PATH) \
 		-o $(LOCAL_BUILD_DIR)/main \
 		$(LOCAL_BUILD_DIR)/main.o \
 		-L $(LOCAL_BUILD_DIR) \
 		-ltest1 \
-		/usr/lib/x86_64-linux-gnu/crt1.o \
-		/usr/lib/x86_64-linux-gnu/crti.o \
+		$(FILE_crt1) \
+		$(FILE_crti) \
 		-lc \
 		-lgcc \
 		-lgcc_eh \
 		-lc \
-		/usr/lib/x86_64-linux-gnu/crtn.o \
+		$(FILE_crtn) \
 
 run-main: $(LOCAL_BUILD_DIR)/main
 	LD_LIBRARY_PATH=$(LOCAL_BUILD_DIR) $(LOCAL_BUILD_DIR)/main
