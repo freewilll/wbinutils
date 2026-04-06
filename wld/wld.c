@@ -161,9 +161,10 @@ static void read_object_or_shared_library_file(List *input_elf_files, const char
 static int read_input_file(const char *path, List *input_elf_files, StrMap *read_shared_object_files, List *library_paths, int as_needed) {
     // If the path isn't absolute, search for it
     if (path[0] != '/') {
-        path = find_file(library_paths, path, "library");
-        if (!path)
+        char *found_path = find_file(library_paths, path, "library");
+        if (!found_path)
             error("Unable to find file: %s", path);
+        path = found_path;
     }
 
     int objects_added = 0;
