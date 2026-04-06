@@ -390,6 +390,15 @@ void test_R_X86_64_TPOFF32() {
     assert_data(output_data, 0xf8, 0xff, 0xff, 0xff, END);
 }
 
+void test_R_X86_64_DTPOFF32() {
+    // The symbol value in the TLS template is 0x10, with an addend of 0x04: 0x10 + 0x04 = 0x114
+    uint8_t output_data[] = {0x00, 0x00, 0x00, 0x00};
+    reset(OT_STATIC_EXEC, output_data, R_X86_64_DTPOFF32, 0, 4);
+    set_value(0x10);
+    run();
+    assert_data(output_data, 0x14, 0x00, 0x00, 0x00, END);
+}
+
 void test_R_X86_64_GOTPCREL_with_GOT_entry() {
     // This instruction cannot be relaxed, so a GOT entry has to be added for the symbol
     uint8_t output_data[] = {0x48, 0x83, 0x3d, 0xf8, 0x00, 0x00, 0x00, 0x00};      // cmpq $0, foo@GOTPCREL(%rip)
@@ -464,6 +473,7 @@ int main() {
     test_R_X86_64_REX_GOTPCRELX();
     test_R_X86_64_REX_GOTPCRELX_in_shared_object();
     test_R_X86_64_TPOFF32();
+    test_R_X86_64_DTPOFF32();
     test_R_X86_64_GOTPCREL_with_GOT_entry();
     test_R_X86_64_GOTPCREL_with_GOT_iplt_entry();
     test_R_X86_64_PLT32_in_static();

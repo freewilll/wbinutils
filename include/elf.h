@@ -126,6 +126,8 @@
 #define R_X86_64_16             12   // Direct 8 bit                  S + A
 #define R_X86_64_16S            13   // Direct 8 bit sign extended    S + A
 #define R_X86_64_8              14   // Direct 8 bit                  S + A
+#define R_X86_64_TLSLD          20   // 32 bit signed PC relative offset to two GOT entries for LD symbol
+#define R_X86_64_DTPOFF32       21   // Offset in TLS block
 #define R_X86_64_GOTTPOFF       22	 // 32 bit signed PC relative offset to GOT entry for IE symbol
 #define R_X86_64_TPOFF32        23   // Offset in initial TLS block   S + A - T
 #define R_X86_64_IRELATIVE      37   // Adjust indirectly by program base

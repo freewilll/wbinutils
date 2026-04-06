@@ -309,6 +309,7 @@ void scan_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fil
             return;
 
         case R_X86_64_TPOFF32:
+        case R_X86_64_DTPOFF32:
         case R_X86_64_32:
         case R_X86_64_32S:
             return;
@@ -702,6 +703,15 @@ void apply_relocation(OutputElfFile *output_elf_file, InputElfFile *input_elf_fi
             *output = value;
             break;
         }
+
+        case R_X86_64_DTPOFF32:
+            // The value is the offset in the TLS block + addend
+            uint32_t *output = (uint32_t *) output_pointer;
+            uint64_t value = S + A;
+
+            if (DEBUG_RELOCATIONS) printf("    value=%#lx\n", value);
+            *output = value;
+            break;
 
         case R_X86_64_PLT32: {
             if (symbol && (symbol->extra & SE_IN_GOT_IPLT))
