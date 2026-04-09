@@ -431,6 +431,10 @@ void test_parse_instruction_statement() {
     test_assembly("imulq     $0x7fffffff,                %rbx, %rcx",               0x48, 0x69, 0xcb, 0xff, 0xff, 0xff, 0x7f,             END);
     test_assembly("imulq     $0x7fffffff,                %rbx, %rbx",               0x48, 0x69, 0xdb, 0xff, 0xff, 0xff, 0x7f,             END);
 
+    test_assembly("bsr       %eax, %ebx",       0x0f, 0xbd, 0xd8, END);
+    test_assembly("bsr       %rax, %rbx", 0x48, 0x0f, 0xbd, 0xd8, END);
+    test_assembly("tzcnt     %eax, %ebx", 0xf3,       0x0f, 0xbc, 0xd8, END);
+    test_assembly("tzcnt     %rax, %rbx", 0xf3, 0x48, 0x0f, 0xbc, 0xd8, END);
 
     test_assembly("test     %al,                        %bl",        0x84, 0xc3, END);
     test_assembly("test     %bl,                        %al",        0x84, 0xd8, END);

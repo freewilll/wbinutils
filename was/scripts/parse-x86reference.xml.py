@@ -147,6 +147,7 @@ OPCODE_ALIASES = (
 for mnem in (
     "add",
     "and",
+    "bsr",
     "cmp",
     "imul",
     "mov",
