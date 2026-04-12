@@ -264,6 +264,15 @@ void test_parse_instruction_statement() {
     test_assembly("mov      %r15,                        0xff       (%rax)", 0x4c, 0x89, 0xb8, 0xff, 0x00, 0x00, 0x00, END);
     test_assembly("mov      %r15,                        0x7fffffff (%rax)", 0x4c, 0x89, 0xb8, 0xff, 0xff, 0xff, 0x7f, END);
 
+    test_assembly("mov      (%rbp,%rsi,4),              %al",              0x8a, 0x44, 0xb5, 0x00, END);
+    test_assembly("mov      (%rbp,%rsi,4),              %ax",  0x66,       0x8b, 0x44, 0xb5, 0x00, END);
+    test_assembly("mov      (%rbp,%rsi,4),              %edx",             0x8b, 0x54, 0xb5, 0x00, END);
+    test_assembly("mov      (%rbp,%rsi,4),              %rdx",       0x48, 0x8b, 0x54, 0xb5, 0x00, END);
+    test_assembly("mov      (%r12,%rsi,4),              %al",        0x41, 0x8a, 0x04, 0xb4,       END);
+    test_assembly("mov      (%r12,%rsi,4),              %ax",  0x66, 0x41, 0x8b, 0x04, 0xb4,       END);
+    test_assembly("mov      (%r12,%rsi,4),              %edx",       0x41, 0x8b, 0x14, 0xb4,       END);
+    test_assembly("mov      (%r12,%rsi,4),              %rdx",       0x49, 0x8b, 0x14, 0xb4,       END);
+
     test_assembly("mov      (%rax,%rbx,1),              %rcx", 0x48, 0x8b, 0x0c, 0x18, END);
     test_assembly("mov      (%r15,%rbx,1),              %rcx", 0x49, 0x8b, 0x0c, 0x1f, END);
     test_assembly("mov      (%rax,%r15,1),              %rcx", 0x4a, 0x8b, 0x0c, 0x38, END);

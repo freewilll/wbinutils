@@ -18,9 +18,12 @@
 // Encoding contains all the details necessary to generate the bytes for an instruction
 typedef struct encoding {
     int size;               // Size of operation
-    int need_rex;           // Set to 1 to always emit a rex. A rex can be emitted even if this is set to zero.
-    int rex_w;              // Need to set REX W bit
     int need_size16;        // Need to send 16-bit size override
+    int need_rex;           // Set to 1 to always emit a rex. A rex can be emitted even if this is set to zero.
+    int rex_b;              // Need to set REX B bit
+    int rex_x;              // Need to set REX X bit
+    int rex_r;              // Need to set REX R bit
+    int rex_w;              // Need to set REX W bit
     char prefix;            // Optional prefix
     char ohf_prefix;        // Optional 0xf prefix. Zero if no prefix
     char primary_opcode;    // Primary opcode
@@ -441,7 +444,11 @@ static Encoding make_encoding(Operand *op1, Operand *op2, Operand *op3, Opcode *
 
 // Returns 0/1 if a REX prefix needs to be emitted
 static int needs_rex_prefix(Encoding *enc) {
-    return (enc->need_rex || enc->rex_w || enc->reg >= 8 || enc->rm >= 8 || enc->index >= 8);
+    enc->rex_b = enc->has_sib && enc->base != 4 ? enc->base >> 3: enc->rm >> 3;
+    enc->rex_x = enc->index >> 3;
+    enc->rex_r = enc->reg >> 3;
+
+    return (enc->need_rex || enc->rex_w || enc->rex_r || enc->rex_b || enc->rex_x);
 }
 
 // Determine the amount of bytes for an encoded instruction
@@ -469,8 +476,7 @@ static void emit_uint64(Instructions *instr, uint64_t data) { EMIT(uint64_t, 8);
 // Add REX prefix if necessary
 static void emit_REX_prefix(Instructions *instr, Encoding *enc) {
     if (needs_rex_prefix(enc)) {
-        int rex_b = enc->has_sib && enc->base != 4 ? enc->base : enc->rm;
-        emit_uint8(instr, (0b100 << 4) | ( REX_W * enc->rex_w) | (REX_B * (rex_b >> 3)) | (REX_R * (enc->reg >> 3)) | (REX_X * (enc->index >> 3)));
+        emit_uint8(instr, (0b100 << 4) | ( REX_W * enc->rex_w) | (REX_B * enc->rex_b) | (REX_R * enc->rex_r) | (REX_X * enc->rex_x));
     }
 }
 
