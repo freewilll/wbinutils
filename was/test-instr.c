@@ -1336,6 +1336,36 @@ void test_symbol_types_and_binding(void) {
         END);
     assert_symbols(0, 8, STT_OBJECT, STB_GLOBAL, bss_index, "foo", END);
 
+    // A .bss symbol followed by a local .comm symbol both end up in .bss
+    test_full_assembly("A .bss symbol and .comm symbol",
+        ".bss;"
+        ".globl foo1;"
+        ".size foo1, 8;"
+        ".type foo1, @object;"
+        "foo1: .zero 8;"
+        ".local foo2;"
+        ".comm  foo2,4,4;",
+        END);
+    assert_symbols(
+        8,  4, STT_OBJECT, STB_LOCAL,  bss_index, "foo2",
+        0,  8, STT_OBJECT, STB_GLOBAL, bss_index, "foo1",
+        END);
+
+    // A local .comm symbol followed by a .bss symbol both end up in .bss
+    test_full_assembly("A .comm symbol and .bss symbol",
+        ".local foo1;"
+        ".comm  foo1,4,4;"
+        ".bss;"
+        ".globl foo2;"
+        ".size foo2, 8;"
+        ".type foo2, @object;"
+        "foo2: .zero 8;",
+        END);
+    assert_symbols(
+        0,  4, STT_OBJECT, STB_LOCAL,  bss_index, "foo1",
+        4,  8, STT_OBJECT, STB_GLOBAL, bss_index, "foo2",
+        END);
+
     // A .local followed by a .globl
     test_full_assembly("a .local followed by a .globl", ".local foo; .globl foo", END);
     assert_symbols(0, 0, STT_NOTYPE, STB_GLOBAL, SHN_UNDEF, "foo", END);

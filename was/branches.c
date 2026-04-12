@@ -73,6 +73,10 @@ static void make_symbol_offsets(OutputSection *section) {
             chunk->lac.symbol->value = offset;
         }
 
+        else if (chunk->type == CT_ZERO && chunk->zec.symbol) {
+            chunk->zec.symbol->value = offset;
+        }
+
         chunk->offset = offset;
 
         if (chunk->type == CT_ALIGN)

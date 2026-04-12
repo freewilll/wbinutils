@@ -203,11 +203,20 @@ Chunk *parse_directive_statement(void) {
             symbol->size = size;
 
             if (was_local) {
-                // The symbol was already declared as .local. Adding a .comm to that
-                // allocates local bss storage for it.
+                // The symbol is declared as .local. Adding a .comm to that
+                // allocates local bss storage.
                 symbol->section = output_elf_file->section_bss;
-                symbol->value = output_elf_file->section_bss->size;
-                output_elf_file->section_bss->size += symbol->size;
+
+                Chunk *chunk = calloc(1, sizeof(Chunk));
+                chunk->type = CT_ZERO;
+                chunk->zec.size = symbol->size;
+                chunk->zec.symbol = symbol;
+
+                if (!output_elf_file->section_bss->chunks)
+                    output_elf_file->section_bss->chunks = new_list(10240);
+
+                append_to_list(output_elf_file->section_bss->chunks, chunk);
+
             }
             else {
                 // The symbol may be merged with other symbols and so becomes global

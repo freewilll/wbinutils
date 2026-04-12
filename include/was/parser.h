@@ -3,6 +3,7 @@
 
 #include "output-elf.h"
 #include "instr.h"
+#include "symbols.h"
 
 // Code (instructions) and data (.byte, .word, etc) chunks are treated in a similar
 // way since they both can have relocations.
@@ -21,6 +22,7 @@ typedef struct data_chunk {
 
 typedef struct zero_chunk {
     int size;
+    Symbol *symbol; // Optional
 } ZeroChunk;
 
 typedef struct align_chunk {
