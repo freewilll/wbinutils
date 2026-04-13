@@ -268,8 +268,20 @@ static List *read_input_files(List *library_paths, List *input_files, int output
             read_input_file(path, input_elf_files, read_shared_object_files, library_paths, 0);
         }
         else {
-            // It's an object file
-            read_object_or_shared_library_file(input_elf_files, input_filename, 0);
+            // The file could be an .o, .so or .a file
+            FileType type = identify_library_file(input_filename);
+
+            switch (type) {
+                case FT_ARCHIVE: {
+                    ArchiveFile *ar_file = open_archive_file(input_filename);
+                    process_library_symbols(ar_file, input_elf_files);
+                    break;
+                }
+
+                default:
+                    read_object_or_shared_library_file(input_elf_files, input_filename, 0);
+                    break;
+            }
         }
     }
 

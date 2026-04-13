@@ -50,7 +50,8 @@ TESTS = \
 	symbol-versioning-double-undefined_symbol_resolution-with-default \
 	symbol-versioning-weak-strong-default-in-two-libs \
 	glibc-dynamic-hello-world \
-	glibc-dynamic-curses
+	glibc-dynamic-curses \
+	archive-file-on-command-line
 
 .PHONY: test
 test: $(TESTS)
